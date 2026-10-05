@@ -1,10 +1,10 @@
 {
-  "name": "asama-local",
+  "name": "guild",
   "owner": {
-    "name": "asama"
+    "name": "guild"
   },
   "metadata": {
-    "description": "あさま用のローカルプラグイン置き場"
+    "description": "Obsidian vault のタスクを冒険者ギルドのギルド員たちで片付けるプラグイン"
   },
   "plugins": [
     {

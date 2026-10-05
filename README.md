@@ -100,7 +100,7 @@ Obsidian vault のタスクを、冒険者ギルドのギルド員たち（Claud
 1. Claude Code で次を実行する:
    ```
    /plugin marketplace add asama0101/guild
-   /plugin install guild@asama-local
+   /plugin install guild@guild
    ```
 2. Claude Code を再起動する。使いたい vault のルート（`.obsidian/` があるフォルダ）で Claude Code を開き、`/guild:init` を 1 回。あとは掲示板で依頼して `/guild:quest`。別の vault でも使うときは、その vault で `/guild:init` をもう 1 回。
 
@@ -108,4 +108,4 @@ Obsidian vault のタスクを、冒険者ギルドのギルド員たち（Claud
 - 冒険者は Web を検索して調べます。Claude Code に WebSearch・WebFetch の使用を聞かれたら許可してください（`/permissions` で許可の一覧に足すと、毎回は聞かれません）。
 - Word・Excel・PowerPoint を読み書きするには Python が要ります（無くても、ノートと回答だけのクエストは動きます）。`/guild:init` が確かめて、入れ方を案内します。
 
-中身を直したら `plugin.json` の version を上げて `/plugin marketplace update asama-local` で反映する。
+中身を直したら `plugin.json` の version を上げて `/plugin marketplace update guild` で反映する。
