@@ -193,6 +193,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
 
   <section id="askSec" class="top">
     <h2>返事が要るもの <span id="askCount" class="count">0</span><span class="hint">答えると、次の回でギルドが動きます（Ctrl+Enter で送れます）</span></h2>
+    <div class="send" style="margin:6px 0"><button id="askBatch" disabled>選んだ回答をまとめて送る</button> <span id="batchCount" class="count">0</span></div>
     <div id="asks" class="asks"></div>
     <p id="askNone" class="muted" style="margin:0">いまは返事が要るものはありません。</p>
   </section>
@@ -326,6 +327,8 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
     if(sig===askSig) return; askSig = sig;
     const drafts = {}; $("asks").querySelectorAll("[data-free]").forEach(t=>drafts[t.dataset.free]=t.value);
     const picks = {}; $("asks").querySelectorAll(".opts button.sel").forEach(b=>picks[b.dataset.q]=b.dataset.opt);
+    // まとめて送るチェックも退避して、描き直しのあとに戻す
+    const checks = new Set([...$("asks").querySelectorAll("[data-pick]:checked")].map(c=>c.dataset.pick));
     $("askCount").textContent = open.filter(notSent).length;
     $("askNone").classList.toggle("hidden", open.length>0);
     $("asks").innerHTML = open.map(q=>{
@@ -342,15 +345,35 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
         ${q.reason&&q.recommended?`<div class="note">推奨の理由：${esc(q.reason)}</div>`:""}
         <textarea id="a-${esc(q.id)}" data-free="${esc(q.id)}" aria-label="返事（自由に書けます）" placeholder="${opts?"ひとこと（自由に）":"返事を書く"}">${esc(drafts[q.id] ?? (sent? ((q.options||[]).includes(sent.answer)? sent.comment : sent.answer) : ""))}</textarea>
         <div class="send"><button data-send="${esc(q.id)}" ${cw?"disabled":""}>返事を送る</button>
+        <label class="note"><input type="checkbox" data-pick="${esc(q.id)}" ${cw?"disabled":checks.has(q.id)?"checked":""}> まとめて送る</label>
         ${cw?`<span class="note">取り消し待ち（次の回で中止になるので、返事は要りません）</span>`:sent?`<span class="note">返事済み（${esc(sent.answered)}）。送り直すと上書きします</span>`:""}</div>
       </div>`;
     }).join("");
     $("asks").querySelectorAll("[data-opt]").forEach(b=>b.onclick=()=>{
       b.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("sel")); b.classList.add("sel");
     });
+    $("asks").querySelectorAll("[data-pick]").forEach(c=>c.onchange=updateBatch);
+    updateBatch();
     $("asks").querySelectorAll("[data-send]").forEach(b=>b.onclick=()=>sendAnswer(b.dataset.send, b.closest(".q")));
     $("asks").querySelectorAll("[data-free]").forEach(t=>t.onkeydown=ev=>{ if(ev.key==="Enter"&&(ev.ctrlKey||ev.metaKey)){ ev.preventDefault(); sendAnswer(t.dataset.free, t.closest(".q")); } });
   }
+
+  // まとめて送るボタンと選択件数を、チェック状態に合わせる
+  function updateBatch(){
+    const n = $("asks").querySelectorAll("[data-pick]:checked").length;
+    $("batchCount").textContent = n; $("askBatch").disabled = n===0;
+  }
+  $("askBatch").onclick = async () => {
+    let sent = 0, skipped = 0;
+    for(const c of [...$("asks").querySelectorAll("[data-pick]:checked")]){
+      const v = validateAnswer(c.dataset.pick, c.closest(".q"));
+      if(v.err){ skipped++; continue; }
+      try{ await writeJSON(await sub("answers"), `${c.dataset.pick}.json`, v.a); sent++; c.checked=false; }
+      catch(e){ toast(`${sent}件送りました。書き込めませんでした: `+e.message); await refresh(); return; }
+    }
+    toast(`${sent}件送りました`+(skipped?`（${skipped}件は未入力のため送っていません）`:""));
+    await refresh();
+  };
 
   // ---- 結果の評価（Good / Bad） ----
   // target はクエスト番号（Q5）か研究番号（S1）。書くのは guild/.system/feedback/F<日時>.json だけ
@@ -418,15 +441,21 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
     $("notices").innerHTML = ns.map((n,i)=>`${i===1?`<details><summary>前の知らせ（${(board.notices||[]).length-1}）</summary>`:""}<div class="notice"><span class="when">${esc(n.time||"")} ・ ${esc(ROLE[n.by]||n.by||"受付嬢")}</span>${esc(n.text)}</div>`).join("") + (ns.length>1?"</details>":"");
   }
 
-  async function sendAnswer(qid, box){
-    if(box.classList.contains("cw")){ toast("取り消し待ちなので、返事は要りません"); return; }
+  // 入力を検証して、送る回答 {a} か不備の理由 {err} を返す
+  function validateAnswer(qid, box){
+    if(box.classList.contains("cw")) return {err:"取り消し待ちなので、返事は要りません"};
     const sel = box.querySelector(".opts button.sel");
     const free = box.querySelector("textarea").value.trim();
     // 選択肢がある質問は必ず選ぶ。「（コメントへ）」の選択肢はひとこと必須
-    if(box.querySelector(".opts") && !sel){ toast("選択肢を選んでください"); return; }
-    if(sel && sel.dataset.opt.includes("（コメントへ）") && !free){ toast("この選択肢はひとことを書いてください"); return; }
-    if(!sel && !free){ toast("返事を書いてください"); return; }
-    const a = {question_id:qid, answer: sel? sel.dataset.opt : free, comment: sel? free : "", answered: now()};
+    if(box.querySelector(".opts") && !sel) return {err:"選択肢を選んでください"};
+    if(sel && sel.dataset.opt.includes("（コメントへ）") && !free) return {err:"この選択肢はひとことを書いてください"};
+    if(!sel && !free) return {err:"返事を書いてください"};
+    return {a:{question_id:qid, answer: sel? sel.dataset.opt : free, comment: sel? free : "", answered: now()}};
+  }
+
+  async function sendAnswer(qid, box){
+    const {a, err} = validateAnswer(qid, box);
+    if(err){ toast(err); return; }
     try{ await writeJSON(await sub("answers"), `${qid}.json`, a); toast("返事を送りました"); await refresh(); }
     catch(e){ toast("書き込めませんでした: "+e.message); }
   }

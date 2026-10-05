@@ -194,6 +194,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
   <div class="main">
     <section id="askSec" class="top">
       <h2 class="mincho">承認と返事 <span id="askCount" class="count">0</span><span class="hint">答えると、次の回でギルドが動きます（Ctrl+Enter で送れます）</span></h2>
+      <div class="send" style="margin:6px 0"><button id="askBatch" disabled>選んだ回答をまとめて送る</button> <span id="batchCount" class="count">0</span></div>
       <div id="asks" class="asks"></div>
       <p id="askNone" class="muted" style="margin:0">いまは返事が要るものはありません。クエストごとの質問と依頼主がやることは、依頼掲示板に出ます。</p>
     </section>
@@ -303,6 +304,8 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
     if(sig===askSig) return; askSig = sig;
     const drafts = {}; $("asks").querySelectorAll("[data-free]").forEach(t=>drafts[t.dataset.free]=t.value);
     const picks = {}; $("asks").querySelectorAll(".opts button.sel").forEach(b=>picks[b.dataset.q]=b.dataset.opt);
+    // まとめて送るチェックも退避して、描き直しのあとに戻す
+    const checks = new Set([...$("asks").querySelectorAll("[data-pick]:checked")].map(c=>c.dataset.pick));
     $("askCount").textContent = open.filter(notSent).length;
     $("askNone").classList.toggle("hidden", open.length>0);
     $("asks").innerHTML = open.map(q=>{
@@ -321,15 +324,35 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
         ${q.reason&&q.recommended?`<div class="note">推奨の理由：${esc(q.reason)}</div>`:""}
         <textarea id="a-${esc(q.id)}" data-free="${esc(q.id)}" aria-label="返事（自由に書けます）" placeholder="${opts?"ひとこと（自由に）":"返事を書く"}">${esc(drafts[q.id] ?? (sent? ((q.options||[]).includes(sent.answer)? sent.comment : sent.answer) : ""))}</textarea>
         <div class="send"><button data-send="${esc(q.id)}" ${cw?"disabled":""}>返事を送る</button>
+        <label class="note"><input type="checkbox" data-pick="${esc(q.id)}" ${cw?"disabled":checks.has(q.id)?"checked":""}> まとめて送る</label>
         ${cw?`<span class="note">取り消し待ち（次の回で中止になるので、返事は要りません）</span>`:sent?`<span class="note">返事済み（${esc(sent.answered)}）。送り直すと上書きします</span>`:""}</div>
       </div>`;
     }).join("");
     $("asks").querySelectorAll("[data-opt]").forEach(b=>b.onclick=()=>{
       b.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("sel")); b.classList.add("sel");
     });
+    $("asks").querySelectorAll("[data-pick]").forEach(c=>c.onchange=updateBatch);
+    updateBatch();
     $("asks").querySelectorAll("[data-send]").forEach(b=>b.onclick=()=>sendAnswer(b.dataset.send, b.closest(".q")));
     $("asks").querySelectorAll("[data-free]").forEach(t=>t.onkeydown=ev=>{ if(ev.key==="Enter"&&(ev.ctrlKey||ev.metaKey)){ ev.preventDefault(); sendAnswer(t.dataset.free, t.closest(".q")); } });
   }
+
+  // まとめて送るボタンと選択件数を、チェック状態に合わせる
+  function updateBatch(){
+    const n = $("asks").querySelectorAll("[data-pick]:checked").length;
+    $("batchCount").textContent = n; $("askBatch").disabled = n===0;
+  }
+  $("askBatch").onclick = async () => {
+    let sent = 0, skipped = 0;
+    for(const c of [...$("asks").querySelectorAll("[data-pick]:checked")]){
+      const v = validateAnswer(c.dataset.pick, c.closest(".q"));
+      if(v.err){ skipped++; continue; }
+      try{ await writeJSON(await sub("answers"), `${c.dataset.pick}.json`, v.a); sent++; c.checked=false; }
+      catch(e){ toast(`${sent}件送りました。書き込めませんでした: `+e.message); await refresh(); return; }
+    }
+    toast(`${sent}件送りました`+(skipped?`（${skipped}件は未入力のため送っていません）`:""));
+    await refresh();
+  };
 
   // ---- 結果の評価（Good / Bad） ----
   // target はクエスト番号（Q5）か研究番号（S1）。書くのは guild/.system/feedback/F<日時>.json だけ
@@ -379,6 +402,22 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
   // 10 秒ごとの描き直しで、書きかけの「計画を直す」を消さない（keepFb と同じ考え）
   const keepReplan = { save(root){ const k={}; root.querySelectorAll("[data-replantext]").forEach(t=>k[t.dataset.replantext]=t.value); return k; }, load(root,k){ root.querySelectorAll("[data-replantext]").forEach(t=>{ if(k[t.dataset.replantext]) t.value=k[t.dataset.replantext]; }); } };
 
+  // ---- 研究の優先度 ----
+  // 値が無い研究は「通常」。書くのは guild/.system/requests/S<日時>.json（kind: study_priority）。研究の状態は変えない
+  const PRIOS = ["優先","通常","保留"];
+  const prioOf = e => PRIOS.includes(e.priority) ? e.priority : "通常";
+  function prioBox(e){
+    if(e.pending || ["達成","中止"].includes(e.status)) return "";
+    const sent = pendingReq.filter(r=>r.kind==="study_priority" && r.target===e.id).sort((a,b)=>String(b.posted||"").localeCompare(String(a.posted||"")))[0];
+    if(sent) return `<div class="replan"><span class="fbtag">優先度を『${esc(sent.priority)}』に変更する依頼を送りました（ギルドマスターが取り込むまで待ちます）</span></div>`;
+    return `<div class="replan"><span class="note">優先度：</span>${PRIOS.map(p=>`<button type="button" class="${p===prioOf(e)?"":"ghost"}" ${p===prioOf(e)?"disabled":""} data-prio="${p}" data-prioof="${esc(e.id)}">${p}</button>`).join(" ")}</div>`;
+  }
+  document.addEventListener("click", async ev=>{
+    const b = ev.target.closest("[data-prio]"); if(!b) return;
+    try{ const d=await sub("requests"); await writeJSON(d, (await freshName(d,"S"+stamp()))+".json", {kind:"study_priority", target: b.dataset.prioof, priority: b.dataset.prio, posted: now()}); toast("優先度の変更を頼みました"); await refresh(); }
+    catch(e){ toast("書き込めませんでした: "+e.message); }
+  });
+
   // ---- 取り消し ----
   // target は研究番号（S1）。書くのは guild/.system/requests/C<日時>.json（kind: cancel）だけ。達成・中止のものは取り消せない
   function cancelBox(target, status){
@@ -408,15 +447,21 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
     $("notices").innerHTML = ns.map(n=>`<div class="notice"><span class="when">${esc(n.time||"")} ・ ${esc(ROLE[n.by]||n.by||"受付嬢")}</span>${esc(n.text)}</div>`).join("");
   }
 
-  async function sendAnswer(qid, box){
-    if(box.classList.contains("cw")){ toast("取り消し待ちなので、返事は要りません"); return; }
+  // 入力を検証して、送る回答 {a} か不備の理由 {err} を返す
+  function validateAnswer(qid, box){
+    if(box.classList.contains("cw")) return {err:"取り消し待ちなので、返事は要りません"};
     const sel = box.querySelector(".opts button.sel");
     const free = box.querySelector("textarea").value.trim();
     // 選択肢がある質問は必ず選ぶ。「（コメントへ）」の選択肢はひとこと必須
-    if(box.querySelector(".opts") && !sel){ toast("選択肢を選んでください"); return; }
-    if(sel && sel.dataset.opt.includes("（コメントへ）") && !free){ toast("この選択肢はひとことを書いてください"); return; }
-    if(!sel && !free){ toast("返事を書いてください"); return; }
-    const a = {question_id:qid, answer: sel? sel.dataset.opt : free, comment: sel? free : "", answered: now()};
+    if(box.querySelector(".opts") && !sel) return {err:"選択肢を選んでください"};
+    if(sel && sel.dataset.opt.includes("（コメントへ）") && !free) return {err:"この選択肢はひとことを書いてください"};
+    if(!sel && !free) return {err:"返事を書いてください"};
+    return {a:{question_id:qid, answer: sel? sel.dataset.opt : free, comment: sel? free : "", answered: now()}};
+  }
+
+  async function sendAnswer(qid, box){
+    const {a, err} = validateAnswer(qid, box);
+    if(err){ toast(err); return; }
     try{ await writeJSON(await sub("answers"), `${qid}.json`, a); toast("返事を送りました"); await refresh(); }
     catch(e){ toast("書き込めませんでした: "+e.message); }
   }
@@ -480,7 +525,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
     $("filters").innerHTML = keys.map(k=>`<button class="${efilter===k?"on":""}" data-f="${k}">${k} ${all.filter(e=>EGROUPS[k](e)).length}</button>`).join("");
     $("filters").querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{ efilter=b.dataset.f; renderExps(); });
     const es = all.filter(e=>EGROUPS[efilter](e))
-      .sort((a,b)=>ESTATUS.indexOf(a.status)-ESTATUS.indexOf(b.status) || String(a.due||"9999").localeCompare(String(b.due||"9999")));
+      .sort((a,b)=>ESTATUS.indexOf(a.status)-ESTATUS.indexOf(b.status) || PRIOS.indexOf(prioOf(a))-PRIOS.indexOf(prioOf(b)) || String(a.due||"9999").localeCompare(String(b.due||"9999")));
     $("eNone").classList.toggle("hidden", es.length>0);
     const asks = openAsks();
     if(!es.find(e=>e.id===selected)){
@@ -493,7 +538,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
       const qs = (e.quests||[]).map(id=>board.quests.find(x=>x.id===id)).filter(Boolean);
       const done = qs.filter(q=>q.status==="達成"||q.status==="中止").length;
       const n = asks.filter(q=>q.study_id===e.id && notSent(q)).length;
-      return `<li><button type="button" class="${e.id===selected?"on":""}" data-sel="${esc(e.id)}"><small>${esc(e.id)} ・ ${esc(e.status)}${qs.length?` ${done}/${qs.length}`:""}</small><b>${esc(e.title)}</b>${n?`<small class="ask">返事が要る ${n}</small>`:""}</button></li>`;
+      return `<li><button type="button" class="${e.id===selected?"on":""}" data-sel="${esc(e.id)}"><small>${esc(e.id)} ・ ${esc(e.status)}${qs.length?` ${done}/${qs.length}`:""}${prioOf(e)!=="通常"?` <span class="badge st-受付待ち">${prioOf(e)}</span>`:""}</small><b>${esc(e.title)}</b>${n?`<small class="ask">返事が要る ${n}</small>`:""}</button></li>`;
     }).join("");
     $("navList").querySelectorAll("[data-sel]").forEach(b=>b.onclick=()=>{ selected=b.dataset.sel; renderExps(); });
     const e = es.find(x=>x.id===selected);
@@ -515,7 +560,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
     const cw = !e.pending && cancelWait(e.id);
     const plan = planList(e);
     return `<section class="exp">
-      <div class="head"><span class="title mincho"><span class="id">${esc(e.pending?"":e.id)}</span>${esc(e.title)}</span><span>${cw?`<span class="badge st-中止">取り消し待ち</span> `:""}<span class="badge st-${esc(e.status)}">${esc(e.status)}</span></span></div>
+      <div class="head"><span class="title mincho"><span class="id">${esc(e.pending?"":e.id)}</span>${esc(e.title)}</span><span>${cw?`<span class="badge st-中止">取り消し待ち</span> `:""}${prioOf(e)!=="通常"?`<span class="badge st-受付待ち">${prioOf(e)}</span> `:""}<span class="badge st-${esc(e.status)}">${esc(e.status)}</span></span></div>
       ${e.status==="承認待ち"&&e.replan?`<div class="note" style="margin-top:6px;color:var(--ask)">計画を直しました。上の承認に答えてください</div>`:""}
       <div class="muted" style="margin-top:6px">${e.due?"期限："+esc(e.due):"期限なし"} ${note?" ・ 研究ノート："+note:""}${e.dir?` ・ フォルダ：<button type="button" class="wiki file" data-copy="${esc(e.dir)}" title="押すとパスをコピーします">${esc(e.dir)}</button>`:""}</div>
       ${(e.files||[]).length?`<div class="muted">資料：${e.files.map(f=>esc(String(f).split("/").pop())).join("、")}</div>`:""}
@@ -523,6 +568,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
       ${qs.length?`<div class="prog"><div class="bar"><i style="width:${pct}%"></i></div><span class="muted">クエスト ${done} / ${qs.length} 達成（中止も含む）</span></div>
         <div class="note" style="margin-top:8px">段の地図：左の段が終わると右の段に進みます。同じ段のクエストは同時に進められます</div>${map}`:(plan?`<div style="margin-top:8px"><b>計画</b>${plan}</div>`:(e.pending?`<p class="note">次の /guild:quest で受付され、受付嬢が目標を聞き取ります。</p>`:""))}
       ${e.next?`<div class="next"><b>次の段階：</b>${esc(e.next)}</div>`:""}
+      ${prioBox(e)}
       ${replanBox(e)}
       ${e.status==="達成"?fbBox(e.id,e.feedback):""}
       <div class="foot"><span style="display:flex;gap:14px;flex-wrap:wrap">${log}${qaHtml}</span>${cancelBox(e.id,e.status)}</div>

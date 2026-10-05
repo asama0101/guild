@@ -5,7 +5,7 @@ disable-model-invocation: true
 ---
 あなたは冒険者ギルドの設立係です。今いる vault のルートで次をする。どの Obsidian の vault でも同じ手順で開ける。vault の置き場所やフォルダの組み方を決めつけず、その vault にあるものに合わせる。
 
-0. 今いるフォルダが vault のルートかを確かめる。`.obsidian/` があればルート。無ければ、上のフォルダに `.obsidian/` があるか探し、見つかればそのパスを伝えて「そこで開き直す」ように頼んで止まる。どこにも無ければ、Obsidian の vault でないかもしれないことを伝え、このまま開いてよいかを聞く。すでにあるファイルは上書きしない（board.html と research.html だけは新しい版で上書きしてよい）。
+0. 今いるフォルダが vault のルートかを確かめる。`.obsidian/` があればルート。無ければ、上のフォルダに `.obsidian/` があるか探し、見つかればそのパスを伝えて「そこで開き直す」ように頼んで止まる。どこにも無ければ、Obsidian の vault でないかもしれないことを伝え、このまま開いてよいかを聞く。「いいえ」ならここで全部止まるので、これは最初の単独の質問にする。すでにあるファイルは上書きしない（board.html と research.html だけは新しい版で上書きしてよい）。
 
 1. `guild/` と、その下の `guild/.system/quests/`、`guild/.system/reports/`、`guild/.system/requests/`、`guild/.system/requests/files/`、`guild/.system/requests/済/`、`guild/.system/requests/保留/`、`guild/.system/answers/`、`guild/.system/answers/済/`、`guild/.system/feedback/`（結果の評価）、`guild/.system/feedback/済/`、`guild/.system/feedback/保留/`、`guild/.system/work/`、`guild/.system/rules/`（追加の決まり）を作る（`済/` は読み終えたファイル、`保留/` はまだ受け付けられないファイルの置き場）。
    - `guild/lessons.md`（教訓帳）が無ければ、`# 教訓帳` の見出しと、表の見出し行 `| 日付 | クエスト | ギルド員 | 評価 | 型 | 何があったか | 次はどうする | 範囲 | 扱い |` と区切り行だけで作る。古い形なら見出しを新しい形に直す。3 列目が `冒険者` の形は `ギルド員` に直し（中身の `scout` は `adventurer` に）、`失敗の型 | 何がいけなかったか | 直し方` の形なら、今ある行の評価を「鑑定」、範囲を「このギルド員」として書き直す。`guild/.system/rules/scout.md` があれば `adventurer.md` に名前を変える。
@@ -19,7 +19,10 @@ disable-model-invocation: true
 
 4. すでに board.json がある場合は、`projects_dir`・`quests_dir`・`glossary_dir`・`knowledge_dir`・`templates_dir`（手順 6 で決める。すでに値があれば変えない）と、無い項目（`studies`・`quests`・`questions`・`notices`・`profile`。それぞれ `[]`）だけを書き足す。ほかの中身は変えない。
 5. vault に `Inbox/` があれば、`inbox` に `"Inbox"` を入れる（掲示板と並んで、Inbox のメモも依頼として受け付ける）。無ければ空のままにする。
-6. フォルダの置き場所を決める。名前は vault の書き方（`guild/10_projects` のような「番号_英小文字」）にそろえる。vault に同じ役のフォルダがあれば、名前が違ってもそれを使う。無いものは作る。決めた値を board.json に入れる。
+6. フォルダの置き場所を決める。質問するのは、手順 0 が通ったあとの次の質問で、該当する行があるときだけ。
+   - 複数の行で既存フォルダの候補が見つかったら、それらは 1 回の `AskUserQuestion` にまとめる。
+   - 候補が見つからない行や、同じ役の既存フォルダがある行は、聞かずに自動で決める。
+   - 名前は vault の書き方（`guild/10_projects` のような「番号_英小文字」）にそろえる。vault に同じ役のフォルダがあれば、名前が違ってもそれを使う。無いものは作る。決めた値を board.json に入れる。
 
    | 項目 | 役 | 既定 | 同じ役の既存フォルダの例 |
    |---|---|---|---|

@@ -8,7 +8,7 @@ argument-hint: "[始める|止める|様子]"
 
 `guild/.system/board.json` が無ければ、先に `/guild:init` を実行するよう伝えて止まる。
 
-引数（`$ARGUMENTS`）が「始める」「止める」「様子」のどれかならそれをする。無ければ、`guild/.system/auto.json` を読んで今の状態（動いているか・間隔・最後の回）を伝え、どれをするかを聞く。
+引数（`$ARGUMENTS`）が「始める」「止める」「様子」のどれかならそれをする。無ければ、`guild/.system/auto.json` を読んで今の状態（動いているか・間隔・最後の回）を伝え、どれをするかを聞く。このモード選択は後の質問がその答えに依存するので単独で聞く。同じ回に聞けるものは 1 回の `AskUserQuestion` にまとめる。
 
 ## 仕組み
 
@@ -23,12 +23,15 @@ argument-hint: "[始める|止める|様子]"
 
 1. OS を確かめる（Windows か、Mac か、Linux か）。
 2. `claude` の場所を確かめる。Windows は `where claude`（PowerShell なら `(Get-Command claude).Source`）、Mac と Linux は `command -v claude`。見つからなければ、Claude Code の入れ方を案内して止まる。
-3. 間隔を聞く。選択肢は「5 分（推奨）」「10 分」「15 分」「その他（分で）」。推奨の理由：依頼を貼ってから長くても 5 分で動き始め、新しいものが無い回は Claude を呼ばないので費用がかからない。前の回がまだ動いていれば錠を見てその回は飛ばすので、間隔が短くても重ならない。
-4. 次のことを伝えて、この内容で入れてよいかを確かめる。
+3. 先に次のことを依頼主に見せる（質問より前に出す）。
    - 入れるもの：`guild/.system/auto/` に置くファイル、登録する予定（Windows はタスク スケジューラの `guild-<vault 名>`、Mac と Linux は crontab の 1 行）。
-   - 許す道具：`allow.txt` の一覧（ファイルの読み書き、ギルド員の呼び出し、Web の検索と取得、`mv`・`mkdir`・`cp`・`ls`・`markitdown`・`python`・`soffice`）。足したいもの、外したいものがあれば聞く。
+   - 許す道具：`allow.txt` の一覧（ファイルの読み書き、ギルド員の呼び出し、Web の検索と取得、`mv`・`mkdir`・`cp`・`ls`・`markitdown`・`python`・`soffice`）。
    - 動くのは、パソコンが起きていてログインしているあいだだけ。
-5. 「入れる」なら次をする。
+4. 次の 2 つを、`AskUserQuestion` の 1 回の呼び出し（`questions` に 2 つ）でまとめて聞く。
+   - 間隔。選択肢は「5 分（推奨）」「10 分」「15 分」「その他（分で）」。推奨の理由：依頼を貼ってから長くても 5 分で動き始め、新しいものが無い回は Claude を呼ばないので費用がかからない。前の回がまだ動いていれば錠を見てその回は飛ばすので、間隔が短くても重ならない。
+   - 許す道具の足し引き。選択肢は「このまま」「足したいものがある」「外したいものがある」。具体名は Other の自由記述で受ける。
+   - 別立ての「入れてよいか」は聞かない。この 2 つへの回答をもって、この内容で入れることを承認したとみなす。「足したいものがある」「外したいものがある」と答えたときだけ、反映した許可の一覧を示してから手順 5 に進む。
+5. 次をする。
    - このスキルと同じフォルダの `guild-run.ps1`（Windows）か `guild-run.sh`（Mac と Linux）を、`guild/.system/auto/` にそのまま書き出す。`allow.txt` は、`guild/.system/auto/allow.txt` が無いときだけ書き出す（依頼主が足した分を消さない）。
    - `guild/.system/auto/claude.txt` に、手順 2 の `claude` のフルパスを 1 行で書く。
    - Mac と Linux は、`guild/.system/auto/path.txt` に今の `PATH` を 1 行で書き（cron の PATH は短く、`python3` や `markitdown` が見つからないため）、`chmod +x guild/.system/auto/guild-run.sh` をする。
