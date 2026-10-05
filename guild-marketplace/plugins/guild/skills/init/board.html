@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>冒険者ギルド 依頼掲示板</title>
+<style>
+/* 依頼掲示板：墨の帯。PC のブラウザ向け。上から 依頼を貼る＋知らせ → 返事が要るもの → かんばん → 依頼主のこと＋用語 */
+:root{
+  --bg:#f7f5f0; --panel:#ffffff; --ink:#2b2b2b; --muted:#6a6a6a; --line:#dcd7cc; --soft:#f1eee7;
+  --band:#3d3d3d; --accent:#3d3d3d; --accent-ink:#fff; --ask:#8a3b3b; --gold:#b8862b;
+  --s-wait:#8f8a80; --s-go:#2f5d8a; --s-ask:#8a3b3b; --s-done:#3a7a4a; --s-fix:#c07a1c; --s-self:#6f4fa0;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1b1b1a; --panel:#252524; --ink:#ecebe8; --muted:#a9a7a2; --line:#3a3936; --soft:#2c2c2a;
+    --band:#2a2a2a; --accent:#d9d6cf; --accent-ink:#1b1b1a; --ask:#d98c8c; --gold:#e0b45a;
+    --s-wait:#8f8676; --s-go:#6aa3e8; --s-ask:#d98c8c; --s-done:#5cc28a; --s-fix:#f0a54a; --s-self:#b48ae0; }
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:80px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Yu Gothic UI","Meiryo","Hiragino Sans",sans-serif;line-height:1.6;font-size:14px}
+/* 帯（固定） */
+.band{position:sticky;top:0;z-index:5;background:var(--band);color:#fff;height:64px;display:flex;align-items:center;gap:20px;padding:0 32px}
+.band .brand{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+.band .brand small{font-size:.75rem;letter-spacing:.2em;opacity:.7}
+.band .brand b{font-size:1.45rem;letter-spacing:.04em}
+.band nav{display:flex;align-self:stretch;margin-left:8px}
+.band nav a{display:flex;align-items:center;padding:0 16px;color:#fff;text-decoration:none;opacity:.7;border-bottom:3px solid transparent}
+.band nav a.on{opacity:1;border-bottom-color:#fff;font-weight:bold}
+.band nav a:hover{opacity:1}
+.band .sub{margin-left:auto;font-size:.78rem;opacity:.9;text-align:right;line-height:1.4;white-space:nowrap}
+.band button{background:#fff;color:var(--band);border:0;border-radius:4px;padding:8px 16px;font:inherit;font-weight:bold;cursor:pointer}
+/* 本体：上から 依頼を貼る＋知らせ → 返事が要るもの → かんばん → 依頼主のこと・用語 */
+.layout{display:flex;flex-direction:column;gap:16px;padding:20px 32px 40px}
+.two{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;align-items:start}
+section{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px 20px}
+section.top{border-top:3px solid var(--accent)}
+h2{margin:0 0 10px;font-size:1.05rem;display:flex;align-items:center;gap:10px}
+.band .counts{display:flex;gap:14px;font-size:.78rem;opacity:.9;margin-left:8px;white-space:nowrap}
+.band .counts b{background:rgba(255,255,255,.18);border-radius:10px;padding:0 8px}
+.band .counts b.hot{background:#fff;color:var(--band)}
+/* 依頼を貼る（常に開いている 2 行の欄） */
+.form .r0 input{font-size:15px;padding:9px 10px}
+.form .r1{display:grid;grid-template-columns:auto 150px 160px;gap:10px;align-items:end;margin-top:8px}
+.form .r2{display:grid;grid-template-columns:minmax(0,1fr) 300px auto;gap:10px;align-items:end;margin-top:8px}
+.form label{margin:0 0 3px}
+.form textarea{min-height:36px}
+/* かんばん */
+.kanban{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
+.col{background:var(--soft);border-radius:6px;padding:8px}
+.col h3{margin:0;padding:2px 6px 8px;font-size:.82rem;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.col h3 label{display:inline;font-size:.75rem;margin:0}
+.col .cards{display:flex;flex-direction:column;gap:8px}
+.count{background:var(--ask);color:#fff;border-radius:12px;font-size:.75rem;padding:0 9px;font-weight:bold}
+.hint{color:var(--muted);font-size:.8rem;font-weight:normal}
+button,.btn{font:inherit;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:4px;padding:7px 14px}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button:disabled{opacity:.5;cursor:default}
+input,textarea,select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:7px 9px;width:100%}
+textarea{min-height:56px;resize:vertical}
+label{display:block;font-size:.8rem;color:var(--muted);margin:8px 0 3px}
+.row{display:flex;gap:10px}
+.row>*{flex:1 1 0;min-width:0}
+.muted{color:var(--muted);font-size:.85rem}
+.note{font-size:.8rem;color:var(--muted)}
+.hidden{display:none!important}
+/* 返事が要るもの（横並び） */
+.asks{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start}
+.q{border:1px solid var(--line);border-left:4px solid var(--ask);border-radius:4px;padding:12px 14px;background:var(--soft)}
+.q .who{font-size:.78rem;color:var(--muted)}
+.qtitle{font-weight:bold;font-size:1rem;margin:2px 0 4px}
+.q .text{white-space:pre-wrap;font-size:.9rem}
+.q .opts{display:flex;flex-direction:column;gap:5px;margin:8px 0 4px}
+.q .opts button{text-align:left;background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:7px 10px}
+.q .opts button.rec{border:2px solid var(--accent)}
+.q .opts button small{margin-left:6px;font-size:.72rem;color:var(--ask)}
+.q .opts button.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.q .opts button.sel small{color:inherit}
+.q textarea{min-height:40px;margin-top:6px;background:var(--panel)}
+.q .send{display:flex;gap:8px;align-items:center;margin-top:8px}
+.q .send button{white-space:nowrap}
+.q.approval{border-left-color:var(--gold)}
+.q.todo{border-left-color:var(--s-self)}
+.q.confirm{border-left-color:var(--s-done)}
+.q.rule{border-left-color:var(--s-fix)}
+.q.cw{opacity:.5} /* 取り消し待ちのクエストの質問は薄くして送れなくする */
+.plan{margin:6px 0 0;padding-left:20px;font-size:.88rem}
+/* クエスト */
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.filters button{background:var(--panel);color:var(--ink);border-color:var(--line);border-radius:14px;padding:2px 12px;font-size:.8rem}
+.filters button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--s-wait);border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.card.k-冒険中,.card.k-鑑定中{border-left-color:var(--s-go)}
+.card.k-返事待ち{border-left-color:var(--s-ask)}
+.card.k-要手直し{border-left-color:var(--s-fix)}
+.card.k-依頼主がやること{border-left-color:var(--s-self)}
+.card.k-達成{border-left-color:var(--s-done)}
+.card .top{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:.78rem;color:var(--muted)}
+.card .id{font-family:ui-monospace,Consolas,monospace}
+.card .title{font-weight:bold;font-size:.98rem;line-height:1.4}
+.card .ask{color:var(--ask);font-size:.82rem;font-weight:bold}
+.card details.more summary{font-size:.78rem}
+.card details.more>div{display:flex;flex-direction:column;gap:4px;margin-top:4px;border-top:1px dashed var(--line);padding-top:6px}
+.badge{display:inline-block;font-size:.75rem;border-radius:3px;padding:1px 8px;color:#fff;white-space:nowrap}
+.st-受付待ち,.st-受付済,.st-中止{background:var(--s-wait)}
+.st-冒険中,.st-鑑定中,.st-進行中{background:var(--s-go)}
+.st-返事待ち,.st-計画中,.st-承認待ち{background:var(--s-ask)}
+.st-達成{background:var(--s-done)}
+.st-要手直し{background:var(--s-fix)}
+.st-依頼主がやること{background:var(--s-self)}
+.stars{color:var(--gold)}
+.exptag{font-size:.75rem;border:1px solid var(--ask);color:var(--ask);border-radius:3px;padding:0 6px}
+.done{font-size:.85rem;margin:4px 0}.done ul{margin:2px 0;padding-left:20px;color:var(--ink)}
+.edge{font-size:.75rem;border:1px solid var(--line);border-radius:3px;padding:0 4px;white-space:nowrap}
+.result{background:var(--soft);border-radius:4px;padding:8px 10px;font-size:.9rem;white-space:pre-wrap}
+.wiki{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:0 6px;margin:0 6px 4px 0;font-size:.8rem;border-radius:3px}
+.foot{display:flex;justify-content:space-between;align-items:center;font-size:.8rem;margin-top:4px}
+.foot a{color:var(--muted)}
+.cancel .ghost{padding:3px 10px;font-size:.78rem}
+details summary{cursor:pointer;color:var(--muted);font-size:.8rem}
+details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
+.pri{display:flex;gap:6px}
+.pri label{margin:0;border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;color:var(--ink);font-size:.8rem;text-align:center;background:var(--panel);white-space:nowrap}
+.pri label:has(input:checked){border:2px solid var(--accent);padding:5px 9px}
+.pri input{display:none}
+.notice{white-space:pre-wrap;font-size:.9rem;margin:0 0 6px}
+.notice .when{font-size:.78rem;color:var(--muted);display:block;white-space:normal}
+.fb{border-top:1px dashed var(--line);margin-top:4px;padding-top:6px}
+.fb .vb{display:flex;gap:8px;margin:4px 0}
+.fb .vb button{background:var(--panel);color:var(--ink);border-color:var(--line);padding:4px 16px}
+.fb .vb button.good{border-color:var(--s-done);color:var(--s-done)}
+.fb .vb button.bad{border-color:var(--s-fix);color:var(--s-fix)}
+.fb .vb button.sel.good{background:var(--s-done);color:#fff}
+.fb .vb button.sel.bad{background:var(--s-fix);color:#fff}
+.fbtag{display:inline-block;font-size:.75rem;border:1px solid var(--line);border-radius:3px;padding:0 6px;margin-top:4px}
+.fbtag.good{border-color:var(--s-done);color:var(--s-done)}
+.fbtag.bad{border-color:var(--s-fix);color:var(--s-fix)}
+.prof dt{font-weight:bold;margin-top:6px;font-size:.85rem}
+.prof dd{margin:2px 0 0 1em;font-size:.85rem}
+.prof dd small{color:var(--muted);margin-left:6px}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:4px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
+.toast.show{opacity:1}
+.gate{text-align:center;padding:60px 16px;margin:24px 32px}
+.gate p{max-width:560px;margin:8px auto}
+.gate button{padding:10px 22px;font-size:1rem}
+.bottom{font-size:.8rem;color:var(--muted);padding:0 32px 24px}
+</style>
+</head>
+<body>
+<header class="band">
+  <div class="brand"><small>冒険者ギルド</small><b>依頼掲示板</b></div>
+  <nav><a class="on" href="board.html">依頼掲示板</a><a href="research.html">研究の記録</a></nav>
+  <div class="counts" id="counts"></div>
+  <div class="sub" id="sub">ギルドの扉を開くと、クエストの様子が見られます</div>
+  <button id="reload" class="hidden" title="最新の状態を読み直す">更新</button>
+</header>
+
+<section id="gate" class="gate">
+  <h2 style="justify-content:center">ギルドの扉</h2>
+  <p>vault の中の <b>_guild</b> フォルダを選んでください。掲示板はそのフォルダを読み書きして、ギルドマスターとやりとりします。</p>
+  <p class="note">Microsoft Edge か Google Chrome で開いてください（Firefox ではフォルダの読み書きができません）。2 回目からはボタンを押して許可するだけです。</p>
+  <p><button id="open">ギルドの扉を開く</button></p>
+  <p id="gateMsg" class="note"></p>
+</section>
+
+<div id="app" class="hidden">
+<div class="layout">
+  <div class="two">
+    <section class="form">
+      <h2>依頼を貼る <span class="hint">書いて「貼る」だけ。いくつものクエストにまたがる目標は<a href="research.html">研究の記録</a>から</span></h2>
+      <div class="r0"><label for="nTitle">依頼の内容（ひとこと）</label><input id="nTitle" placeholder="例：Obsidian のおすすめプラグインを調べる"></div>
+      <div class="r1">
+        <div><label>急ぎ度</label><div class="pri" id="nPri">
+          <label title="ほかの予定がこれを待っている、期限が近い"><input type="radio" name="pri" value="3"><b class="stars">★★★</b> 今日〜明日</label>
+          <label title="近いうちに使う。迷ったらこれ"><input type="radio" name="pri" value="2" checked><b class="stars">★★</b> 今週中</label>
+          <label title="手が空いたときでよい、思いつきのメモ"><input type="radio" name="pri" value="1"><b class="stars">★</b> いつでも</label>
+        </div></div>
+        <div><label for="nDue">期限（あれば）</label><input id="nDue" type="date"></div>
+        <div><label for="nOut">成果物の形</label><select id="nOut"><option>おまかせ</option><option>回答だけ</option><option>ノート</option><option>テキスト</option><option>Word</option><option>Excel</option><option>PowerPoint</option><option>PDF</option><option>その他（くわしくへ）</option></select></div>
+      </div>
+      <div class="r2">
+        <div><label for="nDetail">くわしく（任意：背景、関係するノート、使いみち）</label><textarea id="nDetail" placeholder="例：部長への稟議に使う"></textarea></div>
+        <div><label for="nFiles">資料を添える（いくつでも）</label><input id="nFiles" type="file" multiple></div>
+        <div><button id="post" style="padding:10px 22px;font-weight:bold">貼る</button></div>
+      </div>
+    </section>
+    <section id="noticeSec">
+      <h2>ギルドからの知らせ</h2>
+      <div id="notices"></div>
+      <p id="noticeNone" class="muted" style="margin:0">まだ知らせはありません。/guild:quest が動くたびに、受付嬢がここに結果と、待っていることを書きます。</p>
+    </section>
+  </div>
+
+  <section id="askSec" class="top">
+    <h2>返事が要るもの <span id="askCount" class="count">0</span><span class="hint">答えると、次の回でギルドが動きます（Ctrl+Enter で送れます）</span></h2>
+    <div id="asks" class="asks"></div>
+    <p id="askNone" class="muted" style="margin:0">いまは返事が要るものはありません。</p>
+  </section>
+
+  <section>
+    <h2>クエスト <span class="hint" id="qCount"></span><span class="hint">左から右へ進みます。「くわしく」で達成の条件と記録</span></h2>
+    <div class="kanban">
+      <div class="col"><h3><span>受付 <span id="c0"></span></span></h3><div id="k0" class="cards"></div></div>
+      <div class="col"><h3><span>冒険中・鑑定中・要手直し <span id="c1"></span></span></h3><div id="k1" class="cards"></div></div>
+      <div class="col"><h3><span>返事待ち・依頼主がやること <span id="c2"></span></span></h3><div id="k2" class="cards"></div></div>
+      <div class="col"><h3><span>達成（新しい 8 件） <span id="c3"></span></span><label><input type="checkbox" id="showAll"> 中止と古いものも</label></h3><div id="k3" class="cards"></div></div>
+    </div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>依頼主のこと <span id="pCount" class="hint"></span><span class="hint">人物帳 <code>_guild/client.md</code>。どのギルド員も依頼のたびに読みます</span></h2>
+      <dl id="prof" class="prof" style="margin:0"></dl>
+      <p id="pNone" class="muted">まだ何も分かっていません。</p>
+      <p id="iPend" class="hidden" style="margin:6px 0 0"><span class="fbtag">インタビューを頼みました。次の回で占い師が聞きます</span></p>
+      <div class="row" style="align-items:end;margin-top:8px">
+        <div style="flex:3"><label for="iTopic">インタビューで話したいこと（空なら占い師が、分からないところから聞きます）</label><input id="iTopic" placeholder="例：稟議資料の好み、上司に見せるときの決まり"></div>
+        <div style="flex:0 0 auto"><button id="postInterview">インタビューを受ける</button></div>
+      </div>
+    </section>
+    <section>
+      <h2>用語を足す <span class="hint">用語集 <code id="gdir">用語/</code> に 1 語 1 ノート</span></h2>
+      <label for="tName">用語</label><input id="tName" placeholder="例：ルートリフレクタ">
+      <label for="tMeaning">意味・メモ（空なら冒険者が調べてから書きます）</label><input id="tMeaning" placeholder="例：iBGP の経路を中継するルータ">
+      <p style="margin:10px 0 0;text-align:right"><button id="postTerm">用語を足す</button></p>
+    </section>
+  </div>
+</div>
+<p class="bottom" id="foot"></p>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const STATUSES = ["受付待ち","受付済","冒険中","鑑定中","返事待ち","要手直し","依頼主がやること","達成","中止"];
+  const ROLE = {alchemist:"錬金術師",strategist:"錬金術師",receptionist:"受付嬢",scribe:"書記",sage:"賢者",adventurer:"冒険者",scout:"冒険者",informant:"冒険者",bard:"吟遊詩人",librarian:"司書",appraiser:"鑑定士",seer:"占い師",smith:"鍛冶師",guildmaster:"ギルドマスター",client:"依頼主",user:"依頼主"};
+  let dir = null, board = null, pendingReq = [], pendingAns = {}, pendingFb = [], autoCfg = null, lastRun = null, timer = null;
+
+  function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2500); }
+  function esc(s){ return String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  function now(){ const d=new Date(); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  // ファイル名の日時は PC のローカル時刻で 14 桁（YYYYMMDDHHMMSS）
+  function stamp(){ const d=new Date(); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
+  function stars(n){ n=Number(n)||0; return n? "★".repeat(n) : ""; }
+
+  // ---- 扉（フォルダ）の記憶 ----
+  function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open("guild-board",1); r.onupgradeneeded=()=>r.result.createObjectStore("h"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+  async function saveHandle(h){ try{ const db=await idb(); db.transaction("h","readwrite").objectStore("h").put(h,"dir"); }catch(e){} }
+  async function loadHandle(){ try{ const db=await idb(); return await new Promise(res=>{ const q=db.transaction("h").objectStore("h").get("dir"); q.onsuccess=()=>res(q.result||null); q.onerror=()=>res(null); }); }catch(e){ return null; } }
+
+  async function readJSON(d, name){ try{ const f=await (await d.getFileHandle(name)).getFile(); return JSON.parse(await f.text()); }catch(e){ return null; } }
+  async function writeJSON(d, name, obj){ const h=await d.getFileHandle(name,{create:true}); const w=await h.createWritable(); await w.write(JSON.stringify(obj,null,2)); await w.close(); }
+  async function sub(name){ return dir.getDirectoryHandle(name,{create:true}); }
+  // 読むだけのフォルダ（logs など）は、無くても作らない
+  async function subRead(name){ try{ return await dir.getDirectoryHandle(name); }catch(e){ return null; } }
+  // 同じ秒に 2 件書くときは、同名があれば -2（-3 …）を付ける。返すのは拡張子なしの名前（R20261005120000 か R20261005120000-2）
+  async function freshName(d, base){ let n=base; for(let i=2;;i++){ try{ await d.getFileHandle(n+".json"); }catch(e){ return n; } n=`${base}-${i}`; } }
+  // 添えた資料は requests/files/R<日時>/ に写す。受付のときにギルドマスターが研究かクエストの input/ に移す
+  async function saveFiles(name, input){
+    const fs=[...((input&&input.files)||[])]; if(!fs.length) return [];
+    const d=await (await (await sub("requests")).getDirectoryHandle("files",{create:true})).getDirectoryHandle(name,{create:true});
+    for(const f of fs){ const h=await d.getFileHandle(f.name,{create:true}); const w=await h.createWritable(); await w.write(f); await w.close(); }
+    return fs.map(f=>f.name);
+  }
+  async function listJSON(d){ const out=[]; for await (const [n,h] of d.entries()){ if(h.kind==="file" && n.endsWith(".json")){ const v=await readJSON(d,n); if(v) out.push({...v,_file:n}); } } return out; }
+
+  async function connect(h){
+    if((await h.queryPermission({mode:"readwrite"}))!=="granted"){
+      if((await h.requestPermission({mode:"readwrite"}))!=="granted") throw new Error("読み書きが許可されませんでした。");
+    }
+    const b = await readJSON(h,"board.json");
+    if(!b) throw new Error("選んだフォルダに board.json がありません。vault の _guild フォルダを選んでください（無ければ先に /guild:init を実行します）。");
+    dir=h; await saveHandle(h);
+    $("gate").classList.add("hidden"); $("app").classList.remove("hidden"); $("reload").classList.remove("hidden");
+    await refresh(); clearInterval(timer); timer=setInterval(refresh,10000);
+  }
+
+  $("open").onclick = async () => {
+    $("gateMsg").textContent="";
+    if(!window.showDirectoryPicker){ $("gateMsg").textContent="このブラウザはフォルダの読み書きに対応していません。Edge か Chrome で開いてください。"; return; }
+    try{
+      let h = await loadHandle();
+      if(h){ try{ await connect(h); return; }catch(e){ /* 選び直し */ } }
+      h = await window.showDirectoryPicker({id:"guild",mode:"readwrite"});
+      await connect(h);
+    }catch(e){ if(e.name!=="AbortError") $("gateMsg").textContent=e.message||String(e); }
+  };
+  $("reload").onclick = () => refresh().then(()=>toast("最新の状態にしました"));
+
+  async function refresh(){
+    if(!dir) return;
+    // 読めない瞬間（ギルドマスターが書いている途中など）は、前に読めた内容をそのまま出す
+    board = await readJSON(dir,"board.json") || board || {quests:[],questions:[]};
+    board.quests ||= []; board.questions ||= []; board.studies ||= [];
+    pendingReq = await listJSON(await sub("requests"));
+    const ans = await listJSON(await sub("answers")); pendingAns = {}; ans.forEach(a=>pendingAns[a.question_id]=a);
+    pendingFb = await listJSON(await sub("feedback"));
+    autoCfg = await readJSON(dir,"auto.json"); const logs = await subRead("logs"); lastRun = logs ? await readJSON(logs,"last.json") : null;
+    $("gdir").textContent = (board.glossary_dir || "用語") + "/";
+    render();
+  }
+
+  // 研究の計画の承認などは研究の記録に出す。ここに出すのはクエストの質問と依頼主がやること
+  const isExpAsk = q => q.kind==="approval" || (!!q.study_id && !q.quest_id && q.kind!=="todo");
+  // 返事がまだのもの（送った返事が answers/ に残っているものは数えない）
+  const notSent = q => !pendingAns[q.id];
+  // 取り消しを送ったクエスト（研究を取り消したときは、その研究のクエストも）
+  const cancelReqs = () => pendingReq.filter(r=>r.kind==="cancel");
+  const cancelWait = quest => !!quest && cancelReqs().some(r=>r.target===quest.id || (!!quest.study && r.target===quest.study));
+
+  // ---- 表示 ----
+  function render(){
+    renderNotices(20);
+    $("sub").innerHTML = esc(`${board.vault ? board.vault+" のギルド ・ " : ""}最終更新 ${board.updated || "-"}（ギルドマスター）`) + `<br>${autoText()}`;
+    renderAsks(); renderProfile(); renderQuests();
+    $("foot").textContent = "10 秒ごとに読み直しています。依頼や返事は、次に /guild:quest が動いたとき（手で実行するか、自動実行の次の回）にギルドマスターが受け取ります。";
+  }
+
+  let askSig = "";
+  function renderAsks(){
+    const open = board.questions.filter(q=>q.status!=="回答済" && !isExpAsk(q));
+    // 入力中の返事を消さないよう、質問か返事の状態が変わったときだけ描き直す
+    const sig = JSON.stringify([open, pendingAns, cancelReqs().map(r=>r.target)]);
+    if(sig===askSig) return; askSig = sig;
+    const drafts = {}; $("asks").querySelectorAll("[data-free]").forEach(t=>drafts[t.dataset.free]=t.value);
+    const picks = {}; $("asks").querySelectorAll(".opts button.sel").forEach(b=>picks[b.dataset.q]=b.dataset.opt);
+    $("askCount").textContent = open.filter(notSent).length;
+    $("askNone").classList.toggle("hidden", open.length>0);
+    $("asks").innerHTML = open.map(q=>{
+      const sent = pendingAns[q.id];
+      const quest = board.quests.find(x=>x.id===q.quest_id);
+      const exp = q.study_id ? board.studies.find(x=>x.id===q.study_id) : null;
+      const cw = cancelWait(quest);
+      const opts = (q.options||[]).map(o=>`<button data-q="${esc(q.id)}" data-opt="${esc(o)}" class="${(picks[q.id]??(sent&&sent.answer))===o?"sel":""}${q.recommended===o?" rec":""}">${esc(o)}${q.recommended===o?"<small>推奨</small>":""}</button>`).join("");
+      return `<div class="q${q.kind==="approval"?" approval":q.kind==="todo"?" todo":q.kind==="confirm"?" confirm":q.kind==="rule"?" rule":""}${cw?" cw":""}">
+        <div class="who">${q.kind==="todo"?"依頼主がやること":esc(ROLE[q.from]||q.from||"ギルドマスター")} ・ ${exp?esc(exp.id)+" "+esc(exp.title):esc(q.quest_id||"")+" "+(quest?esc(quest.title):"")} ・ ${esc(q.asked||"")}</div>
+        ${q.title?`<div class="qtitle">${q.interview_id?"インタビュー：":q.feedback_id?"評価の聞き取り：":q.grill?"聞き取り：":q.kind==="confirm"?"確認：":q.kind==="rule"?"決まりの見直し：":""}${esc(q.title)}</div>`:(q.kind==="confirm"?`<div class="qtitle">確認：この理解で進めてよいですか</div>`:q.kind==="rule"?`<div class="qtitle">決まりの見直し</div>`:"")}
+        <div class="text">${esc(q.text)}</div>
+        ${opts?`<div class="opts">${opts}</div>`:""}
+        ${q.reason&&q.recommended?`<div class="note">推奨の理由：${esc(q.reason)}</div>`:""}
+        <textarea id="a-${esc(q.id)}" data-free="${esc(q.id)}" aria-label="返事（自由に書けます）" placeholder="${opts?"ひとこと（自由に）":"返事を書く"}">${esc(drafts[q.id] ?? (sent? ((q.options||[]).includes(sent.answer)? sent.comment : sent.answer) : ""))}</textarea>
+        <div class="send"><button data-send="${esc(q.id)}" ${cw?"disabled":""}>返事を送る</button>
+        ${cw?`<span class="note">取り消し待ち（次の回で中止になるので、返事は要りません）</span>`:sent?`<span class="note">返事済み（${esc(sent.answered)}）。送り直すと上書きします</span>`:""}</div>
+      </div>`;
+    }).join("");
+    $("asks").querySelectorAll("[data-opt]").forEach(b=>b.onclick=()=>{
+      b.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("sel")); b.classList.add("sel");
+    });
+    $("asks").querySelectorAll("[data-send]").forEach(b=>b.onclick=()=>sendAnswer(b.dataset.send, b.closest(".q")));
+    $("asks").querySelectorAll("[data-free]").forEach(t=>t.onkeydown=ev=>{ if(ev.key==="Enter"&&(ev.ctrlKey||ev.metaKey)){ ev.preventDefault(); sendAnswer(t.dataset.free, t.closest(".q")); } });
+  }
+
+  // ---- 結果の評価（Good / Bad） ----
+  // target はクエスト番号（Q5）か研究番号（S1）。書くのは _guild/feedback/F<日時>.json だけ
+  function fbBox(target, fb){
+    if(fb) return `<div class="fbtag ${fb.verdict==="bad"?"bad":"good"}">評価 ${fb.verdict==="bad"?"Bad":"Good"}（${esc(fb.status||"送った")}）</div>`;
+    const sent = pendingFb.find(f=>f.target===target);
+    if(sent) return `<div class="fbtag ${sent.verdict==="bad"?"bad":"good"}">評価 ${sent.verdict==="bad"?"Bad":"Good"} を送りました。次の /guild:quest で占い師が聞き取ります</div>`;
+    return `<div class="fb" data-fb="${esc(target)}"><div class="note">この結果の評価（次の依頼に活かします）</div>
+      <div class="vb"><button type="button" class="good" data-v="good">Good</button><button type="button" class="bad" data-v="bad">Bad</button></div>
+      <textarea data-fbtext="${esc(target)}" placeholder="どこが良かったか・どこが違ったか（ひとことで。くわしくは占い師が聞きます）" style="min-height:40px"></textarea>
+      <p style="margin:6px 0 0;text-align:right"><button type="button" data-fbsend="${esc(target)}">評価を送る</button></p></div>`;
+  }
+  // 10 秒ごとの描き直しで、書きかけの評価を消さない
+  function keepFb(root, draw){
+    const keep = {}; root.querySelectorAll("[data-fb]").forEach(b=>{ const s=b.querySelector(".vb .sel"); keep[b.dataset.fb]={t:b.querySelector("textarea").value, v:s?s.dataset.v:""}; });
+    draw();
+    root.querySelectorAll("[data-fb]").forEach(b=>{ const k=keep[b.dataset.fb]; if(!k) return; b.querySelector("textarea").value=k.t; if(k.v) b.querySelector(`[data-v="${k.v}"]`).classList.add("sel"); });
+    root.querySelectorAll("[data-fb] [data-v]").forEach(x=>x.onclick=()=>{ x.parentElement.querySelectorAll("button").forEach(y=>y.classList.remove("sel")); x.classList.add("sel"); });
+    root.querySelectorAll("[data-fbsend]").forEach(x=>x.onclick=()=>sendFb(x.closest("[data-fb]")));
+  }
+  async function sendFb(box){
+    const s = box.querySelector(".vb .sel"); if(!s){ toast("Good か Bad を選んでください"); return; }
+    const f = {target: box.dataset.fb, verdict: s.dataset.v, comment: box.querySelector("textarea").value.trim(), posted: now()};
+    try{ const d=await sub("feedback"); await writeJSON(d, (await freshName(d,"F"+stamp()))+".json", f); toast("評価を送りました"); await refresh(); }
+    catch(e){ toast("書き込めませんでした: "+e.message); }
+  }
+
+  // ---- 取り消し ----
+  // target はクエスト番号（Q5）か研究番号（S1）。書くのは _guild/requests/C<日時>.json（kind: cancel）だけ。達成・中止のものは取り消せない
+  function cancelBox(target, status){
+    if(["達成","中止","受付待ち"].includes(status)) return "";
+    const sent = pendingReq.find(r=>r.kind==="cancel" && r.target===target);
+    if(sent) return `<span class="fbtag bad">取り消しを送りました。次の /guild:quest で中止になります</span>`;
+    return `<span class="cancel"><button type="button" class="ghost" data-cancel="${esc(target)}">取り消す</button></span>`;
+  }
+  document.addEventListener("click", async ev=>{
+    const b = ev.target.closest("[data-cancel]"); if(!b) return;
+    const target = b.dataset.cancel;
+    const reason = prompt(`${target} を取り消しますか？ 理由があれば書いてください（空でもよい）。ギルド員が作業中のものも、次の回で中止になります。`);
+    if(reason===null) return;
+    try{ const d=await sub("requests"); await writeJSON(d, (await freshName(d,"C"+stamp()))+".json", {kind:"cancel", target, reason:reason.trim(), posted:now()}); toast("取り消しを送りました"); await refresh(); }
+    catch(e){ toast("書き込めませんでした: "+e.message); }
+  });
+  // 受付待ちの依頼の取り下げ：requests/ のそのファイルと、添えた資料のフォルダ requests/files/R<日時>/ を消す
+  document.addEventListener("click", async ev=>{
+    const b = ev.target.closest("[data-withdraw]"); if(!b) return;
+    const file = b.dataset.withdraw, base = file.replace(/\.json$/,"");
+    if(!confirm(`「${b.dataset.title||base}」を取り下げますか？ まだ受け付けていないので、消すだけで済みます。`)) return;
+    try{
+      const d = await sub("requests"); await d.removeEntry(file);
+      try{ await (await d.getDirectoryHandle("files")).removeEntry(base,{recursive:true}); }catch(e){ /* 資料が無ければそのまま */ }
+      toast("取り下げました"); await refresh();
+    }catch(e){ toast("消せませんでした: "+e.message); }
+  });
+
+  // ---- ギルドからの知らせと自動実行 ----
+  function autoText(){
+    const a = autoCfg, l = lastRun;
+    if(!a || !a.enabled) return "自動実行：なし（/guild:quest を実行すると動きます）";
+    return `自動実行：${esc(a.every_min)} 分ごと` + (l ? ` ・ 最後に動いた ${esc(l.time||"-")}（${l.ok===false?"止まりました。_guild/logs を見てください":l.skipped?"することなし":"済み"}）` : " ・ まだ動いていません");
+  }
+  function renderNotices(max){
+    const ns = (board.notices||[]).slice(0, max);
+    $("noticeNone").classList.toggle("hidden", ns.length>0);
+    $("notices").innerHTML = ns.map((n,i)=>`${i===1?`<details><summary>前の知らせ（${(board.notices||[]).length-1}）</summary>`:""}<div class="notice"><span class="when">${esc(n.time||"")} ・ ${esc(ROLE[n.by]||n.by||"受付嬢")}</span>${esc(n.text)}</div>`).join("") + (ns.length>1?"</details>":"");
+  }
+
+  async function sendAnswer(qid, box){
+    if(box.classList.contains("cw")){ toast("取り消し待ちなので、返事は要りません"); return; }
+    const sel = box.querySelector(".opts button.sel");
+    const free = box.querySelector("textarea").value.trim();
+    // 選択肢がある質問は必ず選ぶ。「（コメントへ）」の選択肢はひとこと必須
+    if(box.querySelector(".opts") && !sel){ toast("選択肢を選んでください"); return; }
+    if(sel && sel.dataset.opt.includes("（コメントへ）") && !free){ toast("この選択肢はひとことを書いてください"); return; }
+    if(!sel && !free){ toast("返事を書いてください"); return; }
+    const a = {question_id:qid, answer: sel? sel.dataset.opt : free, comment: sel? free : "", answered: now()};
+    try{ await writeJSON(await sub("answers"), `${qid}.json`, a); toast("返事を送りました"); await refresh(); }
+    catch(e){ toast("書き込めませんでした: "+e.message); }
+  }
+
+  $("post").onclick = async () => {
+    const title=$("nTitle").value.trim(); if(!title){ toast("依頼の内容を書いてください"); return; }
+    const r={kind:"quest", title, detail:$("nDetail").value.trim(), priority:Number((document.querySelector('input[name="pri"]:checked')||{value:2}).value), due:$("nDue").value||"", output:$("nOut").value.replace(/（.*$/,""), files:[], posted:now()};
+    try{ const d=await sub("requests"); const name=await freshName(d,"R"+stamp()); r.files=await saveFiles(name,$("nFiles")); await writeJSON(d, name+".json", r); $("nTitle").value=""; $("nDetail").value=""; $("nDue").value=""; $("nOut").value="おまかせ"; $("nFiles").value=""; toast(r.files.length?`依頼と資料 ${r.files.length} 件を貼りました`:"依頼を貼りました"); await refresh(); }
+    catch(e){ toast("書き込めませんでした: "+e.message); }
+  };
+
+  $("postTerm").onclick = async () => {
+    const title=$("tName").value.trim(); if(!title){ toast("用語を書いてください"); return; }
+    const r={kind:"term", title, detail:$("tMeaning").value.trim(), priority:1, due:"", posted:now()};
+    try{ const d=await sub("requests"); await writeJSON(d, (await freshName(d,"R"+stamp()))+".json", r); $("tName").value=""; $("tMeaning").value=""; toast("用語の登録を貼りました"); await refresh(); }
+    catch(e){ toast("書き込めませんでした: "+e.message); }
+  };
+
+  $("postInterview").onclick = async () => {
+    const r={kind:"interview", title:$("iTopic").value.trim()||"おまかせ", detail:"", posted:now()};
+    try{ const d=await sub("requests"); await writeJSON(d, (await freshName(d,"R"+stamp()))+".json", r); $("iTopic").value=""; toast("インタビューを頼みました"); await refresh(); }
+    catch(e){ toast("書き込めませんでした: "+e.message); }
+  };
+  const PSEC = ["仕事と立場","読み手と使い道","好みの形","言葉づかい","判断の基準","避けたいこと","まだ分からないこと"];
+  function renderProfile(){
+    const ps = board.profile||[];
+    const n = ps.filter(p=>p.section!=="まだ分からないこと").length;
+    $("pCount").textContent = n ? `（人物帳 ${n} 行）` : "";
+    $("pNone").classList.toggle("hidden", ps.length>0);
+    $("iPend").classList.toggle("hidden", !pendingReq.some(r=>r.kind==="interview"));
+    const secs = [...PSEC, ...new Set(ps.map(p=>p.section).filter(x=>!PSEC.includes(x)))];
+    $("prof").innerHTML = secs.map(sec=>{ const it=ps.filter(p=>p.section===sec); return it.length?`<dt>${esc(sec)}</dt>${it.map(p=>`<dd>${esc(p.text)}<small>${esc(p.source||"")}</small></dd>`).join("")}`:""; }).join("");
+  }
+
+  // 受付待ちの札にするのは、まだ受け付けていない quest と term だけ（interview は「依頼主のこと」の欄、study は研究の記録。replan と cancel は札にしない）
+  function allQuests(){
+    const pend = pendingReq.filter(r=>r.kind==="quest" || r.kind==="term").map(r=>({id:"（未受付）", title:r.kind==="term"?`用語「${r.title}」を登録`:r.title, detail:r.detail, priority:r.priority, due:r.due, output:r.kind==="term"?"":r.output, files:r.files||[], status:"受付待ち", posted:r.posted, _file:r._file}));
+    return [...pend, ...board.quests];
+  }
+  // かんばん：受付（受付待ち・受付済）→ 冒険中（冒険中・鑑定中・要手直し）→ 返事待ち（返事待ち・依頼主がやること）→ 達成（新しい 8 件。中止は「古いものも」で）
+  const COLS = [["受付待ち","受付済"],["冒険中","鑑定中","要手直し"],["返事待ち","依頼主がやること"],["達成","中止"]];
+  const qnum = q => Number(String(q.id).replace(/\D/g,""))||0;
+  const openOf = {};
+  function renderQuests(){
+    const qs = allQuests();
+    const asks = board.questions.filter(q=>q.status!=="回答済" && !isExpAsk(q));
+    $("qCount").textContent = `全部で ${qs.length} 件`;
+    const act = qs.filter(q=>!["達成","中止"].includes(q.status)).length, wait = asks.filter(notSent).length;
+    $("counts").innerHTML = `<span>返事が要る <b class="${wait?"hot":""}">${wait}</b></span><span>進行中 <b>${act}</b></span><span>達成 <b>${qs.filter(q=>q.status==="達成").length}</b></span>`;
+    $("app").querySelectorAll("details.more").forEach(d=>openOf[d.dataset.id]=d.open);
+    keepFb($("app").querySelector(".kanban"), ()=>{
+      COLS.forEach((sts,i)=>{
+        let xs = qs.filter(q=>sts.includes(q.status));
+        if(i===3){
+          // 達成の列は番号の大きい順（新しいものが上）。「中止と古いものも」を付けないときは達成の新しい 8 件だけ
+          xs.sort((a,b)=>qnum(b)-qnum(a));
+          if(!$("showAll").checked) xs = xs.filter(q=>q.status==="達成").slice(0,8);
+        }else{
+          xs.sort((a,b)=>STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status) || (b.priority||0)-(a.priority||0) || String(a.due||"9999").localeCompare(String(b.due||"9999")));
+        }
+        $("c"+i).textContent = xs.length;
+        $("k"+i).innerHTML = xs.map(q=>card(q, asks.filter(a=>a.quest_id===q.id && notSent(a)).length)).join("") || `<p class="note" style="margin:4px 6px">なし</p>`;
+      });
+    });
+  }
+  $("showAll").onchange = renderQuests;
+  // ノートは [[ノート名]] で見せる。押すとコピーするので、Obsidian のノートや検索に貼れる
+  function wikiName(p){ return String(p).replace(/^\[\[|\]\]$/g,"").replace(/\|.*$/,"").replace(/\.md$/,"").split("/").pop(); }
+  function noteLink(p){
+    if(/^https?:/.test(p)) return `<a href="${esc(p)}" target="_blank" rel="noopener">${esc(p.replace(/^https?:\/\//,"").slice(0,40))}</a>`;
+    if(/\.[A-Za-z0-9]{2,5}$/.test(p) && !/\.md$/i.test(p) && !/^\[\[/.test(p)) return `<button type="button" class="wiki file" data-copy="${esc(p)}" title="押すとパスをコピーします">${esc(p.split("/").pop())}</button>`;
+    const w = `[[${wikiName(p)}]]`;
+    return `<button type="button" class="wiki" data-copy="${esc(w)}" title="押すとコピーします">${esc(w)}</button>`;
+  }
+  document.addEventListener("click", async ev=>{
+    const b = ev.target.closest("[data-copy]"); if(!b) return;
+    try{ await navigator.clipboard.writeText(b.dataset.copy); toast(b.dataset.copy+" をコピーしました"); }
+    catch(e){ toast("コピーできませんでした: "+b.dataset.copy); }
+  });
+  function card(q, nAsk){
+    const who = (q.adventurers||[]).map(r=>ROLE[r]||r).join("・");
+    const links = (q.links||[]).map(noteLink).join("");
+    const log = (q.log||[]).length ? `<details><summary>冒険の記録（${q.log.length}）</summary><ul>${q.log.map(l=>`<li>${esc(l.time||"")} ${esc(ROLE[l.who]||l.who||"")}${l.edge?` <span class="edge">${esc(l.edge)}</span>`:""}：${esc(l.text)}</li>`).join("")}</ul></details>` : "";
+    const dw = (q.done_when||[]).length ? `<div class="done"><b>達成の条件</b>${q.retries?`<span class="muted">（手直し ${esc(q.retries)} 回）</span>`:""}<ul>${q.done_when.map(c=>`<li>${esc(c)}</li>`).join("")}</ul></div>` : "";
+    const pend = q.id==="（未受付）";
+    const cw = !pend && cancelWait(q);
+    // 質問と返事：このクエストの回答済の質問（題・答え・ひとこと）
+    const qa = board.questions.filter(x=>x.quest_id===q.id && x.status==="回答済");
+    const qaHtml = qa.length ? `<details><summary>質問と返事（${qa.length}）</summary><ul>${qa.map(x=>`<li><b>${esc(x.title||x.text||x.id)}</b>：${esc(x.answer||"")}${x.comment?`<span class="muted">（${esc(x.comment)}）</span>`:""}</li>`).join("")}</ul></details>` : "";
+    return `<div class="card k-${esc(q.status)}">
+      <div class="top"><span><span class="id">${esc(q.id)}</span> <span class="stars">${stars(q.priority)}</span>${q.due?" ・ "+esc(q.due):""}</span><span>${cw?`<span class="badge st-中止">取り消し待ち</span> `:""}<span class="badge st-${esc(q.status)}">${esc(q.status)}</span></span></div>
+      <div class="title">${esc(q.title)}</div>
+      ${q.study?`<div><span class="exptag">${esc(q.study)} ${esc((board.studies.find(x=>x.id===q.study)||{}).title||"")}</span></div>`:""}
+      <div class="muted" style="font-size:.8rem">${who?"担当："+esc(who):""}${q.depends_on&&q.depends_on.length?" ・ 前提："+esc(q.depends_on.join(", ")):""}${q.output?" ・ "+esc(q.output):""}</div>
+      ${nAsk?`<div class="ask">質問 ${nAsk} 件に返事を（上の「返事が要るもの」）</div>`:""}
+      ${q.result?`<div class="result">${esc(short(q.result))}${links?`<div style="margin-top:4px">${links}</div>`:""}</div>`:(links?`<div>${links}</div>`:"")}
+      ${q.status==="達成"&&!pend?fbBox(q.id,q.feedback):""}
+      ${pend?`<div class="foot">${q.detail?`<span class="muted" style="white-space:pre-wrap">${esc(short(q.detail))}</span>`:"<span></span>"}<span class="cancel"><button type="button" class="ghost" data-withdraw="${esc(q._file||"")}" data-title="${esc(q.title)}">取り下げる</button></span></div>`:`<details class="more" data-id="${esc(q.id)}" ${openOf[q.id]?"open":""}><summary>くわしく</summary><div>
+        ${q.detail?`<div class="muted" style="white-space:pre-wrap">${esc(q.detail)}</div>`:""}
+        ${q.dir?`<div class="muted">フォルダ：<button type="button" class="wiki file" data-copy="${esc(q.dir)}" title="押すとパスをコピーします">${esc(q.dir)}</button></div>`:""}
+        ${(q.files||[]).length?`<div class="muted">資料：${q.files.map(f=>esc(String(f).split("/").pop())).join("、")}</div>`:""}
+        ${dw}
+        ${q.result&&q.result.length>90?`<div class="result">${esc(q.result)}</div>`:""}
+        ${qaHtml}
+        <div class="foot">${log||"<span></span>"}${q.status!=="達成"?cancelBox(q.id,q.status):""}</div>
+      </div></details>`}
+    </div>`;
+  }
+  function short(t){ t=String(t||"").split("\n")[0]; return t.length>90 ? t.slice(0,90)+"…" : t; }
+
+  // 前回の扉があれば、ボタン 1 つで再接続できることを案内
+  loadHandle().then(h=>{ if(h){ $("open").textContent="ギルドの扉を開く（前回のフォルダ）"; } });
+})();
+</script>
+</body>
+</html>

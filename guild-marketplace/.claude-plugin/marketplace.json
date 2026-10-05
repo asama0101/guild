@@ -1,0 +1,17 @@
+{
+  "name": "asama-local",
+  "owner": {
+    "name": "asama"
+  },
+  "metadata": {
+    "description": "あさま用のローカルプラグイン置き場"
+  },
+  "plugins": [
+    {
+      "name": "guild",
+      "source": "./plugins/guild",
+      "version": "1.1.0",
+      "description": "Obsidian vault のタスクを冒険者ギルドのギルド員たち（サブエージェント）で片付ける"
+    }
+  ]
+}
