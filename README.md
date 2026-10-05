@@ -108,6 +108,10 @@ Obsidian vault のタスクを、冒険者ギルドのギルド員たち（Claud
      /plugin marketplace add <展開したフォルダのパス>
      /plugin install guild@guild
      ```
+   - 特定の vault だけで使う: 上のどちらかで `marketplace add` したあと、`/plugin install guild@guild` の代わりに vault のルートで次を実行する（`--scope project` は `.claude/settings.json` に記録され、vault を共有する人にも有効。自分だけなら `--scope local`）。
+     ```
+     claude plugin install guild@guild --scope project
+     ```
 2. Claude Code を再起動する。使いたい vault のルート（`.obsidian/` があるフォルダ）で Claude Code を開き、`/guild:init` を 1 回。あとは掲示板で依頼して `/guild:quest`。別の vault でも使うときは、その vault で `/guild:init` をもう 1 回。
 
 - vault の置き場所は問いません（OneDrive・iCloud・Git・ローカル）。同期フォルダにあるときは、`/guild:quest` の実行中に別の PC で同じ vault の `_guild/` を書き換えないでください（同期で上書きされます）。
