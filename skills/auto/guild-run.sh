@@ -1,10 +1,10 @@
 #!/bin/sh
-# Guild auto run for Mac and Linux. Placed in <vault>/_guild/auto/ by /guild:auto and started by cron.
+# Guild auto run for Mac and Linux. Placed in <vault>/guild/.system/auto/ by /guild:auto and started by cron.
 # It runs "/guild:quest auto" only when there is something to do.
 AUTO="$(cd "$(dirname "$0")" && pwd)"
-GUILD="$(dirname "$AUTO")"
-VAULT="$(dirname "$GUILD")"
-LOGS="$GUILD/logs"
+SYS="$(dirname "$AUTO")"
+VAULT="$(dirname "$(dirname "$SYS")")"
+LOGS="$SYS/logs"
 mkdir -p "$LOGS"
 NOW="$(date '+%Y-%m-%d %H:%M')"
 STAMP="$(date '+%Y%m%d-%H%M')"
@@ -16,7 +16,7 @@ if [ -f "$AUTO/run.lock" ]; then
   rm -f "$AUTO/run.lock"
 fi
 # Nothing new (requests, answers, feedback) and no unfinished run: do nothing.
-n=$(ls "$GUILD"/requests/*.json "$GUILD"/answers/*.json "$GUILD"/feedback/*.json 2>/dev/null | wc -l)
+n=$(ls "$SYS"/requests/*.json "$SYS"/answers/*.json "$SYS"/feedback/*.json 2>/dev/null | wc -l)
 if [ "$n" -eq 0 ] && [ ! -f "$AUTO/resume" ]; then last true true; exit 0; fi
 touch "$AUTO/run.lock" "$AUTO/resume"
 ALLOW=$(grep -v '^#' "$AUTO/allow.txt" | sed 's/^ *//;s/ *$//' | grep -v '^$' | paste -sd, -)

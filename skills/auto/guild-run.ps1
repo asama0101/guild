@@ -1,10 +1,10 @@
-# Guild auto run for Windows. Placed in <vault>/_guild/auto/ by /guild:auto and started by Task Scheduler.
+# Guild auto run for Windows. Placed in <vault>/guild/.system/auto/ by /guild:auto and started by Task Scheduler.
 # It runs "/guild:quest auto" only when there is something to do.
 $ErrorActionPreference = "Continue"
 $auto  = Split-Path -Parent $PSCommandPath
-$guild = Split-Path -Parent $auto
-$vault = Split-Path -Parent $guild
-$logs  = Join-Path $guild "logs"
+$sys = Split-Path -Parent $auto
+$vault = Split-Path -Parent (Split-Path -Parent $sys)
+$logs  = Join-Path $sys "logs"
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 $lock   = Join-Path $auto "run.lock"
 $resume = Join-Path $auto "resume"
@@ -20,7 +20,7 @@ if (Test-Path $lock) {
 }
 # Nothing new (requests, answers, feedback) and no unfinished run: do nothing.
 $new = @("requests", "answers", "feedback") | ForEach-Object {
-  Get-ChildItem -Path (Join-Path $guild $_) -Filter *.json -File -ErrorAction SilentlyContinue
+  Get-ChildItem -Path (Join-Path $sys $_) -Filter *.json -File -ErrorAction SilentlyContinue
 }
 if (@($new).Count -eq 0 -and -not (Test-Path $resume)) { Write-Last $true $true; exit 0 }
 New-Item -ItemType File -Force -Path $lock | Out-Null

@@ -157,7 +157,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
 
 <section id="gate" class="gate">
   <h2 style="justify-content:center">ギルドの扉</h2>
-  <p>vault の中の <b>_guild</b> フォルダを選んでください。掲示板はそのフォルダを読み書きして、ギルドマスターとやりとりします。</p>
+  <p>vault の中の <b>guild</b> フォルダを選んでください。掲示板はそのフォルダを読み書きして、ギルドマスターとやりとりします。</p>
   <p class="note">Microsoft Edge か Google Chrome で開いてください（Firefox ではフォルダの読み書きができません）。2 回目からはボタンを押して許可するだけです。</p>
   <p><button id="open">ギルドの扉を開く</button></p>
   <p id="gateMsg" class="note"></p>
@@ -209,7 +209,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
 
   <div class="two">
     <section>
-      <h2>依頼主のこと <span id="pCount" class="hint"></span><span class="hint">人物帳 <code>_guild/client.md</code>。どのギルド員も依頼のたびに読みます</span></h2>
+      <h2>依頼主のこと <span id="pCount" class="hint"></span><span class="hint">人物帳 <code>guild/client.md</code>。どのギルド員も依頼のたびに読みます</span></h2>
       <dl id="prof" class="prof" style="margin:0"></dl>
       <p id="pNone" class="muted">まだ何も分かっていません。</p>
       <p id="iPend" class="hidden" style="margin:6px 0 0"><span class="fbtag">インタビューを頼みました。次の回で占い師が聞きます</span></p>
@@ -269,9 +269,10 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
     if((await h.queryPermission({mode:"readwrite"}))!=="granted"){
       if((await h.requestPermission({mode:"readwrite"}))!=="granted") throw new Error("読み書きが許可されませんでした。");
     }
-    const b = await readJSON(h,"board.json");
-    if(!b) throw new Error("選んだフォルダに board.json がありません。vault の _guild フォルダを選んでください（無ければ先に /guild:init を実行します）。");
-    dir=h; await saveHandle(h);
+    let sh=null; try{ sh=await h.getDirectoryHandle(".system"); }catch(e){}
+    const b = sh && await readJSON(sh,"board.json");
+    if(!b) throw new Error("選んだフォルダに board.json がありません。guild フォルダを選んでください（/guild:init で作られます）。");
+    dir=sh; await saveHandle(h);
     $("gate").classList.add("hidden"); $("app").classList.remove("hidden"); $("reload").classList.remove("hidden");
     await refresh(); clearInterval(timer); timer=setInterval(refresh,10000);
   }
@@ -352,7 +353,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
   }
 
   // ---- 結果の評価（Good / Bad） ----
-  // target はクエスト番号（Q5）か研究番号（S1）。書くのは _guild/feedback/F<日時>.json だけ
+  // target はクエスト番号（Q5）か研究番号（S1）。書くのは guild/.system/feedback/F<日時>.json だけ
   function fbBox(target, fb){
     if(fb) return `<div class="fbtag ${fb.verdict==="bad"?"bad":"good"}">評価 ${fb.verdict==="bad"?"Bad":"Good"}（${esc(fb.status||"送った")}）</div>`;
     const sent = pendingFb.find(f=>f.target===target);
@@ -378,7 +379,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
   }
 
   // ---- 取り消し ----
-  // target はクエスト番号（Q5）か研究番号（S1）。書くのは _guild/requests/C<日時>.json（kind: cancel）だけ。達成・中止のものは取り消せない
+  // target はクエスト番号（Q5）か研究番号（S1）。書くのは guild/.system/requests/C<日時>.json（kind: cancel）だけ。達成・中止のものは取り消せない
   function cancelBox(target, status){
     if(["達成","中止","受付待ち"].includes(status)) return "";
     const sent = pendingReq.find(r=>r.kind==="cancel" && r.target===target);
@@ -409,7 +410,7 @@ details ul{margin:4px 0;padding-left:18px;font-size:.8rem}
   function autoText(){
     const a = autoCfg, l = lastRun;
     if(!a || !a.enabled) return "自動実行：なし（/guild:quest を実行すると動きます）";
-    return `自動実行：${esc(a.every_min)} 分ごと` + (l ? ` ・ 最後に動いた ${esc(l.time||"-")}（${l.ok===false?"止まりました。_guild/logs を見てください":l.skipped?"することなし":"済み"}）` : " ・ まだ動いていません");
+    return `自動実行：${esc(a.every_min)} 分ごと` + (l ? ` ・ 最後に動いた ${esc(l.time||"-")}（${l.ok===false?"止まりました。guild/.system/logs を見てください":l.skipped?"することなし":"済み"}）` : " ・ まだ動いていません");
   }
   function renderNotices(max){
     const ns = (board.notices||[]).slice(0, max);
