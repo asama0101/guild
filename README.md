@@ -97,13 +97,12 @@ Obsidian vault のタスクを、冒険者ギルドのギルド員たち（Claud
 しくみ：2 枚の画面は `board.json`（ギルドマスターだけが書く）を表示し、依頼主の書き込みは `requests/` と `answers/` と `feedback/` に 1 件 1 ファイルで置きます。書き手が分かれているので、ぶつかりません。読み終えたファイルは `済/` に、まだ受け付けられないもの（計画を直している研究へのもう 1 つの直し、聞き取り中の重ねた評価など）は `保留/` に移り、受け付けられるようになった回で読まれます。
 
 ## 入れ方
-1. この `guild-marketplace` フォルダを好きな場所に置く（例: Windows は `C:\Users\<名前>\claude-plugins\guild-marketplace`、Mac は `~/claude-plugins/guild-marketplace`）。vault の中には置かない。
-2. Claude Code で次を実行する（パスは 1 で置いた場所）:
+1. Claude Code で次を実行する:
    ```
-   /plugin marketplace add <guild-marketplace のパス>
+   /plugin marketplace add asama0101/guild
    /plugin install guild@asama-local
    ```
-3. Claude Code を再起動する。使いたい vault のルート（`.obsidian/` があるフォルダ）で Claude Code を開き、`/guild:init` を 1 回。あとは掲示板で依頼して `/guild:quest`。別の vault でも使うときは、その vault で `/guild:init` をもう 1 回。
+2. Claude Code を再起動する。使いたい vault のルート（`.obsidian/` があるフォルダ）で Claude Code を開き、`/guild:init` を 1 回。あとは掲示板で依頼して `/guild:quest`。別の vault でも使うときは、その vault で `/guild:init` をもう 1 回。
 
 - vault の置き場所は問いません（OneDrive・iCloud・Git・ローカル）。同期フォルダにあるときは、`/guild:quest` の実行中に別の PC で同じ vault の `_guild/` を書き換えないでください（同期で上書きされます）。
 - 冒険者は Web を検索して調べます。Claude Code に WebSearch・WebFetch の使用を聞かれたら許可してください（`/permissions` で許可の一覧に足すと、毎回は聞かれません）。

@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "guild",
-      "source": "./plugins/guild",
+      "source": "./",
       "version": "1.1.0",
       "description": "Obsidian vault のタスクを冒険者ギルドのギルド員たち（サブエージェント）で片付ける"
     }
