@@ -77,7 +77,7 @@ marketplace に追加してから install する、2 段階です。marketplace 
 | 占い師 `seer` | 結果の評価（Good / Bad）の聞き取りと、依頼主へのインタビュー。人物帳と教訓の案を書く |
 
 ## コマンド
-- `/guild:init`：vault に `guild/` と HTML の画面（`board.html` の 1 枚。`research.html` は `board.html#research` へ飛ばすだけ）を用意する。最初に 1 回だけ。
+- `/guild:init`：vault に `guild/` と HTML の画面（`board.html` の 1 枚）を用意する。最初に 1 回だけ。
 - `/guild:quest`：画面に貼られた依頼と、質問への返事を受け取り、クエストをギルド員に割り振って片付ける。
 - `/guild:auto`：`/guild:quest` を決まった間隔で自動で動かす（`始める`・`止める`・`様子`）。`様子` は今日と 7 日の使用量も伝える。
 - `/guild:help`：動かし方と止め方を案内し、いまの状態（自動実行・錠・冒険中の件数・返事待ち・使用量）を読んで、いま何をすればよいかを伝える。読むだけで、何も書き換えない。
@@ -104,7 +104,7 @@ flowchart TD
 ```
 
 ## 画面（HTML）`guild/board.html`
-画面は `guild/board.html` の 1 枚です。Edge か Chrome で開き、「ギルドの扉を開く」で `guild` フォルダを選びます（扉は 1 回だけ。タブを切り替えても出ません。更新しても、許可済みなら自動でつながります）。サーバーやインストールは要りません。帯の 4 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録）は画面の中で切り替わり、開いたときの既定は「使い方」です。`guild/research.html` は `board.html#research` へ飛ばすだけの古いブックマーク用のファイルです。答えると次の回でギルドが動きます（Ctrl+Enter でも送れます）。PC のブラウザ向けです。
+画面は `guild/board.html` の 1 枚です。Edge か Chrome で開き、「ギルドの扉を開く」で `guild` フォルダを選びます（扉は 1 回だけ。タブを切り替えても出ません。更新しても、許可済みなら自動でつながります）。サーバーやインストールは要りません。帯の 4 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録）は画面の中で切り替わり、開いたときの既定は「使い方」です。答えると次の回でギルドが動きます（Ctrl+Enter でも送れます）。PC のブラウザ向けです。
 
 ### 使い方タブ
 - 動かし方・止め方・状態の見方・用語の説明、自動実行の状態（動いているか・間隔・最後の回）、使用量（今日 / 7 日 / 累計）、設定（同時数）が見られます。
@@ -168,7 +168,7 @@ flowchart TD
 vault/
 ├ .obsidian/、Inbox/                 そのまま（vault 直下）
 └ guild/
-   ├ board.html、research.html       画面（board.html を開く。research.html は飛ばすだけ）
+   ├ board.html                      画面（ここを開く）
    ├ client.md、lessons.md           人物帳、教訓帳
    ├ guild_templates/                会社の型（稟議の PowerPoint など）
    ├ 10_projects/<研究名>/           研究ノート、input/（資料）、output/（成果物と結果の Markdown）
