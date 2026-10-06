@@ -111,7 +111,10 @@ vault/
 しくみ：2 枚の画面は `board.json`（ギルドマスターだけが書く）を表示し、依頼主の書き込み（研究の優先度の変更も `requests/` に置かれます）は `requests/` と `answers/` と `feedback/` に 1 件 1 ファイルで置きます。書き手が分かれているので、ぶつかりません。読み終えたファイルは `済/` に、まだ受け付けられないもの（計画を直している研究へのもう 1 つの直し、聞き取り中の重ねた評価など）は `保留/` に移り、受け付けられるようになった回で読まれます。
 
 ## 入れ方
-1. 次のどちらかで入れる。
+
+入れるには marketplace に追加して install する 2 ステップが要ります。順番が重要で、marketplace 追加だけではプラグインは読み込まれません。
+
+1. marketplace に追加する。
    - GitHub から入れる（git が使える場合）: Claude Code で次を実行する。
      ```
      /plugin marketplace add asama0101/guild
@@ -122,15 +125,25 @@ vault/
      /plugin marketplace add <展開したフォルダのパス>
      /plugin install guild@guild
      ```
-   - 特定の vault だけで使う: 上のどちらかで `marketplace add` したあと、`/plugin install guild@guild` の代わりに vault のルートで次を実行する（`--scope project` は `.claude/settings.json` に記録され、vault を共有する人にも有効。自分だけなら `--scope local`）。
-     ```
-     claude plugin install guild@guild --scope project
-     ```
-2. Claude Code を再起動する。使いたい vault のルート（`.obsidian/` があるフォルダ）で Claude Code を開き、`/guild:init` を 1 回。あとは掲示板で依頼して `/guild:quest`。別の vault でも使うときは、その vault で `/guild:init` をもう 1 回。
+     例: Windows で `C:\Users\<ユーザー>\OneDrive\guild` に置いた場合は、`/plugin marketplace add C:\Users\<ユーザー>\OneDrive\guild`です。
+
+2. install する。GitHub または zip から入れた場合は、どこからでも実行できます。特定 vault だけで使う場合は、その vault のルートで実行します。
+   ```
+   claude plugin install guild@guild --scope project
+   ```
+   `--scope project` は `.claude/settings.json` に記録され、そのプロジェクトだけで有効になります。自分だけで使う場合は `--scope local` を使ってください。
+
+3. `/reload-plugins` を実行する。`/reload-plugins` の出力に「1 plugin」と表示され、skills・agents の数が増えていれば読み込めています。
+
+4. 使いたい vault のルート（`.obsidian/` があるフォルダ）で Claude Code を開き、`/guild:init` を 1 回。あとは掲示板で依頼して `/guild:quest`。別の vault でも使うときは、その vault で `/guild:init` をもう 1 回。
+
+やり直す: `/plugin marketplace remove guild` のあと、marketplace add からやり直せます。
 
 - vault の置き場所は問いません（OneDrive・iCloud・Git・ローカル）。同期フォルダにあるときは、`/guild:quest` の実行中に別の PC で同じ vault の `guild/` を書き換えないでください（同期で上書きされます）。
 - 冒険者は Web を検索して調べます。Claude Code に WebSearch・WebFetch の使用を聞かれたら許可してください（`/permissions` で許可の一覧に足すと、毎回は聞かれません）。
 - Python 3 が要ります（`py`・`python3`・`python` のどれかを自動で探します）。Windows では Git Bash も要ります。
 - Word・Excel・PowerPoint を読み書きする外部ライブラリは、vault の外の venv（`~/.guild/venv`、Windows は `%USERPROFILE%\.guild\venv`）に `/guild:init` が入れます。Python が無い・入れられないときは Office の変換だけが使えず、ノートと回答だけのクエストは動きます。
+
+### 更新のしかた
 
 中身を直したら `plugin.json` と `marketplace.json` の両方の version を上げて `/plugin marketplace update guild` で反映する。zip で入れた場合は、新しい zip を同じ場所に上書きして同じコマンドを実行する。
