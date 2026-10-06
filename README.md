@@ -1,6 +1,6 @@
 # guild：冒険者ギルド
 
-Obsidian vault のタスクを、冒険者ギルドのギルド員たち（Claude Code のサブエージェント）で片付けるプラグインです。tmux は使わず、1 つの Claude Code セッションの中で動きます。Windows・Mac・Linux（cron）のどれでも、どの Obsidian の vault でも使えます（vault ごとに `/guild:init` でギルドを開きます）。
+Obsidian vault のタスクを、冒険者ギルドのギルド員たち（Claude Code のサブエージェント）で片付けるプラグインです。tmux は使わず、1 つの Claude Code セッションの中で動きます。Windows・Mac・Linux（cron）のどれでも、どの Obsidian の vault でも使えます（vault ごとに `/guild:init` でギルドを開きます）。Obsidian の vault は推奨で、必須ではありません。普通のフォルダでも動きますが、`[[ノート名]]` のリンクをたどれず、グラフビューも使えません。
 
 | 役 | 中身 |
 |---|---|
@@ -135,7 +135,7 @@ vault/
 
 3. `/reload-plugins` を実行する。`/reload-plugins` の出力に「1 plugin」と表示され、skills・agents の数が増えていれば読み込めています。
 
-4. 使いたい vault のルート（`.obsidian/` があるフォルダ）で Claude Code を開き、`/guild:init` を 1 回。あとは掲示板で依頼して `/guild:quest`。別の vault でも使うときは、その vault で `/guild:init` をもう 1 回。
+4. 使いたい vault のルート（`.obsidian/` があるフォルダ。Obsidian を使わないなら普通のフォルダでもよく、そのときは `/guild:init` が 1 回確認します）で Claude Code を開き、`/guild:init` を 1 回。あとは掲示板で依頼して `/guild:quest`。別の vault でも使うときは、その vault で `/guild:init` をもう 1 回。
 
 やり直す: `/plugin marketplace remove guild` のあと、marketplace add からやり直せます。
 
