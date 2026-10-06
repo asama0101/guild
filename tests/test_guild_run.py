@@ -25,9 +25,10 @@ class TestLock(unittest.TestCase):
             self.assertFalse(gr.lock_is_fresh(lock))  # 無い
             lock.touch()
             self.assertTrue(gr.lock_is_fresh(lock))
-            _age(lock, 2.9)
+            self.assertEqual(gr.LOCK_HOURS, 1)
+            _age(lock, 0.9)
             self.assertTrue(gr.lock_is_fresh(lock))
-            _age(lock, 3.1)
+            _age(lock, 1.1)
             self.assertFalse(gr.lock_is_fresh(lock))
 
 
@@ -223,6 +224,105 @@ class TestRunFlow(unittest.TestCase):
             self.assertFalse((auto / "run.lock").exists())
             logs = list((auto.parent / "logs").glob("run-*.log"))
             self.assertTrue(any("kaboom" in p.read_text(encoding="utf-8") for p in logs))
+
+
+_OK_JSON = json.dumps({
+    "type": "result", "is_error": False, "result": "全部片付けました", "num_turns": 7,
+    "total_cost_usd": 0.1234,
+    "usage": {"input_tokens": 100, "output_tokens": 50,
+              "cache_read_input_tokens": 900, "cache_creation_input_tokens": 30},
+}, ensure_ascii=False)
+
+
+class TestUsage(unittest.TestCase):
+    NOW = gr.datetime(2026, 10, 6, 12, 30)
+
+    def test_parse_normal(self):
+        d = gr.parse_claude_json(_OK_JSON)
+        self.assertEqual(d["result"], "全部片付けました")
+        rec = gr.usage_record(self.NOW, True, d)
+        self.assertEqual(rec, {
+            "time": "2026-10-06 12:30", "ok": True, "input_tokens": 100, "output_tokens": 50,
+            "cache_read_input_tokens": 900, "cache_creation_input_tokens": 30,
+            "cost_usd": 0.1234, "turns": 7})
+
+    def test_missing_keys_are_null(self):
+        d = gr.parse_claude_json(json.dumps({"result": "x", "usage": {"input_tokens": 5}}))
+        rec = gr.usage_record(self.NOW, True, d)
+        self.assertEqual(rec["input_tokens"], 5)
+        for k in ("output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens",
+                  "cost_usd", "turns"):
+            self.assertIsNone(rec[k])
+        d = gr.parse_claude_json(json.dumps({"result": "x"}))  # usage 自体が無い
+        self.assertIsNone(gr.usage_record(self.NOW, True, d)["input_tokens"])
+
+    def test_not_json(self):
+        self.assertIsNone(gr.parse_claude_json("Error: boom"))
+        self.assertIsNone(gr.parse_claude_json(""))
+        self.assertIsNone(gr.parse_claude_json("[1, 2]"))
+        self.assertEqual(gr.usage_record(self.NOW, False, None),
+                         {"time": "2026-10-06 12:30", "ok": False})
+
+    def test_json_line_after_noise(self):
+        d = gr.parse_claude_json("warn\n" + _OK_JSON + "\nstderr text\n")
+        self.assertEqual(d["num_turns"], 7)
+
+
+class TestUsageViaRun(unittest.TestCase):
+    def _vault(self, d):
+        auto = Path(d) / "guild" / ".system" / "auto"
+        auto.mkdir(parents=True)
+        (auto / "allow.txt").write_text("Read\n", encoding="utf-8")
+        (auto / "resume").touch()
+        return auto
+
+    def _usage(self, auto):
+        f = auto.parent / "logs" / "usage.jsonl"
+        return [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()]
+
+    def test_json_run_writes_usage_and_readable_log(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto = self._vault(d)
+            seen = {}
+
+            def runner(cmd, logfile, cwd):
+                seen["cmd"] = cmd
+                Path(logfile).write_text(_OK_JSON, encoding="utf-8")
+                return 0
+
+            self.assertEqual(gr.run(auto, runner=runner), 0)
+            self.assertEqual(seen["cmd"][seen["cmd"].index("--output-format") + 1], "json")
+            rows = self._usage(auto)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual((rows[0]["ok"], rows[0]["input_tokens"], rows[0]["turns"]), (True, 100, 7))
+            log = next((auto.parent / "logs").glob("run-*.log")).read_text(encoding="utf-8")
+            self.assertIn("全部片付けました", log)
+            self.assertNotIn("total_cost_usd", log)
+            self.assertFalse((auto / "resume").exists())  # 既存の動き
+
+    def test_non_json_keeps_raw_log_and_minimal_usage(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto = self._vault(d)
+
+            def runner(cmd, logfile, cwd):
+                Path(logfile).write_text("Error: something broke\n", encoding="utf-8")
+                return 2
+
+            self.assertEqual(gr.run(auto, runner=runner), 2)
+            rows = self._usage(auto)
+            self.assertEqual(set(rows[0]), {"time", "ok"})
+            self.assertFalse(rows[0]["ok"])
+            log = next((auto.parent / "logs").glob("run-*.log")).read_text(encoding="utf-8")
+            self.assertIn("something broke", log)
+            self.assertTrue((auto / "resume").exists())
+
+    def test_usage_failure_does_not_fail_run(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto = self._vault(d)
+            (auto.parent / "logs").mkdir()
+            (auto.parent / "logs" / "usage.jsonl").mkdir()  # 書けない
+            self.assertEqual(gr.run(auto, runner=lambda c, l, w: 0), 0)
+            self.assertFalse((auto / "resume").exists())
 
 
 class TestPathTxt(unittest.TestCase):
