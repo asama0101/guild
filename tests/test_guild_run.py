@@ -514,6 +514,21 @@ class TestModelAndSimple(unittest.TestCase):
             self.assertEqual(len(seen), 1)
             self.assertEqual(seen[0][seen[0].index("--model") + 1], "opus")
 
+    def test_python_txt(self):
+        with tempfile.TemporaryDirectory() as d:
+            sysd = Path(d)
+            exe = sysd / "python.exe"
+            exe.touch()
+            gr.write_python_txt(sysd, str(exe))
+            line = (sysd / "python.txt").read_text(encoding="utf-8").strip()
+            self.assertEqual(line, str(exe).replace("\\", "/"))
+            (sysd / "pythonw.exe").touch()
+            self.assertEqual(gr.console_python(str(sysd / "pythonw.exe")), str(sysd / "python.exe"))
+            self.assertEqual(gr.console_python("/usr/bin/python3"), "/usr/bin/python3")
+            mtime = (sysd / "python.txt").stat().st_mtime_ns
+            gr.write_python_txt(sysd, str(exe))  # 同じなら書き直さない
+            self.assertEqual((sysd / "python.txt").stat().st_mtime_ns, mtime)
+
     def test_missing_board_py_is_fine(self):
         with tempfile.TemporaryDirectory() as d:
             auto, sysd = self._vault(d)

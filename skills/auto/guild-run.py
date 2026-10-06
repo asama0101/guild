@@ -162,6 +162,26 @@ def windows_runner(python_exe):
     return str(w) if w.exists() else str(python_exe)
 
 
+def console_python(exe):
+    """pythonw.exe で動いているときは、同じ階層の python.exe を返す（ギルドマスターが Bash から使う）。"""
+    p = Path(exe)
+    if p.name.lower() == "pythonw.exe" and p.with_name("python.exe").exists():
+        return str(p.with_name("python.exe"))
+    return str(exe)
+
+
+def write_python_txt(sysd, exe):
+    """ギルドマスターが board.py を動かす Python を python.txt に残す。変わらなければ書かない。"""
+    f = Path(sysd) / "python.txt"
+    line = console_python(exe).replace("\\", "/")
+    try:
+        if f.is_file() and f.read_text(encoding="utf-8").strip() == line:
+            return
+    except OSError:
+        pass
+    f.write_text(line + "\n", encoding="utf-8")
+
+
 def schtasks_create_args(task, every_min, runner_exe, script):
     """シェルを経由させず subprocess に渡す list 引数（/TN が MSYS のパス変換を受けないため）。"""
     if '"' in str(runner_exe) or '"' in str(script):
@@ -292,6 +312,7 @@ def run(auto_dir, runner=_real_runner):
         lock.unlink(missing_ok=True)
     lock.touch()
     try:
+        write_python_txt(sysd, sys.executable)
         apply_simple_requests(sysd)
     except Exception:
         # 取り込めなくても回は止めない（ギルドマスターが手順 2 で拾う）。跡だけ残す
