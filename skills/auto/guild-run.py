@@ -17,7 +17,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-LOCK_HOURS = 3
+LOCK_HOURS = 1
 KEEP_LOGS = 30
 PROMPT = "/guild:quest auto"
 
@@ -53,6 +53,56 @@ def prune_logs(logs, keep=KEEP_LOGS):
     """run-*.log を名前の新しい順に keep 個残し、古いものを消す。"""
     for p in sorted(Path(logs).glob("run-*.log"), reverse=True)[keep:]:
         p.unlink(missing_ok=True)
+
+
+def parse_claude_json(raw):
+    """claude --output-format json の出力から、結果の dict を取り出す。取れなければ None。
+    標準エラーが混ざっても読めるよう、全体 → 末尾の行から順に試す。"""
+    text = (raw or "").strip()
+    cands = [text] + [l.strip() for l in reversed(text.splitlines()) if l.strip().startswith("{")]
+    for c in cands:
+        try:
+            d = json.loads(c)
+        except ValueError:
+            continue
+        if isinstance(d, dict) and ("result" in d or "usage" in d or "total_cost_usd" in d):
+            return d
+    return None
+
+
+def usage_record(now, ok, data):
+    """usage.jsonl の 1 行分。data が None（JSON でない）なら time と ok だけ。
+    取れない値は 0 にせず None（使用量不明）にする。"""
+    rec = {"time": now.strftime("%Y-%m-%d %H:%M"), "ok": bool(ok)}
+    if not isinstance(data, dict):
+        return rec
+    u = data.get("usage")
+    u = u if isinstance(u, dict) else {}
+    cost = data.get("total_cost_usd", data.get("cost_usd"))
+    rec.update({
+        "input_tokens": u.get("input_tokens"),
+        "output_tokens": u.get("output_tokens"),
+        "cache_read_input_tokens": u.get("cache_read_input_tokens"),
+        "cache_creation_input_tokens": u.get("cache_creation_input_tokens"),
+        "cost_usd": cost,
+        "turns": data.get("num_turns"),
+    })
+    return rec
+
+
+def record_usage(logs, log, now, ok):
+    """ログの JSON を読み、usage.jsonl に追記する。ログは人が読める結果の文字列に直す。
+    JSON でなければログは生のまま。失敗しても回は失敗にしない。"""
+    try:
+        raw = Path(log).read_text(encoding="utf-8", errors="replace") if Path(log).is_file() else ""
+        data = parse_claude_json(raw)
+        if data is not None:
+            res = data.get("result")
+            Path(log).write_text((res if isinstance(res, str) else raw).rstrip() + "\n", encoding="utf-8")
+        with open(Path(logs) / "usage.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(usage_record(now, ok, data), ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 def cron_expr(every_min):
@@ -186,8 +236,12 @@ def _write_last(logs, now, ok, skipped):
 def _real_runner(cmd, logfile, cwd):
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     with open(logfile, "wb") as f:
-        return subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, cwd=cwd,
-                              creationflags=flags).returncode
+        # JSON を壊さないよう、標準エラーは別ファイルへ（ログの後ろに足す）
+        p = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, cwd=cwd, creationflags=flags)
+    if p.stderr:
+        with open(logfile, "ab") as f:
+            f.write(b"\n" + p.stderr)
+    return p.returncode
 
 
 def run(auto_dir, runner=_real_runner):
@@ -215,8 +269,10 @@ def run(auto_dir, runner=_real_runner):
         cfile = auto / "claude.txt"
         lines = cfile.read_text(encoding="utf-8").splitlines() if cfile.is_file() else []
         claude = lines[0].strip() if lines and lines[0].strip() else "claude"
-        cmd = [claude, "-p", PROMPT, "--permission-mode", "acceptEdits", "--allowedTools", allow]
+        cmd = [claude, "-p", PROMPT, "--permission-mode", "acceptEdits", "--allowedTools", allow,
+               "--output-format", "json"]
         code = runner(cmd, log, str(vault))
+        record_usage(logs, log, now, code == 0)
         if code == 0:
             resume.unlink(missing_ok=True)
         _write_last(logs, now, code == 0, False)
