@@ -17,6 +17,8 @@ disable-model-invocation: true
    { "vault": "<vault 名>", "inbox": "", "projects_dir": "<手順 6>", "quests_dir": "<手順 6>", "glossary_dir": "<手順 6>", "knowledge_dir": "<手順 6>", "templates_dir": "<手順 6>", "updated": "<日時>", "studies": [], "quests": [], "questions": [], "notices": [], "profile": [] }
    ```
 
+   - `venv_python`（文字列）は手順 7 で venv を作れたときだけ書き足す。最初の例には含めない。
+
 4. すでに board.json がある場合は、`projects_dir`・`quests_dir`・`glossary_dir`・`knowledge_dir`・`templates_dir`（手順 6 で決める。すでに値があれば変えない）と、無い項目（`studies`・`quests`・`questions`・`notices`・`profile`。それぞれ `[]`）だけを書き足す。ほかの中身は変えない。
 5. vault に `Inbox/` があれば、`inbox` に `"Inbox"` を入れる（掲示板と並んで、Inbox のメモも依頼として受け付ける）。無ければ空のままにする。
 6. フォルダの置き場所を決める。質問するのは、手順 0 が通ったあとの次の質問で、該当する行があるときだけ。
@@ -33,12 +35,17 @@ disable-model-invocation: true
    | `templates_dir` | 会社の型（稟議の PowerPoint など） | `guild/guild_templates` | なし（`guild/` の下に作る） |
 
 7. 道具を確かめる（勝手には入れない）。
-   - `python --version`（無ければ `python3 --version`）。Python が無ければ、Word・Excel・PowerPoint の読み書きができないことと、ノートと回答だけのクエストは動くことを報告に書く。
-   - `markitdown --help`。動かなければ、資料を読むのに要ることと、入れ方（`python -m pip install "markitdown[all]"`）を報告に書く。
-   - `python -c "import pptx, docx, openpyxl"`。動かなければ、鍛冶師がファイルを作るのに要ることと、入れ方（`python -m pip install python-pptx python-docx openpyxl`）を報告に書く。
+   - vault の外に Python の venv を作り、Word・Excel・PowerPoint の変換に使う外部ライブラリを入れる。Bash ツール（Git Bash を含む）から次の順で進める。
+     1. venv の場所は Linux/Mac が `~/.guild/venv`、Windows が `%USERPROFILE%\.guild\venv`（Git Bash では `"$USERPROFILE/.guild/venv"`）。すでにあれば作り直さず、そのまま使う。
+     2. 無いときだけ、作成に使う Python を `py -3`、`python3`、`python` の順に探す。それぞれ `--version` を実行し、成功して `Python 3.x` と出た最初のものを使う。Microsoft Store のスタブ（実行しても Store が開くだけで、出力が無いか終了コードが 0 でないもの）は使わない。見つかったら `<その Python> -m venv <venv の場所>` で作る。
+     3. 作ったあとは venv 内の Python のフルパス（Windows は `<venv>\Scripts\python.exe`、それ以外は `<venv>/bin/python`）だけを使う。`python` や `pip` を素のまま呼ばない。
+     4. `<venv_python> -m pip install python-docx openpyxl python-pptx markitdown` で入れる（入っていれば何も変わらない）。
+     5. うまくいったら、そのフルパスを `guild/.system/board.json` の `venv_python`（文字列）に書く（すでに値があれば、実在する場合は変えない）。
+     6. Python が見つからない・ネットワークに届かない・pip が失敗したときは、「Word/Excel/PowerPoint の変換は使えません」と報告に書き、init は続ける。このときは `venv_python` を書かない（空文字も入れない。すでにあるキーも消さない）。ノートと回答だけのクエストは動くことも添える。
    - 冒険者は Web の検索と取得（WebSearch・WebFetch）を使う。Claude Code の権限で止められると調べものが進まないので、使うときに許可するか、許可の一覧に足しておく（`/permissions`）ように報告に書く（設定は書き換えない）。
    - vault が Git で管理されていれば（`.git/` がある）、`guild/` も vault の中身としてコミットされることを報告に書く。分けたいときの `.gitignore` の例（`guild/.system/work/`、`guild/.system/requests/files/`）も添える（`.gitignore` は書き換えない）。
 8. 開設を依頼主に報告する。伝えること:
+   - 外部ライブラリの venv の場所（`~/.guild/venv`、Windows は `%USERPROFILE%\.guild\venv`）と、board.json の `venv_python` に書いた Python のパス。作れなかったときは、Word/Excel/PowerPoint の変換が使えないことを伝える。
    - `guild/board.html`（依頼掲示板）を Edge か Chrome で開き、「ギルドの扉を開く」で `guild` フォルダを選ぶ。研究は `guild/research.html`（研究の記録）で同じように開く。2 枚は上の帯のタブで行き来できる。
    - 研究と単発のクエストは、`<projects_dir>/` と `<quests_dir>/` に 1 件ずつフォルダができ、資料は `input/`、成果物は `output/` に入る。会社の型は `<templates_dir>/` に置いておくと、鍛冶師が合わせて作る。
    - 質問への返事で分かった仕事の場の事実（使っている機器、会議の日、会社の決まりなど）は、賢者が `<knowledge_dir>/` に話題ごとに書き写す。次の依頼からは、書いてあることは聞かれない。
