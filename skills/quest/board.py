@@ -137,7 +137,7 @@ def _find_target(board, tid):
 def summary(board):
     """ギルドマスターが読む要約。result・log・detail・回答済の質問は含めない。"""
     top_keys = ("vault", "inbox", "max_active", "projects_dir", "quests_dir", "glossary_dir",
-                "knowledge_dir", "templates_dir", "venv_python", "system_python",
+                "knowledge_dir", "templates_dir", "venv_python",
                 "results_backfilled", "pending_term_quests", "updated")
     out = {k: board[k] for k in top_keys if k in board}
     out["studies"] = [{
@@ -160,7 +160,9 @@ def summary(board):
     out["open_questions"] = [{k: a[k] for k in qkeys if a.get(k)}
                              for a in board.get("questions", []) if a.get("status") == "未回答"]
     out["answered_questions"] = sum(1 for a in board.get("questions", []) if a.get("status") == "回答済")
-    out["notices"] = len(board.get("notices", []))
+    notices = board.get("notices", [])
+    out["notices"] = len(notices)
+    out["latest_stops"] = (notices[0].get("stops") or []) if notices else []
     return out
 
 

@@ -131,6 +131,9 @@ class TestSummary(unittest.TestCase):
         self.assertNotIn("log", s["quests"][0])
         self.assertEqual(s["open_questions"], [{"id": "A2", "kind": "question", "quest_id": "Q1"}])
         self.assertEqual(s["answered_questions"], 1)
+        self.assertEqual(s["latest_stops"], [])
+        b["notices"] = [{"text": "x", "stops": ["Q3 は許可待ち"]}]
+        self.assertEqual(bd.summary(b)["latest_stops"], ["Q3 は許可待ち"])
 
 
 class TestApplySimple(unittest.TestCase):

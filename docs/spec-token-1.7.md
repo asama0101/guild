@@ -131,3 +131,4 @@
 - Q3：board.json の退避は達成・中止から 30 日。画面は board.json だけを読む。
 - Q4：自動実行のギルドマスターのモデルは任意で指定（`auto.json` の `model`、既定は指定なし）。
 - 質問せずに決めたこと：quest をコマンドからスキルに移す（参照ファイルを同じフォルダに置くため。init・auto・help と形がそろう）。board.json の書き出しは「節目でまとめる」ではなく board.py のサブコマンドごと（小さい書き込みなので画面の追従も保てる）。T と E の統合は非目標。司書の用語集めは 2 件以上たまってから。
+- 実装での変更：board.py を動かす Python は board.json の `system_python` ではなく `guild/.system/python.txt`（1 行）にした。SKILL.md が board.json を読む前に Python を知る必要があるため。`/guild:init` と自動実行のスクリプト（`run` のたびに `sys.executable` から）が書く。自動実行の `allow.txt` には、`/guild:auto 始める` が `python.txt` の Python も足す。

@@ -1,6 +1,6 @@
 {
   "name": "guild",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Obsidian vault のタスクを冒険者ギルドのギルド員たち（サブエージェント）で片付ける",
   "author": {
     "name": "guild"

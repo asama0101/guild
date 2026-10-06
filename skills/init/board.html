@@ -351,7 +351,7 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     <section>
       <h2>ギルドからの知らせ</h2>
       <div id="notices"></div>
-      <p id="noticeNone" class="muted" style="margin:0">まだ知らせはありません。/guild:quest が動くたびに、受付嬢がここに結果と、待っていることを書きます。</p>
+      <p id="noticeNone" class="muted" style="margin:0">まだ知らせはありません。/guild:quest が動くたびに、伝令がここに結果と、待っていることを書きます。</p>
     </section>
   </div>
 
@@ -432,7 +432,7 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
   const $ = id => document.getElementById(id);
   const STATUSES = ["受付待ち","受付済","冒険中","鑑定中","返事待ち","要手直し","依頼主がやること","達成","中止"];
   const ESTATUS = ["受付待ち","計画中","承認待ち","進行中","達成","中止"];
-  const ROLE = {alchemist:"錬金術師",strategist:"錬金術師",receptionist:"受付嬢",scribe:"書記",sage:"賢者",adventurer:"冒険者",scout:"冒険者",informant:"冒険者",bard:"吟遊詩人",librarian:"司書",appraiser:"鑑定士",seer:"占い師",smith:"鍛冶師",guildmaster:"ギルドマスター",client:"依頼主",user:"依頼主"};
+  const ROLE = {alchemist:"錬金術師",strategist:"錬金術師",receptionist:"受付嬢",herald:"伝令",scribe:"書記",sage:"賢者",adventurer:"冒険者",scout:"冒険者",informant:"冒険者",bard:"吟遊詩人",librarian:"司書",appraiser:"鑑定士",seer:"占い師",smith:"鍛冶師",guildmaster:"ギルドマスター",client:"依頼主",user:"依頼主"};
   const TABS = ["guide","asks","board","research"];
   let dir = null, board = null, pendingReq = [], pendingAns = {}, pendingFb = [], autoCfg = null, lastRun = null, usageText = null, timer = null;
   let tab = "guide", efilter = "未完了", selected = null, selectedTitle = null;
@@ -775,7 +775,7 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     const all = board.notices||[], ns = all.slice(0, max);
     $(noneId).classList.toggle("hidden", ns.length>0);
     const stops = n => Array.isArray(n.stops) && n.stops.length ? `<div class="stops"><b>止まっていること</b><ul>${n.stops.map(s=>`<li>${esc(s)}</li>`).join("")}</ul></div>` : "";
-    const html = ns.map((n,i)=>`${i===1?`<details><summary>前の知らせ（${all.length-1}）</summary>`:""}<div class="notice"><span class="when">${esc(n.time||"")} ・ ${esc(ROLE[n.by]||n.by||"受付嬢")}</span>${esc(n.text)}</div>${stops(n)}`).join("") + (ns.length>1?"</details>":"");
+    const html = ns.map((n,i)=>`${i===1?`<details><summary>前の知らせ（${all.length-1}）</summary>`:""}<div class="notice"><span class="when">${esc(n.time||"")} ・ ${esc(ROLE[n.by]||n.by||"伝令")}</span>${esc(n.text)}</div>${stops(n)}`).join("") + (ns.length>1?"</details>":"");
     draw(id, html, $(id), false, true);
   }
 

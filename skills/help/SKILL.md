@@ -19,12 +19,12 @@ disable-model-invocation: true
 - 止まったまま残った錠 `guild/.system/auto/run.lock`：1 時間より古ければ残りなので、消してよい。1 時間以内なら自動の回が動いているので、終わるまで待つ。
 
 ## いまの状態を伝える
-`guild/.system/board.json` が無ければ、先に `/guild:init` を実行するよう伝えて止まる。あれば、次を読む（読むだけ）。JSON は Python の `json.load`（UTF-8）で読み、Bash の `sed`・`echo` で扱わない。`board.json` を書き換えない。
+`guild/.system/board.json` が無ければ、先に `/guild:init` を実行するよう伝えて止まる。あれば、次を読む（読むだけ）。`board.json` は `<guild/.system/python.txt の Python> guild/.system/board.py get --summary`（無ければ Python の `json.load`（UTF-8））で読み、Bash の `sed`・`echo` で扱わない。`board.json` を書き換えない。
 
-- `guild/.system/auto.json`：自動実行が動いているか（`enabled`）、間隔（`every_min`）。無ければ自動実行は未設定。
+- `guild/.system/auto.json`：自動実行が動いているか（`enabled`）、間隔（`every_min`）、モデル（`model`。無ければ既定）。無ければ自動実行は未設定。
 - `guild/.system/logs/last.json`：最後の回の時刻と結果（`ok`・`skipped`）。無ければ「まだ回なし」。`ok: false` なら止まった回があり、次の回でやり直す。
 - `guild/.system/auto/run.lock`：あるか、どれくらい古いか（ファイルの更新日時。1 時間以内か、より古いか）。
-- `board.json`：冒険中のクエストの件数と `max_active`（無ければ 4）の対比、返事待ち（`questions` の `status` が `未回答`）の件数、`返事待ち`・`依頼主がやること` のクエストの件数。`notices[0]` の `stops`（止まっていること）があればそれも。
+- `board.json`（`get --summary`）：冒険中のクエストの件数と `max_active`（無ければ 4）の対比、返事待ち（`open_questions`）の件数、`返事待ち`・`依頼主がやること` のクエストの件数。`latest_stops`（最新の知らせの `stops`）（止まっていること）があればそれも。
 - `guild/.system/requests/`・`answers/`・`feedback/` の直下の `*.json` の件数（まだ受け取られていない依頼・返事・評価）。
 - `guild/.system/logs/usage.jsonl`：直近の使用量（最後の数回と、今日の合計。`null` は不明）。無ければ「記録なし」。
 
