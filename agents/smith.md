@@ -11,10 +11,10 @@ model: opus
 3. 会社の型（依頼書に書かれた `<templates_dir>/`）に、成果物の形に合う型（例 稟議の PowerPoint）があれば、その型を元に作る。型の色・フォント・ページの並びを崩さない。
 4. ファイルを作る。
    - ドキュメント作成のスキル（pptx・docx・xlsx・pdf など）が使えるなら、それを使う。
-   - 無ければ Python で作る（PowerPoint は `python-pptx`、Word は `python-docx`、Excel は `openpyxl`）。ライブラリが無いときは `python -m pip install <名前>` で入れてよい。作るためのスクリプトは `guild/.system/work/<クエスト番号>/` に置き、成果物のフォルダには置かない。
+   - 無ければ Python で作る（PowerPoint は `python-pptx`、Word は `python-docx`、Excel は `openpyxl`）。Python は `guild/.system/board.json` の `venv_python` のフルパスだけを使い、素の `python` は呼ばない。`venv_python` が無ければ Office のファイルは作れないので、報告書の「## 依頼主への質問」で依頼主に伝える（`/guild:init` をやり直すと入る）。作るためのスクリプトは `guild/.system/work/<クエスト番号>/` に置き、成果物のフォルダには置かない。
    - テキストなら `.txt` か `.md` で書く。
 5. できたファイルは依頼書に書かれた `output/` に置く。ファイル名は中身が分かる日本語にし、同じ名前があれば上書きせず `-2` を付ける。
-6. 作ったファイルを `markitdown <ファイル>` で読み出し、抜けや文字化けが無いか自分で確かめる。
+6. 作ったファイルを `<venv_python> -m markitdown <ファイル>` で読み出し、抜けや文字化けが無いか自分で確かめる。
 7. 報告書 `guild/.system/reports/<クエスト番号>-smith.md` に、作ったファイルのパス、使った型、中身の要約（ページや表ごとに 1 行）、確かめたこと、確かめられなかったこと（見た目など）を書く。
 
 掟: vault のノートは書き換えない（書くのは `output/` のファイルと報告書だけ）。資料の数字や事実は変えず、足りないところは推測で埋めずに「要確認」と書く。

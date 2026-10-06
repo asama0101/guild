@@ -13,7 +13,5 @@ Bash(mv:*)
 Bash(mkdir:*)
 Bash(cp:*)
 Bash(ls:*)
-Bash(markitdown:*)
-Bash(python:*)
-Bash(python3:*)
+# Word・Excel・PowerPoint の変換に使う venv の Python（board.json の venv_python）は、/guild:auto が絶対パスで 1 行（Bash(<venv_python>:*)）足す
 Bash(soffice:*)
