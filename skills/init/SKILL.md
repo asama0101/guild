@@ -16,6 +16,8 @@ disable-model-invocation: true
    - `guild/lessons.md`（教訓帳）が無ければ、`# 教訓帳` の見出しと、表の見出し行 `| 日付 | クエスト | ギルド員 | 評価 | 型 | 何があったか | 次はどうする | 範囲 | 扱い |` と区切り行だけで作る。古い形なら見出しを新しい形に直す。3 列目が `冒険者` の形は `ギルド員` に直し（中身の `scout` は `adventurer` に）、`失敗の型 | 何がいけなかったか | 直し方` の形なら、今ある行の評価を「鑑定」、範囲を「このギルド員」として書き直す。`guild/.system/rules/scout.md` があれば `adventurer.md` に名前を変える。
    - `guild/client.md`（依頼主の人物帳）が無ければ、`# 依頼主の人物帳` の見出しと、節 `## 仕事と立場`・`## 読み手と使い道`・`## 好みの形`・`## 言葉づかい`・`## 判断の基準`・`## 避けたいこと`・`## まだ分からないこと` の見出しだけで作る。
 2. このスキルと同じフォルダにある `board.html` と `research.html` を読み、そのまま `guild/board.html`（依頼掲示板）と `guild/research.html`（研究の記録）に書き出す。どちらも依頼主がブラウザで開く。
+**board.json の決まり（手順 3〜5・7 すべてに共通）：** 読み書きは、必ず Python の `json.load` と `json.dump`（`ensure_ascii=False`、UTF-8）で行う。Bash の `sed`・`echo`・ヒアドキュメントで書かない（Windows のパスの `\` が落ちたり展開されたりして、壊れた JSON になる）。Windows のパスは `/` 区切りで書いてよい。書いたあとは `json.load` で読み直し、壊れていないことを確かめる。
+
 3. `guild/.system/board.json` が無ければ、次の内容で作る。`vault` には今いるフォルダの名前（Obsidian の vault なら vault 名）を入れる。`updated` は今の日時（`YYYY-MM-DD HH:MM`）。
 
    ```json
@@ -45,7 +47,7 @@ disable-model-invocation: true
      2. 無いときだけ、作成に使う Python を `py -3`、`python3`、`python` の順に探す。それぞれ `--version` を実行し、成功して `Python 3.x` と出た最初のものを使う。Microsoft Store のスタブ（実行しても Store が開くだけで、出力が無いか終了コードが 0 でないもの）は使わない。見つかったら `<その Python> -m venv <venv の場所>` で作る。
      3. 作ったあとは venv 内の Python のフルパス（Windows は `<venv>\Scripts\python.exe`、それ以外は `<venv>/bin/python`）だけを使う。`python` や `pip` を素のまま呼ばない。
      4. `<venv_python> -m pip install python-docx openpyxl python-pptx markitdown` で入れる（入っていれば何も変わらない）。
-     5. うまくいったら、そのフルパスを `guild/.system/board.json` の `venv_python`（文字列）に書く（すでに値があれば、実在する場合は変えない）。
+     5. うまくいったら、そのフルパスを `guild/.system/board.json` の `venv_python`（文字列）に、上の決まりどおり Python で書く（すでに値があれば、実在する場合は変えない）。書いた直後に `json.load` で読み直し、`os.path.exists(venv_python)` が真であることを確かめる。偽なら書き直す。
      6. Python が見つからない・ネットワークに届かない・pip が失敗したときは、「Word/Excel/PowerPoint の変換は使えません」と報告に書き、init は続ける。このときは `venv_python` を書かない（空文字も入れない。すでにあるキーも消さない）。ノートと回答だけのクエストは動くことも添える。
    - 冒険者は Web の検索と取得（WebSearch・WebFetch）を使う。Claude Code の権限で止められると調べものが進まないので、使うときに許可するか、許可の一覧に足しておく（`/permissions`）ように報告に書く（設定は書き換えない）。
    - vault が Git で管理されていれば（`.git/` がある）、`guild/` も vault の中身としてコミットされることを報告に書く。分けたいときの `.gitignore` の例（`guild/.system/work/`、`guild/.system/requests/files/`）も添える（`.gitignore` は書き換えない）。
