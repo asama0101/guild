@@ -6,7 +6,7 @@ disable-model-invocation: true
 あなたは冒険者ギルドの設立係です。今いるフォルダ（推奨は Obsidian の vault のルート）で次をする。どのフォルダでも同じ手順で開ける。置き場所やフォルダの組み方を決めつけず、そこにあるものに合わせる。
 
 0. 開設してよい場所かを確かめる。Obsidian の vault（`.obsidian/` があるフォルダ）は推奨だが必須ではない。確認は、下の順で最初に当たったものだけをする（選択式で聞き、聞くときは今いるフォルダのパスを必ず示す）。すでにあるファイルは上書きしない（board.html と research.html だけは新しい版で上書きしてよい）。
-   - 今いるフォルダに `.claude-plugin/plugin.json` があり、その `name` が `guild` なら、プラグイン本体のフォルダ。ソースと実データが混ざるので、警告して確認する（推奨の答えは「やめる」。テストのためなら「このまま開く」も選べる）。「このまま開く」なら、報告で `guild/` を `.gitignore` に入れることを勧める（書き換えはしない）。フォルダ名では判定しない（実データのフォルダが `guild` という名前のこともあるため）。
+   - 今いるフォルダに `.claude-plugin/plugin.json` があり、その `name` が `guild` なら、プラグイン本体のフォルダ。ソースと実データが混ざるので、警告して確認する（推奨の答えは「やめる」。テストのためなら「このまま開く」も選べる）。「このまま開く」なら、報告で `.gitignore` に `guild/` の 1 行を足すことを勧める（その行をそのまま書く。`.gitignore` は書き換えない）。フォルダ名では判定しない（実データのフォルダが `guild` という名前のこともあるため）。
    - 今いるフォルダに `.obsidian/` があれば、vault のルート。確認せず進む。
    - 無いが、上のフォルダに `.obsidian/` があれば、そのパスを伝えて聞く（推奨の答えは「vault のルートで開き直す（ここでは止まる）」。もう 1 つは「このフォルダで開く」）。
    - どこにも無ければ、Obsidian 無しで開いてよいかを 1 回だけ聞く（推奨の答えは「このまま開く（Obsidian 無しで使う）」。もう 1 つは「やめる」）。Obsidian では `[[ノート名]]` のリンクをたどれて、グラフビューで用語のつながりが見えることを添える。
@@ -15,8 +15,10 @@ disable-model-invocation: true
 1. `guild/` と、その下の `guild/.system/quests/`、`guild/.system/reports/`、`guild/.system/requests/`、`guild/.system/requests/files/`、`guild/.system/requests/済/`、`guild/.system/requests/保留/`、`guild/.system/answers/`、`guild/.system/answers/済/`、`guild/.system/feedback/`（結果の評価）、`guild/.system/feedback/済/`、`guild/.system/feedback/保留/`、`guild/.system/work/`、`guild/.system/rules/`（追加の決まり）を作る（`済/` は読み終えたファイル、`保留/` はまだ受け付けられないファイルの置き場）。
    - `guild/lessons.md`（教訓帳）が無ければ、`# 教訓帳` の見出しと、表の見出し行 `| 日付 | クエスト | ギルド員 | 評価 | 型 | 何があったか | 次はどうする | 範囲 | 扱い |` と区切り行だけで作る。古い形なら見出しを新しい形に直す。3 列目が `冒険者` の形は `ギルド員` に直し（中身の `scout` は `adventurer` に）、`失敗の型 | 何がいけなかったか | 直し方` の形なら、今ある行の評価を「鑑定」、範囲を「このギルド員」として書き直す。`guild/.system/rules/scout.md` があれば `adventurer.md` に名前を変える。
    - `guild/client.md`（依頼主の人物帳）が無ければ、`# 依頼主の人物帳` の見出しと、節 `## 仕事と立場`・`## 読み手と使い道`・`## 好みの形`・`## 言葉づかい`・`## 判断の基準`・`## 避けたいこと`・`## まだ分からないこと` の見出しだけで作る。
-2. このスキルと同じフォルダにある `board.html` と `research.html` を読み、そのまま `guild/board.html`（依頼掲示板）と `guild/research.html`（研究の記録）に書き出す。どちらも依頼主がブラウザで開く。
+2. このスキルと同じフォルダにある `board.html` と `research.html` を、そのまま `guild/board.html`（依頼掲示板）と `guild/research.html`（研究の記録）にコピーする（`cp` などでよい。中身を読み込まなくてよい）。どちらも依頼主がブラウザで開く。
 **board.json の決まり（手順 3〜5・7 すべてに共通）：** 読み書きは、必ず Python の `json.load` と `json.dump`（`ensure_ascii=False`、UTF-8）で行う。Bash の `sed`・`echo`・ヒアドキュメントで書かない（Windows のパスの `\` が落ちたり展開されたりして、壊れた JSON になる）。Windows のパスは `/` 区切りで書いてよい。書いたあとは `json.load` で読み直し、壊れていないことを確かめる。
+
+**パスの決まり：** 操作は絶対パスで行い、`cd` で作業ディレクトリを `guild/` などに移さない（移すと相対パスが食い違う）。board.json の `*_dir` は、開設したフォルダ（`guild/` を含むフォルダ）からの相対パスで書く。
 
 3. `guild/.system/board.json` が無ければ、次の内容で作る。`vault` には今いるフォルダの名前（Obsidian の vault なら vault 名）を入れる。`updated` は今の日時（`YYYY-MM-DD HH:MM`）。
 
