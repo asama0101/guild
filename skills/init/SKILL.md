@@ -15,7 +15,7 @@ disable-model-invocation: true
 1. `guild/` と、その下の `guild/.system/quests/`、`guild/.system/reports/`、`guild/.system/requests/`、`guild/.system/requests/files/`、`guild/.system/requests/済/`、`guild/.system/requests/保留/`、`guild/.system/answers/`、`guild/.system/answers/済/`、`guild/.system/feedback/`（結果の評価）、`guild/.system/feedback/済/`、`guild/.system/feedback/保留/`、`guild/.system/work/`、`guild/.system/rules/`（追加の決まり）を作る（`済/` は読み終えたファイル、`保留/` はまだ受け付けられないファイルの置き場）。
    - `guild/lessons.md`（教訓帳）が無ければ、`# 教訓帳` の見出しと、表の見出し行 `| 日付 | クエスト | ギルド員 | 評価 | 型 | 何があったか | 次はどうする | 範囲 | 扱い |` と区切り行だけで作る。古い形なら見出しを新しい形に直す。3 列目が `冒険者` の形は `ギルド員` に直し（中身の `scout` は `adventurer` に）、`失敗の型 | 何がいけなかったか | 直し方` の形なら、今ある行の評価を「鑑定」、範囲を「このギルド員」として書き直す。`guild/.system/rules/scout.md` があれば `adventurer.md` に名前を変える。
    - `guild/client.md`（依頼主の人物帳）が無ければ、`# 依頼主の人物帳` の見出しと、節 `## 仕事と立場`・`## 読み手と使い道`・`## 好みの形`・`## 言葉づかい`・`## 判断の基準`・`## 避けたいこと`・`## まだ分からないこと` の見出しだけで作る。
-2. このスキルと同じフォルダにある `board.html` を、そのまま `guild/board.html` にコピーする（`cp` などでよい。中身を読み込まなくてよい）。依頼主が開くのは `board.html` の 1 枚で、中に 4 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録）がある。あわせて、`skills/quest/board.py`（`/guild:quest` のスキルのフォルダにある。このスキルの 1 つ上の `quest/` フォルダ）を `guild/.system/board.py` にコピーする（ギルドマスターが board.json を読み書きする道具。中身は読み込まなくてよい）。
+2. このスキルと同じフォルダにある `board.html` を、そのまま `guild/board.html` にコピーする（`cp` などでよい。中身を読み込まなくてよい）。依頼主が開くのは `board.html` の 1 枚で、中に 5 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録・資料庫）がある。あわせて、`skills/quest/board.py`（`/guild:quest` のスキルのフォルダにある。このスキルの 1 つ上の `quest/` フォルダ）を `guild/.system/board.py` にコピーする（ギルドマスターが board.json を読み書きする道具。中身は読み込まなくてよい）。
 **board.json の決まり（手順 3〜5・7 すべてに共通）：** 読み書きは、必ず Python の `json.load` と `json.dump`（`ensure_ascii=False`、UTF-8）で行う。Bash の `sed`・`echo`・ヒアドキュメントで書かない（Windows のパスの `\` が落ちたり展開されたりして、壊れた JSON になる）。Windows のパスは `/` 区切りで書いてよい。書いたあとは `json.load` で読み直し、壊れていないことを確かめる。
 
 **パスの決まり：** 操作は絶対パスで行い、`cd` で作業ディレクトリを `guild/` などに移さない（移すと相対パスが食い違う）。board.json の `*_dir` は、開設したフォルダ（`guild/` を含むフォルダ）からの相対パスで書く。
@@ -23,14 +23,14 @@ disable-model-invocation: true
 3. `guild/.system/board.json` が無ければ、次の内容で作る。`vault` には今いるフォルダの名前（Obsidian の vault なら vault 名）を入れる。`updated` は今の日時（`YYYY-MM-DD HH:MM`）。
 
    ```json
-   { "vault": "<vault 名>", "inbox": "", "max_active": 4, "projects_dir": "<手順 6>", "quests_dir": "<手順 6>", "glossary_dir": "<手順 6>", "knowledge_dir": "<手順 6>", "templates_dir": "<手順 6>", "updated": "<日時>", "studies": [], "quests": [], "questions": [], "notices": [], "profile": [], "results_backfilled": true }
+   { "vault": "<vault 名>", "inbox": "", "max_active": 4, "projects_dir": "<手順 6>", "quests_dir": "<手順 6>", "glossary_dir": "<手順 6>", "assets_dir": "<手順 6>", "knowledge_dir": "<手順 6>", "templates_dir": "<手順 6>", "updated": "<日時>", "studies": [], "quests": [], "questions": [], "notices": [], "profile": [], "results_backfilled": true }
    ```
 
    - `max_active`（同時に冒険中にできる件数。1〜8、既定 4）は画面の「使い方」タブで変えられる。
    - `results_backfilled: true` は新しい vault だけに書く（過去の達成分の後追いは要らない）。すでに board.json がある場合は足さない（`/guild:quest` が後追いして書く）。
    - `venv_python`（文字列）は手順 7 で venv を作れたときだけ書き足す。最初の例には含めない。
 
-4. すでに board.json がある場合は、`projects_dir`・`quests_dir`・`glossary_dir`・`knowledge_dir`・`templates_dir`（手順 6 で決める。すでに値があれば変えない）と、無い項目（`studies`・`quests`・`questions`・`notices`・`profile`。それぞれ `[]`）だけを書き足す。ほかの中身は変えない。
+4. すでに board.json がある場合は、`projects_dir`・`quests_dir`・`glossary_dir`・`assets_dir`・`knowledge_dir`・`templates_dir`（手順 6 で決める。すでに値があれば変えない）と、無い項目（`studies`・`quests`・`questions`・`notices`・`profile`。それぞれ `[]`）だけを書き足す。ほかの中身は変えない。
    （すでに board.json がある場合、`max_active` が無ければ足さない。ギルドマスターが無いときは 4 とみなす。）
 5. vault に `Inbox/` があれば、`inbox` に `"Inbox"` を入れる（掲示板と並んで、Inbox のメモも依頼として受け付ける）。無ければ空のままにする。
 6. フォルダの置き場所を決める。質問するのは、手順 0 が通ったあとの次の質問で、該当する行があるときだけ。
@@ -43,6 +43,7 @@ disable-model-invocation: true
    | `projects_dir` | 研究のフォルダを置く | `guild/10_projects` | 名前に project / プロジェクト を含むもの（見つかれば依頼主に使うか聞く） |
    | `quests_dir` | 単発のクエストのフォルダを置く | `guild/20_quests` | `20_tasks` など、名前に quest / task を含むもの |
    | `glossary_dir` | 用語ノート | `guild/30_glossary` | `用語/`、`用語集/`、`Glossary/` |
+   | `assets_dir` | 資料から抽出した事実のノート | `guild/50_assets` | （同じ役の既存フォルダ無し） |
    | `knowledge_dir` | 知識帳（質問と返事で分かった事実と決まり） | `guild/40_knowledge` | `knowledge/`、`知識/`、`Wiki/` など、名前に knowledge / wiki / 知識 を含むもの |
    | `templates_dir` | 会社の型（稟議の PowerPoint など） | `guild/guild_templates` | なし（`guild/` の下に作る） |
 
@@ -56,12 +57,13 @@ disable-model-invocation: true
      6. Python が見つからない・ネットワークに届かない・pip が失敗したときは、「Word/Excel/PowerPoint の変換は使えません」と報告に書き、init は続ける。このときは `venv_python` を書かない（空文字も入れない。すでにあるキーも消さない）。ノートと回答だけのクエストは動くことも添える。
    - ギルドマスターが board.py を動かす Python を `guild/.system/python.txt`（1 行。Windows は `/` 区切りでよい）に書く。`venv_python` があればそれ。無ければ上で見つけた Python（venv を作らなかったときは `py -3`、`python3`、`python` の順に `--version` が `Python 3.x` と出る最初のものを探す。Store のスタブは除く）。どれも見つからなければ書かず、「Python が無いと `/guild:quest` は動きません」と報告する。
    - 用語集の索引を作る。`<glossary_dir>/` が無ければ作り、`<その Python> guild/.system/board.py glossary-index <glossary_dir>` を実行する（`<glossary_dir>/用語集.md` ができる。すでにあれば作り直してよい）。
+   - 資料庫の索引を作る。`<assets_dir>/` が無ければ作り、`<その Python> guild/.system/board.py assets-index` を実行する（`<assets_dir>/資料庫.md` と `guild/.system/assets.json` ができる。すでにあれば作り直してよい）。
    - 冒険者は Web の検索と取得（WebSearch・WebFetch）を使う。Claude Code の権限で止められると調べものが進まないので、使うときに許可するか、許可の一覧に足しておく（`/permissions`）ように報告に書く（設定は書き換えない）。
    - vault が Git で管理されていれば（`.git/` がある）、`guild/` も vault の中身としてコミットされることを報告に書く。分けたいときの `.gitignore` の例（`guild/.system/work/`、`guild/.system/requests/files/`）も添える（`.gitignore` は書き換えない）。
 8. 開設を依頼主に報告する。伝えること:
    - Obsidian の vault での利用は推奨（必須ではない）。`[[ノート名]]` のリンクをたどれ、グラフビューで用語のつながりが見える。Obsidian 無しでも動くが、リンクはたどれない。
    - 外部ライブラリの venv の場所（`~/.guild/venv`、Windows は `%USERPROFILE%\.guild\venv`）と、board.json の `venv_python` に書いた Python のパス。作れなかったときは、Word/Excel/PowerPoint の変換が使えないことを伝える。
-   - 画面は `guild/board.html` の 1 枚。Edge か Chrome で開き、「ギルドの扉を開く」で `guild` フォルダを選ぶ（扉は 1 回だけ）。4 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録）は画面の中で切り替える。開いたときの既定は「使い方」タブで、動かし方・止め方・自動実行の状態・使用量・同時数の設定がある。
+   - 画面は `guild/board.html` の 1 枚。Edge か Chrome で開き、「ギルドの扉を開く」で `guild` フォルダを選ぶ（扉は 1 回だけ）。5 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録・資料庫）は画面の中で切り替える。開いたときの既定は「使い方」タブで、動かし方・止め方・自動実行の状態・使用量・同時数の設定がある。
    - 困ったときや、いまの状態を知りたいときは `/guild:help`（読むだけで、何も書き換えない）。
    - 研究と単発のクエストは、`<projects_dir>/` と `<quests_dir>/` に 1 件ずつフォルダができ、資料は `input/`、成果物は `output/` に入る。達成したクエストは、成果物の形が「回答だけ」でも、結果の Markdown が `output/` に残る。会社の型は `<templates_dir>/` に置いておくと、鍛冶師が合わせて作る。
    - 質問への返事で分かった仕事の場の事実（使っている機器、会議の日、会社の決まりなど）は、賢者が `<knowledge_dir>/` に話題ごとに書き写す。次の依頼からは、書いてあることは聞かれない。

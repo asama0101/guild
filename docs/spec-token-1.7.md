@@ -9,7 +9,7 @@
 
 ### A-1. quest.md の分割と重複除去（最優先）
 - `commands/quest.md` を `skills/quest/SKILL.md` に移す（init・auto・help と同じ形。`argument-hint: "[auto]"`、`disable-model-invocation: true`。`/guild:quest` と `claude -p "/guild:quest auto"` の呼び方は変わらない）。`commands/` は空になるので消す。
-- SKILL.md に残すもの（ホットパス）：冒頭の確認、ギルドの掟、フォルダ、クエストの遷移表、board.json の形、手順 1〜11 の骨格、自動実行時の短い規則、参照ファイルの読み方。**目標は 12,000 字以下（約 10K トークン）。**
+- SKILL.md に残すもの（ホットパス）：冒頭の確認、ギルドの掟、フォルダ、クエストの遷移表、board.json の形、手順 1〜11 の骨格、自動実行時の短い規則、参照ファイルの読み方。**目標は、公式推奨の「SKILL.md は 500 行以下、詳細は `references/` へ」を目安にする（資料庫の追加に伴う依頼主の決定。上限は外した）。** ~~旧目標：12,000 字以下（約 10K トークン）。~~
 - 頻度の低い分岐は `skills/quest/references/` に分け、その分岐に入ったときだけ Read する。SKILL.md には「〜のときは `references/<名前>.md` を読んでそのとおりにする」の 1 行だけを書く。
   | ファイル | 中身（今の quest.md の出どころ） |
   |---|---|
@@ -45,10 +45,21 @@
   | `apply-simple` | `requests/` 直下の `M<日時>.json`（`kind: setting`）と `S<日時>.json`（`kind: study_priority`）を今の手順 2 の規則どおりに取り込み、`済/` に移す（同名は `-2`）。取り込んだ・取り込まなかったことを `add-notice`（`by: "guildmaster"`、定型文「同時数を n 件にした」「S3 の優先度を 保留 にした」「同時数 12 は範囲外なので取り込まなかった」）で残し、結果を JSON で印字する |
   | `archive [--days 30]` | `達成`・`中止` になってから N 日（最後の `log` の `time` で判定）たったクエストと、その `回答済` の質問を `guild/.system/board-archive.json` に移す。研究のクエストは、その研究も `達成`・`中止` で N 日たったときに研究ごと移す。`notices`・`profile` は触らない。番号の通し番号は board.json のトップに `last_ids: {Q, S, A, F, I}` を持たせて保ち、`add-*` はそれを使う（退避しても番号が戻らない） |
   | `glossary-index <glossary_dir>` | 用語ノートの frontmatter（`aliases`）と先頭の段落から `<glossary_dir>/用語集.md` を作り直す（B-3） |
+  | `assets-index` | `assets_dir` の候補を条件つきで確定に昇格し、`資料庫.md` と `.system/assets.json` を作り直す。`{index, counts}` を印字する。`assets_dir` が無いと失敗する |
+  | `assets-apply` | `requests/D*.json`（資料庫の決定）を取り込んで `済/` に移し、`add-notice` で残し、`{applied, rejected}` を印字する |
+  | `assets-list` | ノートを `<id>  <状態>  <targets>  <source>  <version>` の 1 行ずつ、候補・確定・置換済の順に印字する |
+  | `assets-check <ファイル>…` | 各ファイルの `{file, sha256, state, note}` を印字する。`state` は `registered`・`trashed`・`changed`・`new`・`unreadable` |
+  | `assets-trash <id>…` | id の完全一致でノートを `<assets_dir>/ゴミ箱/` に移し、移した id を印字する。1 件でも不明なら何も動かさず失敗する |
+  | `assets-scan [--limit N]` | 前提設定は `assets_dir` と、`projects_dir` か `quests_dir` のどちらか。案件フォルダの `input/` を走査し、庫に未登録の資料だけを `{items, remaining, unreadable, oversize}` で印字する（上限に当たると `truncated: true`）。`--limit` は 1〜20（既定 5。範囲外は `BoardError`）。20 MB 超（`MAX_SCAN_BYTES`、暫定）は `oversize` に名前を入れ、シンボリックリンク・隠しファイル・md 写しは対象外 |
+  | `assets-approve [--source S] [--target T] [--all] [--yes]` | 絞り込み（3 つのどれか）が必須。`--yes` なしは `{preview, skipped}` を印字するだけで何も変えない。`--yes` ありは `conflict` なしの候補を確定にし `{approved, skipped}` を印字する。自分以外に同じ `source` の確定ノートがある候補と、`supersedes` を持つ候補は対象外。`--target` は `targets` をカンマで分けた要素との完全一致、`--source` は資料名の完全一致で、両方指定すると AND。前提設定は `assets_dir` だけ |
 - SKILL.md の決まり：**ギルドマスターは board.json を Read・Write で直接触らない。** 読むのは `get --summary`（回の始めと、手順 5・7・11 の始め）と `get --quest` など、書くのは上のサブコマンドだけ。「状態が変わるたびに書き直す」は、サブコマンドごとに書かれるので自然に満たされる（画面はこれまでどおり 10 秒で追う）。
 - 手順 11 の最後に `archive --days 30` を実行する。
 - `/guild:help` は `get --summary` で読んでよい（無ければ今までどおり `json.load`）。
-- テスト `tests/test_board.py`：純関数（要約の中身、`set-status` の `log`、`apply-simple` の規則、`archive` の判定、`glossary-index` の解析、`last_ids` の保持）。
+- テスト `tests/test_board.py`：純関数（要約の中身、`set-status` の `log`、`apply-simple` の規則、`archive` の判定、`glossary-index` の解析、`last_ids` の保持）。資料庫は、`assets-check` の判定、`assets-apply` の遷移（承認・却下・上書き・ゴミ箱・取り込めない決定）、自動確定、`assets-trash` の全件一致、`assets-index` の再実行で同じ結果になること、`resolve_assets_dir`。後追いは `TestAssetsScan`（走査の対象、除外、`oversize`・`unreadable`、シンボリックリンクを辿らないこと）と `TestAssetsApprove`（絞り込み必須、プレビューと `--yes`、対象外の理由）。画面側は `tests/test_static.py`（資料庫タブの有無と値のエスケープ、達成列の「もっと見る」）。
+- 資料庫：構成・読み方・手順は `skills/quest/references/assets.md`。
+- 後追い：起動は依頼主の明示だけ。走査の上限（深さ 20 段、調べるファイル 1000 件、1 回の原本サイズ合計 50 MB）は暫定で、超えると `truncated: true` が付き、`remaining` は「少なくとも」の意味になる。
+- 一括承認：ギルドマスターは `--yes` を付けて実行しない。理由と対象外の候補は `skills/quest/references/assets.md` の「一括承認」。
+- 画面：達成列は `doneShown`（既定 8 件、「もっと見る」で 8 件ずつ追加）。
 
 ### A-3. guild-run.py：値を 1 つ変える依頼では Claude を呼ばない
 - `run` の `has_work` の前に、`<sysd>/board.py` があれば `apply-simple` を同じプロセスから呼ぶ（`importlib` で読み込む。無ければ飛ばす）。そのあとで `has_work` を見る。`M`・`S` だけの回は `skipped: true` で終わり、Claude を呼ばない。
@@ -94,7 +105,7 @@
 - `plugin.json`・`marketplace.json` の version を 1.7.0 に。
 
 ## 受入条件
-1. `skills/quest/SKILL.md` が 12,000 字以下で、`commands/quest.md` は無い。`/guild:quest` と `claude -p "/guild:quest auto"` が今までどおり動く。
+1. `skills/quest/SKILL.md` が公式推奨の 500 行以下を目安に収まり（~~旧目標：12,000 字以下~~。資料庫の追加で上限は外した）、`commands/quest.md` は無い。`/guild:quest` と `claude -p "/guild:quest auto"` が今までどおり動く。
 2. SKILL.md と `references/*.md` を合わせて、「保留」「計画の直し」「結果の Markdown」の規則がそれぞれ 1 か所にだけ書かれ、ほかは節名かファイル名で参照している。遷移の条件は遷移表にだけある。
 3. 返事 1 件だけの回（例：`approval` の「この案で進める」）で、`references/` のうち読むのは `study.md` だけ（SKILL.md の文面で確かめる）。
 4. SKILL.md に board.json を Read・Write で直接触る指示が無く、読み書きがすべて `board.py` のサブコマンドで書かれている。board.py は `tests/test_board.py` が通る。

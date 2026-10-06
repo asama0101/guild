@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 ## 動かし方
 1. `/guild:init`（vault ごとに 1 回）。
-2. 画面 `guild/board.html` を Edge か Chrome で開き、「ギルドの扉を開く」で `guild` フォルダを選ぶ。扉は 1 回だけで、4 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録）は画面の中で切り替える。
+2. 画面 `guild/board.html` を Edge か Chrome で開き、「ギルドの扉を開く」で `guild` フォルダを選ぶ。扉は 1 回だけで、5 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録・資料庫）は画面の中で切り替える。
 3. 依頼掲示板で依頼を、研究の記録で研究を貼り、`/guild:quest` を実行する。
 4. 決まった間隔で自動で動かすなら `/guild:auto 始める`。
 

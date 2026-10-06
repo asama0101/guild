@@ -472,12 +472,8 @@ class TestInstallFlow(unittest.TestCase):
             self.assertEqual(self.calls[0][:2], ["schtasks", "/Query"])
 
 
-class TestModelAndSimple(unittest.TestCase):
-    def test_build_cmd_model(self):
-        self.assertNotIn("--model", gr.build_cmd("claude", "Read"))
-        self.assertNotIn("--model", gr.build_cmd("claude", "Read", "bad model; rm"))
-        cmd = gr.build_cmd("claude", "Read", "sonnet")
-        self.assertEqual(cmd[cmd.index("--model") + 1], "sonnet")
+class _VaultMixin:
+    """board.py 入りの自動実行 vault を作るヘルパー。テストを持たないので、継承してもテストは重複しない。"""
 
     def _vault(self, d):
         auto = Path(d) / "vault" / "guild" / ".system" / "auto"
@@ -490,6 +486,14 @@ class TestModelAndSimple(unittest.TestCase):
         src = Path(_SRC).parent.parent / "quest" / "board.py"
         (sysd / "board.py").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
         return auto, sysd
+
+
+class TestModelAndSimple(_VaultMixin, unittest.TestCase):
+    def test_build_cmd_model(self):
+        self.assertNotIn("--model", gr.build_cmd("claude", "Read"))
+        self.assertNotIn("--model", gr.build_cmd("claude", "Read", "bad model; rm"))
+        cmd = gr.build_cmd("claude", "Read", "sonnet")
+        self.assertEqual(cmd[cmd.index("--model") + 1], "sonnet")
 
     def test_setting_only_skips_claude(self):
         with tempfile.TemporaryDirectory() as d:
@@ -534,6 +538,73 @@ class TestModelAndSimple(unittest.TestCase):
             auto, sysd = self._vault(d)
             (sysd / "board.py").unlink()
             self.assertEqual(gr.apply_simple_requests(sysd), 0)
+
+
+class TestAssetsDecisions(_VaultMixin, unittest.TestCase):
+    """R6: 画面の資料庫の決定を Claude なしで取り込む。"""
+
+    def _with_assets(self, d, board_py=None):
+        auto, sysd = self._vault(d)
+        b = json.loads((sysd / "board.json").read_text(encoding="utf-8"))
+        b["assets_dir"] = "guild/50_assets"
+        (sysd / "board.json").write_text(json.dumps(b), encoding="utf-8")
+        adir = sysd.parent / "50_assets"
+        adir.mkdir()
+        (adir / "n-1.md").write_text("---\ntype: asset\nstatus: 候補\nsha256: x\n---\n", encoding="utf-8")
+        (sysd / "requests" / "D20261006100000.json").write_text(
+            json.dumps({"kind": "asset_decision", "note": "n-1", "action": "approve", "posted": "x"}),
+            encoding="utf-8")
+        if board_py is not None:
+            (sysd / "board.py").write_text(board_py, encoding="utf-8")
+        return auto, sysd, adir
+
+    def test_decision_applied_and_has_work_false(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd, adir = self._with_assets(d)
+            self.assertTrue(gr.has_work(sysd, auto))
+            self.assertGreaterEqual(gr.apply_simple_requests(sysd), 1)
+            self.assertIn("status: 確定", (adir / "n-1.md").read_text(encoding="utf-8"))
+            self.assertFalse(gr.has_work(sysd, auto))
+            self.assertEqual(len(json.loads((sysd / "board.json").read_text(encoding="utf-8"))["notices"]), 1)
+
+    def test_run_skips_claude(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd, adir = self._with_assets(d)
+            called = []
+            self.assertEqual(gr.run(auto, runner=lambda *a: called.append(a) or 0), 0)
+            self.assertEqual(called, [])
+
+    def test_old_board_py_without_apply_assets(self):
+        src = (Path(_SRC).parent.parent / "quest" / "board.py").read_text(encoding="utf-8")
+        self.assertIn("def apply_assets(", src)
+        old = src.replace("def apply_assets(", "def _renamed_apply_assets(")
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd, adir = self._with_assets(d, board_py=old)
+            self.assertEqual(gr.apply_simple_requests(sysd), 0)  # 例外にならない
+            self.assertIn("status: 候補", (adir / "n-1.md").read_text(encoding="utf-8"))
+            self.assertTrue(gr.has_work(sysd, auto))  # 取り込めなかった分は Claude へ
+
+    def test_assets_json_rebuilt_without_claude(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd, adir = self._with_assets(d)
+            gr.apply_simple_requests(sysd)
+            j = json.loads((sysd / "assets.json").read_text(encoding="utf-8"))
+            self.assertEqual(j["counts"]["確定"], 1)
+
+    def test_apply_assets_exception_keeps_simple_changes(self):
+        src = (Path(_SRC).parent.parent / "quest" / "board.py").read_text(encoding="utf-8")
+        bad = src.replace("    a, r = _apply_assets(board, req_dir, sys_dir, now)",
+                          "    raise RuntimeError('boom-assets')")
+        self.assertNotEqual(src, bad)
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd, adir = self._with_assets(d, board_py=bad)
+            (sysd / "requests" / "M20261006100000.json").write_text(
+                json.dumps({"kind": "setting", "key": "max_active", "value": 7, "posted": "x"}), encoding="utf-8")
+            self.assertGreaterEqual(gr.apply_simple_requests(sysd), 1)
+            b = json.loads((sysd / "board.json").read_text(encoding="utf-8"))
+            self.assertEqual(b["max_active"], 7)
+            self.assertEqual(len(b["notices"]), 1)
+            self.assertIn("boom-assets", "".join(p.read_text(encoding="utf-8") for p in (sysd / "logs").glob("*")))
 
 
 if __name__ == "__main__":

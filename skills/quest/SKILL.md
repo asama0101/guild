@@ -13,7 +13,7 @@ argument-hint: "[auto]"
 ## board.json は board.py で触る
 - 読み書きは `guild/.system/board.py` のサブコマンドだけ。**board.json を Read・Write・`sed` で直接触らない。** 書くたびに `updated` と保存が済む。
 - Python は `guild/.system/python.txt`（1 行）のもの。無ければ `py -3`・`python3`・`python` の順で最初に `--version` が `Python 3.x` と出たもの（Store のスタブは除く）を探し、その 1 行を書く。
-- 回の始めに、このスキルの `board.py` を `guild/.system/board.py` に `cp` で上書きし、`<glossary_dir>/用語集.md` が無ければ `board.py glossary-index <glossary_dir>` で作る。
+- 回の始めに、このスキルの `board.py` を `guild/.system/board.py` に `cp` で上書きし、`<glossary_dir>/用語集.md` が無ければ `board.py glossary-index <glossary_dir>` で作る。資料庫を使う回は、続けて `assets-apply` → `assets-index` を実行する（詳細は `references/assets.md`）。
 - 読む：`get --summary`（回の始めと手順 5・7・11 の始め）。要約に無い項目（`result`・`log`・`detail`・`plan` など）は `get --quest Q5`・`--study S1`・`--question A3`。
 - 書く：`add-quest|add-study|add-question '<json>'`（id を印字。クエストは研究の `quests` にも足す）、`next-id F|I`、`set-status <id> <状態> --text <理由>`、`set <id> <項目> '<json>'`（`null` で消す）、`set-top`、`log`、`answer`、`close-questions`、`add-notice`、`apply-simple`、`archive`。
 
@@ -22,7 +22,7 @@ argument-hint: "[auto]"
 - 依頼書は 1 枚に 1 クエスト：`guild/.system/quests/<番号>-<ギルド員>.md`（例 `Q2-adventurer.md`）。報告書は同じ名前で `guild/.system/reports/` に書かせる。同じ番号・同じ役の 2 回目からは `<番号>-<ギルド員><n>.md`（`n` はその番号・その役の依頼書の最大の番号の次。無印は 1）。手直しの再出発は `n` = `retries`+1（1 回目は無印）で、`report` には最新の報告書を書く。伝令の取り次ぎ `T`・締め `E`、司書の用語集め `W`、賢者の知識集め `K`、鑑定士の決まりの案 `L` は、その回の分をまとめて 1 枚にする。
 - 番号は board.py が付ける（Q クエスト・S 研究・A 質問・F 評価・I インタビュー）。ファイル名の日時は 14 桁 `YYYYMMDDHHMMSS`（ローカル時刻）で、同じ秒に 2 枚になるときは `-2`。受付嬢の `R<日時>-receptionist.md` は依頼ファイルの日時を使う。
 - 元のノートは削除・移動しない。ギルド員の口調は報告書の最後の 1 行だけ。
-- **どの依頼書にも書く**：用語集の索引 `<glossary_dir>/用語集.md`、知識帳の目次 `<knowledge_dir>/知識帳.md`、人物帳 `guild/client.md`、`rules/_all.md` と `rules/<ギルド員>.md`（あれば）のパス、教訓帳のそのギルド員と「全員」の直近 5 行（Good も Bad も）。受付・評価・インタビューの依頼書には、関係する報告書のパスも書く（受付は同じ研究の前提クエスト、評価はそのクエストと鑑定の報告書、インタビューは最近の評価のまとめ 3 件）。
+- **どの依頼書にも書く**：用語集の索引 `<glossary_dir>/用語集.md`、知識帳の目次 `<knowledge_dir>/知識帳.md`、資料庫の索引 `<assets_dir>/資料庫.md`（あれば）、人物帳 `guild/client.md`、`rules/_all.md` と `rules/<ギルド員>.md`（あれば）のパス、教訓帳のそのギルド員と「全員」の直近 5 行（Good も Bad も）。受付・評価・インタビューの依頼書には、関係する報告書のパスも書く（受付は同じ研究の前提クエスト、評価はそのクエストと鑑定の報告書、インタビューは最近の評価のまとめ 3 件）。
 - 用語ノートは吟遊詩人だけ、知識帳は賢者だけが書く。受付嬢と書記は、知識帳にあることを依頼主に聞かない。
 - 研究ノートの `guild_status` は、錬金術師が作るときの `計画中` だけ錬金術師が書き、以後はあなたが書く（「記録」の節もあなた）。既存の `status` などには触らない。
 - 役の分担：聞き取りは受付嬢、質問の取り次ぎと結果・締めの文面は伝令 `herald`、評価の聞き取りとインタビューは占い師、仕分けは書記、研究の計画は錬金術師、質問と返事の書き写しは賢者。あなたは割り振りと状態の判定と記録だけをし、依頼主への文面は書かず、受付嬢・伝令・占い師の文を変えずに載せる。書記は番号を付けない（あなたが依頼書に書く。研究は錬金術師の仮の番号 `S1-1` …）。
@@ -67,7 +67,7 @@ argument-hint: "[auto]"
 - 1 回の実行は、出発できるものが無くなるまで手順 5〜8 をくり返す。
 
 ## board.json の形
-トップ：`max_active`・`*_dir`・`venv_python`・`inbox`・`last_ids`・`results_backfilled`・`pending_term_quests`・`studies`・`quests`・`questions`・`notices`（`{time, by: "herald", text, stops[]}`）・`profile`（`{section, text, source}`）。
+トップ：`max_active`・`*_dir`（`assets_dir` 含む）・`venv_python`・`inbox`・`last_ids`・`results_backfilled`・`pending_term_quests`・`studies`・`quests`・`questions`・`notices`（`{time, by: "herald", text, stops[]}`）・`profile`（`{section, text, source}`）。
 - 研究：`id title goal due priority status(計画中|承認待ち|進行中|達成|中止) dir note files quests next feedback replan plan log`。
 - クエスト：`id study title detail priority due status adventurers depends_on notes output(おまかせ|回答だけ|ノート|テキスト|Word|Excel|PowerPoint|PDF|その他) dir files source done_when retries appraise terms{ask,lookup} result links report feedback log[{time,who,edge,text}]`。
 - 質問：`id quest_id study_id kind(question|approval|todo|confirm|rule) from asked grill feedback_id interview_id title text options recommended reason status(未回答|回答済) answer comment`。
@@ -86,7 +86,7 @@ argument-hint: "[auto]"
    - ふつうの質問：返事を依頼書に書き足して `受付済`。手直しを止めた質問は遷移表のとおり。前提が中止になった質問：「前提なしで続ける」は `depends_on` から外して `受付済`、「やめる」は `中止`。クエストも研究も付いていない質問（賢者の問い）は `回答済` にして賢者の次の回に渡すだけで、どのクエストも止めない。
    - `todo`：「終わった」は `達成`（`result` に返事のコメントを写し、決めたことは後のクエストの依頼書にも書く）、「やめる」は `中止`。`中止` を前提にしているクエストは `返事待ち` にし、伝令の取り次ぎで `["前提なしで続ける", "やめる"]` を聞く。
    - 錬金術師・書記の「受付嬢への問い」への返事、研究の承認・研究の質問、次の段階 → `study.md`（計画の直しなら `replan.md`）。評価・インタビュー（`feedback_id`・`interview_id`）→ `feedback.md`。決まりの見直し（`kind: rule`）→ `lessons.md`。
-2. **依頼を受け取る。** まず `board.py apply-simple`（同時数 `setting` と研究の優先度 `study_priority`。自動の回はスクリプトが先に取り込んでいる）。次に `requests/保留/`・`feedback/保留/` のファイルを元のフォルダに戻して読む。`R<日時>.json` の `kind`：`quest`（`title detail priority due output files posted`）、`study`、`term`（`title` が用語、`detail` が意味。クエストとして手順 4 へ）、`interview`（→ `feedback.md`）。`inbox` のメモのうち、どのクエストの `source` にも無いものも依頼として集める（メモは動かさない）。同じ `posted` が載っていれば二重に扱わない。受け付けられないもの（`計画中`・`承認待ち` の研究への `replan`、終わっていないインタビュー中の新しいインタビュー、聞き取り中の重ねた評価）は `保留/` に移す。
+2. **依頼を受け取る。** まず `board.py apply-simple`（同時数 `setting` と研究の優先度 `study_priority`。自動の回はスクリプトが先に取り込んでいる）。次に `requests/保留/`・`feedback/保留/` のファイルを元のフォルダに戻して読む。`R<日時>.json` の `kind`：`quest`（`title detail priority due output files posted`）、`study`、`term`（`title` が用語、`detail` が意味。クエストとして手順 4 へ）、`interview`（→ `feedback.md`）、`asset_decision`（取り込みは `assets-apply`。解釈しない）。`inbox` のメモのうち、どのクエストの `source` にも無いものも依頼として集める（メモは動かさない）。同じ `posted` が載っていれば二重に扱わない。受け付けられないもの（`計画中`・`承認待ち` の研究への `replan`、終わっていないインタビュー中の新しいインタビュー、聞き取り中の重ねた評価）は `保留/` に移す。
    - `kind: cancel`（取り消し）：最初に扱う → `intake.md`。
    - `kind: replan` → `replan.md`。`kind: study` → 手順 3。それ以外はクエスト（手順 4）。
    - `feedback/*.json`（結果の評価）→ `feedback.md`。
@@ -97,7 +97,8 @@ argument-hint: "[auto]"
 5. **出発。** 出発させるかは、遷移表の「受付済→冒険中」「要手直し→冒険中」の条件だけで決める。前提クエストが無いか `達成` のものは出発できる（`依頼主がやること` のままの前提はまだ終わっていない）。触るノートが重ならないものは同時に出す。冒険中が `max_active` 件になるまで出し、並びは「board.json の形」の規則に従う。依頼書には、内容・くわしく・触るノート・`done_when`・成果物の形・資料のパス（写しがあれば写し）・`output/` のパス・先に調べる語・依頼主から聞いた語の意味・「どの依頼書にも書く」ものを書く。鍛冶師には `<templates_dir>/`、研究のクエストには研究の目標と研究ノートのパス、手直しには鑑定の報告書のパスと満たさなかった条件（評価のやり直しは占い師のまとめ）も書く。出発したら `冒険中`。
 6. **質問（取り次ぎ）。** ギルド員（受付嬢と占い師を除く）の報告書の「依頼主への質問」と、報告書が無いまま止まった問い（道具が使えないなど）は、必ず伝令を通す（自分で質問の文を書かない）。その回の分をまとめて伝令の依頼書 `T<日時>-herald.md`（どのクエストの誰の問いか、報告書のパス、人物帳、固定の選択肢）に書いて呼ぶ。「ギルド員への答え」はそのギルド員の依頼書に書き足して手順 5 で出し直す。「依頼主への質問」は文面を変えずに `add-question`（`from: herald`、`quest_id` 付き）で載せ、クエストを `返事待ち` にする（ほかのクエストは進める）。賢者の問いは `quest_id`・`study_id` を付けず、どのクエストも止めない。
 7. **鑑定。** 報告書がそろったクエストは `鑑定中` にし、鑑定士の依頼書 `<番号>-appraiser.md`（2 回目からは `-appraiser2.md` …。これまでの鑑定の報告書のパスをすべて書く）に、報告書・成果物・`done_when`・成果物の形・回答済みの質問と返事（取り次ぎの答えも）を書いて鑑定させる（`appraise: false` は鑑定士を呼ばず、吟遊詩人の「## 自己点検」の全項目が満たされていれば `達成`。満たさなければ 1 回だけ直させ、2 回目はそのまま `達成`）。「気づいたこと」は要手直しにせず締めの依頼書に添える。満たさない条件があれば `要手直し` にして教訓帳に 1 行（→ `lessons.md`）、遷移表どおり出し直す（手順 5）か、止めて `返事待ち` にし、直らない理由と `["このままでよい", "やり方を変える（コメントへ）", "やめる"]` を伝令の取り次ぎで聞く。すべて満たしたら `達成` にし、`links` に成果を足し、「結果の Markdown」を作る（フォルダと `output/` が無ければ先に作る）。
-8. **用語と知識を集める。** 知識：この回に `回答済` になった質問のうち `kind` が `question`・`confirm` のもの、または `達成` になったクエスト（用語ノートを書くものを除く）があるときだけ、賢者の依頼書 `K<日時>-sage.md`（質問と返事・報告書のパス・場所）を書いて呼ぶ。`approval`・`todo`・`rule` の返事だけの回は呼ばない。賢者の「受付嬢への問い」は手順 6 と同じく伝令に取り次がせる。用語：この回に `達成` になったクエスト（用語ノートのものを除く）を `pending_term_quests` に足し、2 件以上、または報告書の「## 用語」の語が合わせて 3 語以上なら、司書の依頼書 `W<日時>-librarian.md`（報告書・成果ノート・依頼主から聞いた語と返事・用語集の索引）を書いて呼び、`pending_term_quests` を空にする（候補は 1 回 10 語まで）。候補が 1 つ以上あれば、「用語ノートを書く（n 語）」を `add-quest`（担当 `bard`、`appraise: false`、触るノートは候補の用語ノート、`log` に司書の報告書の名前）で `受付済` に載せ、枠があれば同じ回に出発する。
+8. **用語と知識を集める。** 知識：この回に `回答済` になった質問のうち `kind` が `question`・`confirm` のもの、または `達成` になったクエスト（用語ノートを書くものを除く）があるときだけ、賢者の依頼書 `K<日時>-sage.md`（質問と返事・報告書のパス・場所）を書いて呼ぶ。`approval`・`todo`・`rule` の返事だけの回は呼ばない。賢者の「受付嬢への問い」は手順 6 と同じく伝令に取り次がせる。資料庫：→ `assets.md`。用語：この回に `達成` になったクエスト（用語ノートのものを除く）を `pending_term_quests` に足し、2 件以上、または報告書の「## 用語」の語が合わせて 3 語以上なら、司書の依頼書 `W<日時>-librarian.md`（報告書・成果ノート・依頼主から聞いた語と返事・用語集の索引）を書いて呼び、`pending_term_quests` を空にする（候補は 1 回 10 語まで）。候補が 1 つ以上あれば、「用語ノートを書く（n 語）」を `add-quest`（担当 `bard`、`appraise: false`、触るノートは候補の用語ノート、`log` に司書の報告書の名前）で `受付済` に載せ、枠があれば同じ回に出発する。
+   - 依頼主が「資料庫の後追い」と頼んだときだけ、`references/assets.md` の後追い節に従う（自動では始めない）。`assets-approve --yes` は依頼主が実行し、ギルドマスターは付けて実行しない。
 9. **研究の締め。** → `study.md`。
 10. **振り返り。** この回に教訓帳に足した行があれば → `lessons.md`。
 11. **締め。** この回に動いたクエスト・研究・載せた質問（鑑定の報告書・成果物のパス・「気づいたこと」、止まっている要因：返事待ち・許可待ち・手直しを止めたもの・`保留`や計画の直し待ちの研究・`max_active` の枠待ち・取り込まなかった設定・`保留/` に移したもの）を、伝令の依頼書 `E<日時>-herald.md` に書いて締めの文面を書かせる。`## result` をクエストの `result` に写し（単発はクエストのノートの「結果」、研究のクエストは研究ノートの「記録」にも）、`## 依頼主への報告` と `## 止まっていること`（1 行 1 要因。「なし」なら無し）を `add-notice --text … --stop …` で足す。取り込んだ `requests/`・`answers/`・`feedback/` を `済/` に移し（同名は `-2`）、最後に `board.py archive --days 30`。報告は伝令の文面のまま伝え、達成があれば Good / Bad を付けられることを 1 行添える。run.lock は消す。

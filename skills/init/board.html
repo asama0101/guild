@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>冒険者ギルド 掲示板</title>
 <style>
-/* 掲示板：1 枚の画面に 4 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録）。タブは #guide #asks #board #research で開く。研究の記録だけ帯をえんじにする */
+/* 掲示板：1 枚の画面に 5 つのタブ（使い方・返事が要るもの・依頼掲示板・研究の記録・資料庫）。タブは #guide #asks #board #research #assets で開く。研究の記録だけ帯をえんじにする */
 :root{
   --bg:#f7f5f0; --panel:#ffffff; --ink:#2b2b2b; --muted:#6a6a6a; --line:#dcd7cc; --soft:#f1eee7; --rule:#e6e2d8;
   --band:#3d3d3d; --accent:#3d3d3d; --accent-ink:#fff; --ask:#8a3b3b; --gold:#b8862b; --stop:#b00020;
@@ -51,6 +51,7 @@ section.top{border-top:3px solid var(--accent)}
 h2{margin:0 0 10px;font-size:1.05rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 h3.sh{margin:16px 0 6px;font-size:.95rem;border-bottom:1px solid var(--line);padding-bottom:2px}
 .count{background:var(--ask);color:#fff;border-radius:12px;font-size:.75rem;padding:0 9px;font-weight:bold;font-family:"Yu Gothic UI","Meiryo",sans-serif;letter-spacing:0}
+.more{display:block;margin:6px auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:4px 16px;font-size:.85rem}
 .hint{color:var(--muted);font-size:.8rem;font-weight:normal;font-family:"Yu Gothic UI","Meiryo",sans-serif;letter-spacing:0}
 /* 依頼を貼る（常に開いている 2 行の欄） */
 .form .r0 input{font-size:15px;padding:9px 10px}
@@ -223,6 +224,19 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
 .gate p{max-width:560px;margin:8px auto}
 .gate button{padding:10px 22px;font-size:1rem}
 .bottom{font-size:.8rem;color:var(--muted);padding:0 32px 24px}
+/* 資料庫 */
+.as-note{border:1px solid var(--line);border-left:4px solid var(--s-wait);border-radius:4px;padding:8px 12px;margin:0 0 8px;background:var(--panel)}
+.as-note.s-候補{border-left-color:var(--s-fix)}
+.as-note.s-確定{border-left-color:var(--s-done)}
+.as-note.cf{border-left-color:var(--s-ask)}
+.as-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.as-top b{font-size:.95rem}
+.as-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.as-btns button{padding:4px 10px;font-size:.82rem}
+.as-meta{font-size:.8rem;color:var(--muted);margin:4px 0}
+table.as{border-collapse:collapse;width:100%;font-size:.85rem;margin:6px 0}
+table.as th,table.as td{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
 </style>
 </head>
 <body>
@@ -233,6 +247,7 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     <a href="#asks" data-tab="asks">返事が要るもの<span id="nbAsks" class="nb hidden">0</span></a>
     <a href="#board" data-tab="board">依頼掲示板<span id="nbBoard" class="nb hidden">0</span></a>
     <a href="#research" data-tab="research">研究の記録<span id="nbResearch" class="nb hidden">0</span></a>
+    <a href="#assets" data-tab="assets">資料庫<span id="nbAssets" class="nb hidden">0</span></a>
   </nav>
   <div class="counts" id="counts"></div>
   <div class="sub" id="sub">ギルドの扉を開くと、様子が見られます</div>
@@ -283,6 +298,8 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
         <dd><span class="badge st-中止">中止</span> 取り消されました。</dd>
         <dt>研究の状態</dt>
         <dd>受付待ち → 計画中 → 承認待ち（計画を承認すると動き出します）→ 進行中 → 達成。</dd>
+        <dt>資料庫の状態</dt>
+        <dd><b>候補</b> 資料から取り出した事実で、承認待ちです。<b>確定</b> 承認済みで、ギルド員が参照します。<b>置換済</b> 新しい版に置き換わった古いものです。食い違いのある候補は、新旧を見比べて「上書き OK / NG」で答えます。</dd>
         <dt>返事の色</dt>
         <dd>赤い丸は、まだ返事をしていない質問の数です。返事を送ると、カードが<b>緑の枠</b>と「✓ 返事済み（受け取り待ち）」の帯になり、次の回で受け取られると消えます。</dd>
       </dl>
@@ -297,6 +314,7 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
         <dt>研究</dt><dd>いくつものクエストにまたがる目標。計画を承認してから動き出します。</dd>
         <dt>段</dt><dd>研究の中のクエストを、前提の順に並べた列。同じ段のクエストは同時に進められます。</dd>
         <dt>錠（run.lock）</dt><dd>自動の回が重ならないようにする目印のファイル。</dd>
+        <dt>資料庫</dt><dd>設計書・契約書などの資料から取り出した事実のノート置き場（<code>guild/</code> 内の <code>assets_dir</code>）。1 資料 1 ノートで、承認したものだけが確定します。「資料庫」タブで見られます。</dd>
         <dt>人物帳</dt><dd>依頼主（あなた）のことを書きためたノート <code>guild/client.md</code>。どのギルド員も依頼のたびに読みます。</dd>
       </dl>
     </section>
@@ -366,7 +384,7 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
       <div class="col"><h3><span>受付 <span id="c0"></span></span></h3><div id="k0" class="cards"></div></div>
       <div class="col"><h3><span>冒険中・鑑定中・要手直し <span id="c1"></span></span></h3><div id="k1" class="cards"></div></div>
       <div class="col"><h3><span>返事待ち・依頼主がやること <span id="c2"></span></span></h3><div id="k2" class="cards"></div></div>
-      <div class="col"><h3><span>達成（新しい 8 件） <span id="c3"></span></span><label><input type="checkbox" id="showAll"> 中止と古いものも</label></h3><div id="k3" class="cards"></div></div>
+      <div class="col"><h3><span><span id="doneTitle">達成</span></span><label><input type="checkbox" id="showAll"> 中止と古いものも</label></h3><div id="k3" class="cards"></div></div>
     </div>
   </section>
 
@@ -423,6 +441,14 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
   <div id="exps"></div>
 </main>
 
+<!-- 資料庫：資料から取り出した事実の候補・確定・置換済 -->
+<main id="v-assets" class="layout hidden">
+  <section class="top">
+    <h2>資料庫 <span id="assetsCount" class="count">0</span><span class="hint">資料から取り出した事実。承認や却下を送ると、次の回でギルドが取り込みます</span></h2>
+    <div id="assetsBox"></div>
+  </section>
+</main>
+
 <p class="bottom" id="foot"></p>
 </div>
 <div id="toast" class="toast"></div>
@@ -433,8 +459,8 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
   const STATUSES = ["受付待ち","受付済","冒険中","鑑定中","返事待ち","要手直し","依頼主がやること","達成","中止"];
   const ESTATUS = ["受付待ち","計画中","承認待ち","進行中","達成","中止"];
   const ROLE = {alchemist:"錬金術師",strategist:"錬金術師",receptionist:"受付嬢",herald:"伝令",scribe:"書記",sage:"賢者",adventurer:"冒険者",scout:"冒険者",informant:"冒険者",bard:"吟遊詩人",librarian:"司書",appraiser:"鑑定士",seer:"占い師",smith:"鍛冶師",guildmaster:"ギルドマスター",client:"依頼主",user:"依頼主"};
-  const TABS = ["guide","asks","board","research"];
-  let dir = null, board = null, pendingReq = [], pendingAns = {}, pendingFb = [], autoCfg = null, lastRun = null, usageText = null, timer = null;
+  const TABS = ["guide","asks","board","research","assets"];
+  let dir = null, board = null, pendingReq = [], pendingAns = {}, pendingFb = [], assets = null, autoCfg = null, lastRun = null, usageText = null, timer = null;
   let tab = "guide", efilter = "未完了", selected = null, selectedTitle = null;
   const filters = {asks:"", board:"", research:""};   // 返事欄の絞り込み（クエスト・研究の番号。空はすべて）
   const missing = new Set();                           // まとめて送るで「未入力」だった質問
@@ -499,6 +525,13 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
   };
   $("reload").onclick = () => refresh(true).then(()=>toast("最新の状態にしました"));
 
+  // assets.json は資料由来で形が崩れうる。notes・facts・conflict_rows は配列、要素はオブジェクトだけにそろえる
+  function normAssets(a){
+    if(!a || typeof a!=="object") return null;
+    const arr = x => Array.isArray(x) ? x.filter(e=>e && typeof e==="object") : [];
+    a.notes = arr(a.notes).map(n=>({...n, facts:arr(n.facts), conflict_rows:arr(n.conflict_rows)}));
+    return a;
+  }
   async function refresh(force){
     if(!dir) return;
     // 読めない瞬間（ギルドマスターが書いている途中など）は、前に読めた内容をそのまま出す
@@ -507,6 +540,10 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     pendingReq = await listJSON(await sub("requests"));
     const ans = await listJSON(await sub("answers")); pendingAns = {}; ans.forEach(a=>pendingAns[a.question_id]=a);
     pendingFb = await listJSON(await sub("feedback"));
+    // 無い（読めない）なら null、壊れた JSON（書いている途中）なら前の内容を保つ
+    const atxt = await readText(dir,"assets.json");
+    if(atxt==null) assets = null;
+    else { try{ assets = normAssets(JSON.parse(atxt)); }catch(e){} }
     autoCfg = await readJSON(dir,"auto.json"); const logs = await subRead("logs");
     lastRun = logs ? await readJSON(logs,"last.json") : null;
     usageText = logs ? await readText(logs,"usage.jsonl") : null;
@@ -530,7 +567,7 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     root.querySelectorAll("[data-keep]").forEach(t=>{ vals[t.dataset.keep]=t.value; });
     root.querySelectorAll("[data-pickgrp]").forEach(g=>{ const s=g.querySelector("button.sel"); if(s) picks[g.dataset.pickgrp]=s.dataset.opt ?? s.dataset.v; });
     root.querySelectorAll("[data-pick]:checked").forEach(c=>checks.add(c.dataset.pick));
-    const dk = (d,i)=>`${i}|${(d.querySelector("summary")||{}).textContent||""}`;
+    const dk = (d,i)=> d.dataset.dk ? `k|${d.dataset.dk}` : `${i}|${(d.querySelector("summary")||{}).textContent||""}`;   // data-dk があれば順序に依らず同じ詳細へ戻す
     root.querySelectorAll("details").forEach((d,i)=>{ opens[dk(d,i)]=d.open; });
     const ae = document.activeElement;
     const focus = (ae && ae.dataset && ae.dataset.keep && root.contains(ae)) ? {k:ae.dataset.keep, s:ae.selectionStart, e:ae.selectionEnd, top:ae.scrollTop} : null;
@@ -599,6 +636,7 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     if(tab==="guide") renderGuide(force);
     else if(tab==="asks") renderAskArea("asks", force);
     else if(tab==="board"){ renderNotices("notices","noticeNone",20); renderAskArea("board", force); renderProfile(); renderQuests(force); }
+    else if(tab==="assets") renderAssets(force);
     else renderResearch(force);
     $("foot").textContent = "10 秒ごとに読み直しています。依頼や返事は、次に /guild:quest が動いたとき（手で実行するか、自動実行の次の回）にギルドマスターが受け取ります。";
   }
@@ -607,7 +645,9 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     $("sub").innerHTML = esc(`${board.vault ? board.vault+" のギルド ・ " : ""}最終更新 ${board.updated || "-"}（ギルドマスター）`) + `<br>${autoText(true)}`;
     const open = openAll(), n = f => open.filter(q=>f(q) && notSent(q)).length;
     const nAll = n(AREAS.asks), nBoard = n(AREAS.board), nRes = n(AREAS.research);
-    [["nbAsks",nAll],["nbBoard",nBoard],["nbResearch",nRes]].forEach(([id,v])=>{ $(id).textContent=v; $(id).classList.toggle("hidden", !v); });
+    let nAs = 0;
+    try{ nAs = assets && Array.isArray(assets.notes) ? assets.notes.filter(x=>x.status==="候補").length : 0; }catch(e){}
+    [["nbAsks",nAll],["nbBoard",nBoard],["nbResearch",nRes],["nbAssets",nAs]].forEach(([id,v])=>{ $(id).textContent=v; $(id).classList.toggle("hidden", !v); });
     $("asksCount").textContent = nAll; $("boardCount").textContent = nBoard; $("researchCount").textContent = nRes;
     const qs = allQuests(), act = qs.filter(q=>!["達成","中止"].includes(q.status)).length;
     $("counts").innerHTML = `<span>返事が要る <b class="${nAll?"hot":""}">${nAll}</b></span><span>進行中 <b>${act}</b></span><span>達成 <b>${qs.filter(q=>q.status==="達成").length}</b></span>`;
@@ -852,30 +892,45 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     const pend = pendingReq.filter(r=>r.kind==="quest" || r.kind==="term").map(r=>({id:"（未受付）", title:r.kind==="term"?`用語「${r.title}」を登録`:r.title, detail:r.detail, priority:r.priority, due:r.due, output:r.kind==="term"?"":r.output, files:r.files||[], status:"受付待ち", posted:r.posted, _file:r._file}));
     return [...pend, ...board.quests];
   }
-  // かんばん：受付（受付待ち・受付済）→ 冒険中（冒険中・鑑定中・要手直し）→ 返事待ち（返事待ち・依頼主がやること）→ 達成（新しい 8 件。中止は「古いものも」で）
+  // かんばん：受付（受付待ち・受付済）→ 冒険中（冒険中・鑑定中・要手直し）→ 返事待ち（返事待ち・依頼主がやること）→ 達成（新しい順に doneShown 件。「もっと見る」で DONE_STEP 件ずつ増やす。中止は「古いものも」で）
   const COLS = [["受付待ち","受付済"],["冒険中","鑑定中","要手直し"],["返事待ち","依頼主がやること"],["達成","中止"]];
+  const DONE_STEP = 8;
+  let doneShown = DONE_STEP;   // 達成の列に出す件数。再描画で innerHTML が置き換わるので、data- 属性でなくここに持つ。達成が減っても戻さない。押した分は保持する（意図）
   const qnum = q => Number(String(q.id).replace(/\D/g,""))||0;
   function renderQuests(force){
     const qs = allQuests();
     const asks = board.questions.filter(q=>q.status!=="回答済" && !isExpAsk(q));
     $("qCount").textContent = `全部で ${qs.length} 件`;
+    let total = 0, shown = 0;
+    const all = $("showAll").checked;
     const cols = COLS.map((sts,i)=>{
       let xs = qs.filter(q=>sts.includes(q.status));
       if(i===3){
         // 達成の列は番号の大きい順（新しいものが上）。「中止と古いものも」を付けないときは達成の新しい 8 件だけ
         xs.sort((a,b)=>qnum(b)-qnum(a));
-        if(!$("showAll").checked) xs = xs.filter(q=>q.status==="達成").slice(0,8);
+        if(!all) xs = xs.filter(q=>q.status==="達成");
+        total = xs.length;
+        if(!all) xs = xs.slice(0, doneShown);
+        shown = xs.length;
       }else{
         xs.sort((a,b)=>STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status) || (b.priority||0)-(a.priority||0) || String(a.due||"9999").localeCompare(String(b.due||"9999")));
       }
-      $("c"+i).textContent = xs.length;
-      return xs.map(q=>card(q, asks.filter(a=>a.quest_id===q.id && notSent(a)).length)).join("") || `<p class="note" style="margin:4px 6px">なし</p>`;
+      if(i<3) $("c"+i).textContent = xs.length;
+      let h = xs.map(q=>card(q, asks.filter(a=>a.quest_id===q.id && notSent(a)).length)).join("") || `<p class="note" style="margin:4px 6px">なし</p>`;
+      if(i===3){
+        // 全件が見えるのは board.json に残っている分だけ（達成は 30 日で退避される）
+        if(!all && shown<total) h += `<button type="button" class="more" id="doneMore">もっと見る</button>`;
+        h += `<p class="note" style="margin:4px 6px">board.json に残っている分だけ表示します。達成から 30 日たつと退避されて消えます</p>`;
+      }
+      return h;
     });
     // 4 つの列の内容をまとめて署名にする（変わらなければ描き直さない）
-    const sig = cols.join("\u0001");
+    const doneTitle = all ? `達成・中止 ${total} 件` : `達成 ${total} 件中 ${shown} 件を表示`;
+    const sig = cols.join("\u0001") + "\u0001" + doneTitle;   // 見出しも署名に含める（件数だけ増えてカードが変わらないときも更新する）
     if(lastHtml.kanban===sig) return;
     if(!force && busy()){ dirty=true; return; }
     lastHtml.kanban = sig;
+    $("doneTitle").textContent = doneTitle;
     keepState($("kanban"), ()=>{ cols.forEach((h,i)=>{ $("k"+i).innerHTML = h; }); });
   }
   $("showAll").onchange = () => renderQuests(true);
@@ -1059,16 +1114,78 @@ table.usage th{color:var(--muted);font-weight:normal;font-size:.78rem}
     catch(e){ toast("書き込めませんでした: "+e.message); }
   };
 
+  // ---- 資料庫 ----
+  // assets.json の値は資料から抽出した任意の文字列。innerHTML に入れるものは必ず esc() を通す
+  const AS_ORDER = ["候補","確定","置換済"];
+  const AS_LABEL = {approve:"承認", reject:"却下", overwrite_ok:"上書き OK", overwrite_ng:"上書き NG", trash:"ゴミ箱へ移す"};
+  // 遷移表（契約書 4）に合うボタンだけ出す
+  function assetActions(n){
+    if(n.status==="候補") return n.conflict===true ? ["overwrite_ok","overwrite_ng","trash"] : ["approve","reject","trash"];
+    return ["trash"];
+  }
+  function assetNote(n){
+    const id = String(n.id ?? ""), cf = n.conflict===true;
+    const sent = pendingReq.filter(r=>r.kind==="asset_decision" && r.note===id).sort((a,b)=>String(b.posted||"").localeCompare(String(a.posted||"")))[0];
+    const btns = sent
+      ? `<span class="fbtag">受付済み（次の回で反映）：${esc(AS_LABEL[sent.action]||sent.action)}</span>`
+      : assetActions(n).map(a=>`<button type="button" class="${a==="approve"||a==="overwrite_ok"?"":"ghost"}" data-asset="${esc(a)}" data-note="${esc(id)}">${esc(AS_LABEL[a])}</button>`).join("");
+    const facts = Array.isArray(n.facts) ? n.facts : [], rows = Array.isArray(n.conflict_rows) ? n.conflict_rows : [];
+    const meta = [["資料名",n.source],["版",n.version],["日付",n.date],["対象",n.targets],["種別",n.kind],["場所",n.locator]]
+      .filter(m=>m[1]!=null && m[1]!=="").map(m=>`${esc(m[0])}：${esc(m[1])}`).join(" ／ ");
+    const ft = facts.length ? `<table class="as"><tr><th>項目</th><th>値</th><th>出典箇所</th></tr>${facts.map(f=>`<tr><td>${esc(f.item)}</td><td>${esc(f.value)}</td><td>${esc(f.where)}</td></tr>`).join("")}</table>` : `<p class="note">取り出した事実はありません。</p>`;
+    const ct = rows.length ? `<p class="ask" style="margin:6px 0 0"><b>食い違い（旧と新）</b>${n.supersedes?`　置き換える先：${esc(n.supersedes)}`:""}</p><table class="as"><tr><th>項目</th><th>旧</th><th>新</th></tr>${rows.map(r=>`<tr><td>${esc(r.item)}</td><td>${esc(r.old)}</td><td>${esc(r.new)}</td></tr>`).join("")}</table>` : "";
+    return `<div class="as-note s-${esc(n.status)}${cf?" cf":""}"><div class="as-top"><b>${esc(id)}</b><span class="as-btns">${btns}</span></div>
+      <div class="as-meta">${meta}</div>
+      <details data-dk="${esc(id)}"><summary>事実 ${facts.length} 件${rows.length?`・食い違い ${rows.length} 件`:""}</summary>${ft}${ct}</details></div>`;
+  }
+  function renderAssets(force){
+    const box = $("assetsBox");
+    if(!assets || !Array.isArray(assets.notes)){
+      $("assetsCount").textContent = "0";
+      draw("assetsList", `<p class="muted" style="margin:0">まだ資料庫は作られていません（次の回で作られます）。</p>`, box, false, true); return;
+    }
+    try{ renderAssetsBody(box, force); }
+    catch(e){ draw("assetsList", `<p class="muted" style="margin:0">資料庫を表示できませんでした: ${esc(e.message)}</p>`, box, false, true); }
+  }
+  function renderAssetsBody(box, force){
+    const notes = assets.notes, c = assets.counts || {};
+    $("assetsCount").textContent = notes.filter(n=>n.status==="候補").length;
+    const other = notes.filter(n=>!AS_ORDER.includes(n.status));   // 未知の status も「その他」として出す
+    const head = `<p class="muted" style="margin:0 0 8px">${AS_ORDER.map(k=>`${esc(k)} <b>${esc(c[k] ?? 0)}</b>`).join("　")}${other.length?`　その他 <b>${other.length}</b>`:""}</p>`;
+    const body = AS_ORDER.map(k=>{
+      const ns = notes.filter(n=>n.status===k);
+      return ns.length ? `<h3 class="sh">${esc(k)}</h3>${ns.map(assetNote).join("")}` : "";
+    }).join("") + (other.length ? `<h3 class="sh">その他</h3>${other.map(assetNote).join("")}` : "");
+    draw("assetsList", head + (body || `<p class="muted">資料はまだ登録されていません。</p>`), box, true, force);
+  }
+  async function sendAsset(note, action, btn){
+    // 却下・上書き NG もノートがゴミ箱へ移る。実際の削除は手動で行う
+    if(["trash","reject","overwrite_ng"].includes(action) && !confirm(`「${note}」をゴミ箱へ移しますか？（${AS_LABEL[action]}）ファイルは消えず、ゴミ箱のフォルダに移るだけです。実際の削除は手動で行ってください。`)) return;
+    if(btn) btn.disabled = true;
+    try{ await postRequest("D", {kind:"asset_decision", note, action, posted:now()}); toast("送りました（次の回で反映）"); await refresh(true); }
+    catch(e){ toast("書き込めませんでした: "+e.message); }
+    finally{ if(btn) btn.disabled = false; }
+  }
+
   // ---- クリックなどの受け口（描き直しても効くよう、まとめて document で受ける） ----
   document.addEventListener("click", async ev=>{
     const t = ev.target, c = sel => t.closest && t.closest(sel);
     let b;
+    if(c("#doneMore")){
+      const prev = $("k3").querySelectorAll(".card").length;
+      doneShown += DONE_STEP; renderQuests(true);
+      // ボタンが置き換わってフォーカスを失うので、残ったボタン、無ければ新しく出た最初のカードへ戻す
+      const nb = $("doneMore"), nc = $("k3").querySelectorAll(".card")[prev];
+      if(nb) nb.focus({preventScroll:true}); else if(nc){ nc.tabIndex = -1; nc.focus({preventScroll:true}); }
+      return;
+    }
     if((b=c("[data-opt]"))){ b.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); return; }
     if((b=c(".vb [data-v]"))){ b.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); return; }
     if((b=c("[data-send]"))){ sendAnswer(b.dataset.send, b.closest(".q")); return; }
     if((b=c("[data-batch]"))){ sendBatch(b.dataset.batch); return; }
     if((b=c("[data-fbsend]"))){ sendFb(b.closest("[data-fb]")); return; }
     if(c("#setSend")){ sendSetting(); return; }
+    if((b=c("[data-asset]"))){ sendAsset(b.dataset.note, b.dataset.asset, b); return; }
     if((b=c("[data-f]"))){ efilter=b.dataset.f; renderResearch(true); return; }
     if((b=c("[data-sel]"))){ selected=b.dataset.sel; renderResearch(true); return; }
     if((b=c("[data-replansend]"))){

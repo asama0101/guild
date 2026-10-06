@@ -273,6 +273,15 @@ def apply_simple_requests(sysd):
     board_json = Path(sysd) / "board.json"
     board = mod.load(board_json)
     msgs = mod.apply_simple(board, Path(sysd) / "requests")
+    if hasattr(mod, "apply_assets"):  # 古い board.py（資料庫なし）では呼ばない
+        try:
+            msgs += mod.apply_assets(board, Path(sysd) / "requests", Path(sysd), datetime.now())
+        except Exception:
+            # 資料庫の失敗で、取り込み済みの M・S の変更まで失わない。跡だけ残す
+            logs = Path(sysd) / "logs"
+            logs.mkdir(parents=True, exist_ok=True)
+            with open(logs / "apply-assets.log", "a", encoding="utf-8") as f:
+                f.write(traceback.format_exc())
     if msgs:
         mod.add_notice(board, "。".join(msgs) + "。", by="guildmaster")
         mod.save(board_json, board)
