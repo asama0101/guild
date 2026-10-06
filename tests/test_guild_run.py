@@ -472,5 +472,54 @@ class TestInstallFlow(unittest.TestCase):
             self.assertEqual(self.calls[0][:2], ["schtasks", "/Query"])
 
 
+class TestModelAndSimple(unittest.TestCase):
+    def test_build_cmd_model(self):
+        self.assertNotIn("--model", gr.build_cmd("claude", "Read"))
+        self.assertNotIn("--model", gr.build_cmd("claude", "Read", "bad model; rm"))
+        cmd = gr.build_cmd("claude", "Read", "sonnet")
+        self.assertEqual(cmd[cmd.index("--model") + 1], "sonnet")
+
+    def _vault(self, d):
+        auto = Path(d) / "vault" / "guild" / ".system" / "auto"
+        auto.mkdir(parents=True)
+        sysd = auto.parent
+        (auto / "allow.txt").write_text("Read\n", encoding="utf-8")
+        (sysd / "requests").mkdir()
+        (sysd / "board.json").write_text(json.dumps({"max_active": 4, "studies": [], "quests": [],
+                                                      "questions": [], "notices": []}), encoding="utf-8")
+        src = Path(_SRC).parent.parent / "quest" / "board.py"
+        (sysd / "board.py").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        return auto, sysd
+
+    def test_setting_only_skips_claude(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd = self._vault(d)
+            (sysd / "requests" / "M20261006100000.json").write_text(
+                json.dumps({"kind": "setting", "key": "max_active", "value": 7, "posted": "x"}), encoding="utf-8")
+            called = []
+            code = gr.run(auto, runner=lambda *a: called.append(a) or 0)
+            self.assertEqual(code, 0)
+            self.assertEqual(called, [])
+            self.assertEqual(json.loads((sysd / "board.json").read_text(encoding="utf-8"))["max_active"], 7)
+            self.assertTrue(json.loads((sysd / "logs" / "last.json").read_text(encoding="utf-8"))["skipped"])
+            self.assertFalse((auto / "run.lock").exists())
+
+    def test_real_request_still_calls_claude_with_model(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd = self._vault(d)
+            (sysd / "auto.json").write_text(json.dumps({"model": "opus"}), encoding="utf-8")
+            (sysd / "requests" / "R1.json").write_text(json.dumps({"kind": "quest"}), encoding="utf-8")
+            seen = []
+            gr.run(auto, runner=lambda cmd, log, cwd: seen.append(cmd) or 0)
+            self.assertEqual(len(seen), 1)
+            self.assertEqual(seen[0][seen[0].index("--model") + 1], "opus")
+
+    def test_missing_board_py_is_fine(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd = self._vault(d)
+            (sysd / "board.py").unlink()
+            self.assertEqual(gr.apply_simple_requests(sysd), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

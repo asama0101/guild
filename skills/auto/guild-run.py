@@ -6,6 +6,7 @@
 標準ライブラリのみ。OS 判定は sys.platform だけに頼る。
 """
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -200,6 +201,19 @@ def read_venv_python(board_json):
     return v or None
 
 
+def valid_model(name):
+    """--model に渡す名前。空や変な文字は None（指定なし）にする。"""
+    return name if isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9._\[\]-]{1,64}", name) else None
+
+
+def build_cmd(claude, allow, model=None):
+    cmd = [claude, "-p", PROMPT, "--permission-mode", "acceptEdits", "--allowedTools", allow,
+           "--output-format", "json"]
+    if valid_model(model):
+        cmd += ["--model", model]
+    return cmd
+
+
 def status_mismatch(enabled, registered):
     """auto.json の enabled と実際の登録の食い違いを文章で返す。無ければ None。"""
     if enabled and not registered:
@@ -225,6 +239,24 @@ def read_path_txt(path):
         if line.strip():
             return line.strip()
     return None
+
+
+def apply_simple_requests(sysd):
+    """同時数・研究の優先度の変更（M・S ファイル）を Claude を呼ばずに board.json へ取り込む。
+    board.py が無ければ何もしない。取り込んだ件数を返す。"""
+    bp = Path(sysd) / "board.py"
+    if not bp.is_file():
+        return 0
+    spec = importlib.util.spec_from_file_location("guild_board", bp)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    board_json = Path(sysd) / "board.json"
+    board = mod.load(board_json)
+    msgs = mod.apply_simple(board, Path(sysd) / "requests")
+    if msgs:
+        mod.add_notice(board, "。".join(msgs) + "。", by="guildmaster")
+        mod.save(board_json, board)
+    return len(msgs)
 
 
 def _write_last(logs, now, ok, skipped):
@@ -258,10 +290,17 @@ def run(auto_dir, runner=_real_runner):
         if lock_is_fresh(lock):
             return 0
         lock.unlink(missing_ok=True)
+    lock.touch()
+    try:
+        apply_simple_requests(sysd)
+    except Exception:
+        # 取り込めなくても回は止めない（ギルドマスターが手順 2 で拾う）。跡だけ残す
+        with open(log, "a", encoding="utf-8") as f:
+            f.write("apply-simple: " + traceback.format_exc())
     if not has_work(sysd, auto):
+        lock.unlink(missing_ok=True)
         _write_last(logs, now, True, True)
         return 0
-    lock.touch()
     resume.touch()
     code = 1
     try:
@@ -269,8 +308,7 @@ def run(auto_dir, runner=_real_runner):
         cfile = auto / "claude.txt"
         lines = cfile.read_text(encoding="utf-8").splitlines() if cfile.is_file() else []
         claude = lines[0].strip() if lines and lines[0].strip() else "claude"
-        cmd = [claude, "-p", PROMPT, "--permission-mode", "acceptEdits", "--allowedTools", allow,
-               "--output-format", "json"]
+        cmd = build_cmd(claude, allow, _read_auto_json(sysd).get("model"))
         code = runner(cmd, log, str(vault))
         record_usage(logs, log, now, code == 0)
         if code == 0:
@@ -314,7 +352,7 @@ def _read_auto_json(sysd):
         return {}
 
 
-def install(auto_dir, every_min):
+def install(auto_dir, every_min, model=None):
     auto, sysd, vault, _ = _paths(auto_dir)
     script = Path(__file__).resolve()
     py = read_venv_python(sysd / "board.json") or sys.executable
@@ -329,6 +367,7 @@ def install(auto_dir, every_min):
         _crontab_set(cron_replace(_crontab_get(), str(vault), line))
         save_path(auto, sys.platform, os.environ.get("PATH", ""))
     _write_auto_json(sysd, {"enabled": True, "every_min": every_min, "os": kind, "task": task,
+                            "model": valid_model(model),
                             "since": datetime.now().strftime("%Y-%m-%d %H:%M")})
 
 
@@ -363,13 +402,14 @@ def main(argv=None):
     sub.add_parser("run")
     ins = sub.add_parser("install")
     ins.add_argument("--every", type=int, default=5, metavar="MIN")
+    ins.add_argument("--model", default=None, help="ギルドマスターのモデル（sonnet / opus など。省略で既定）")
     sub.add_parser("uninstall")
     sub.add_parser("status")
     a = ap.parse_args(argv)
     auto = Path(__file__).resolve().parent
     if a.cmd == "install":
         try:
-            install(auto, a.every)
+            install(auto, a.every, a.model)
         except ValueError as e:
             print(f"install を中止: {e}", file=sys.stderr)
             return 1
