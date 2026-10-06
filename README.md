@@ -114,24 +114,26 @@ vault/
 
 入れるには marketplace に追加して install する 2 ステップが要ります。順番が重要で、marketplace 追加だけではプラグインは読み込まれません。
 
-1. marketplace に追加する。
+1. marketplace に追加する（この時点では、プラグインはまだ読み込まれません）。
    - GitHub から入れる（git が使える場合）: Claude Code で次を実行する。
      ```
      /plugin marketplace add asama0101/guild
-     /plugin install guild@guild
      ```
    - zip を手動で置く: GitHub のリポジトリ画面で「Code」→「Download ZIP」を押し、展開したフォルダを好きな場所に置く（vault の中には置かない）。Claude Code で次を実行する（パスは置いた場所）。
      ```
      /plugin marketplace add <展開したフォルダのパス>
+     ```
+     例: Windows で `C:\Users\<ユーザー>\Documents\guild-plugin` に置いた場合は、`/plugin marketplace add C:\Users\<ユーザー>\Documents\guild-plugin` です。
+
+2. install する（scope は 1 つだけ選ぶ。両方は実行しない）。
+   - その vault だけで使う（推奨）: その vault のルートで次を実行する。`.claude/settings.json` に記録され、そのプロジェクトだけで有効になります。自分だけで使う場合は `--scope local` にします。
+     ```
+     claude plugin install guild@guild --scope project
+     ```
+   - どの場所でも使う: どこからでも次を実行する。
+     ```
      /plugin install guild@guild
      ```
-     例: Windows で `C:\Users\<ユーザー>\OneDrive\guild` に置いた場合は、`/plugin marketplace add C:\Users\<ユーザー>\OneDrive\guild`です。
-
-2. install する。GitHub または zip から入れた場合は、どこからでも実行できます。特定 vault だけで使う場合は、その vault のルートで実行します。
-   ```
-   claude plugin install guild@guild --scope project
-   ```
-   `--scope project` は `.claude/settings.json` に記録され、そのプロジェクトだけで有効になります。自分だけで使う場合は `--scope local` を使ってください。
 
 3. `/reload-plugins` を実行する。`/reload-plugins` の出力に「1 plugin」と表示され、skills・agents の数が増えていれば読み込めています。
 
