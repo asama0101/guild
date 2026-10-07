@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
 <title>ギルドの画面</title>
 <style>
 :root {
@@ -163,6 +164,14 @@ function h(tag, attrs, ...kids) {
   }
   return el;
 }
+// null や false を文字にしない append
+Element.prototype.add = function (...kids) {
+  for (const c of kids.flat(Infinity)) {
+    if (c === null || c === undefined || c === false) continue;
+    this.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return this;
+};
 function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
 function $(id) { return document.getElementById(id); }
 let toastTimer = null;
@@ -352,7 +361,7 @@ function diagramPath(rel) {
 // 図と 1 行要約を box に入れる。読めないときは案内を出す。
 async function fillDiagram(box, svgRel, txtRel) {
   const token = ++S.diagToken;
-  clear(box).append(h('p', { class: 'muted small', text: '図を読み込んでいます。' }));
+  clear(box).add(h('p', { class: 'muted small', text: '図を読み込んでいます。' }));
   try {
     const rel = diagramPath(svgRel);
     if (!rel) throw new Error('図の場所が正しくありません');
@@ -361,12 +370,12 @@ async function fillDiagram(box, svgRel, txtRel) {
     let sentence = '';
     if (txtRel) { try { sentence = (await readText(['.system', ...txtRel.split('/')])).trim(); } catch (e) { sentence = ''; } }
     if (token !== S.diagToken) return;
-    clear(box).append(
+    clear(box).add(
       h('div', { class: 'diagram', tabindex: '0', role: 'group', 'aria-label': '道のりの図（横にスクロールできます）' }, node),
       sentence ? h('p', { text: sentence }) : null);
   } catch (e) {
     if (token !== S.diagToken) return;
-    clear(box).append(h('p', { class: 'muted', text: '道のりの図は、まだありません。' }));
+    clear(box).add(h('p', { class: 'muted', text: '道のりの図は、まだありません。' }));
   }
 }
 
@@ -419,7 +428,7 @@ function renderNow() {
   const box = clear($('nowbar'));
   if (!S.board) return;
   const n = computeNow();
-  box.append(h('div', { class: 'now' },
+  box.add(h('div', { class: 'now' },
     h('div', { class: 'line' }, h('p', { text: n.text }), h('button', { type: 'button', class: 'primary', onclick: n.go }, n.button))));
   const notice = (S.board.notices || []).slice(-1)[0];
   const stops = [];
@@ -429,9 +438,9 @@ function renderNow() {
   const wrap = box.firstChild;
   if (notice) {
     const stopIds = (notice.stops || []).map(id => String(id)).join('、');
-    wrap.append(h('p', { class: 'small', text: `知らせ（${jpStamp(notice.time)}）：${notice.text}${stopIds ? `　止まっている質問：${stopIds}` : ''}` }));
+    wrap.add(h('p', { class: 'small', text: `知らせ（${jpStamp(notice.time)}）：${notice.text}${stopIds ? `　止まっている質問：${stopIds}` : ''}` }));
   }
-  if (stops.length) wrap.append(h('ul', { class: 'small' }, stops.slice(0, 3).map(t => h('li', { text: t }))));
+  if (stops.length) wrap.add(h('ul', { class: 'small' }, stops.slice(0, 3).map(t => h('li', { text: t }))));
 }
 
 // ---------------------------------------------------------------- 画面：タブ
@@ -449,8 +458,8 @@ function renderTabs() {
         if (j >= 0) { ev.preventDefault(); setTab(TABS[j]); const b = $(`tab-${TABS[j]}`); if (b) b.focus(); }
       }
     }, name);
-    if (name === '質問' && count > 0) btn.append(h('span', { class: 'badge', 'aria-label': `未回答 ${count} 件`, text: String(count) }));
-    box.append(btn);
+    if (name === '質問' && count > 0) btn.add(h('span', { class: 'badge', 'aria-label': `未回答 ${count} 件`, text: String(count) }));
+    box.add(btn);
   });
 }
 function setTab(name) {
@@ -461,7 +470,7 @@ function setTab(name) {
 
 // ---------------------------------------------------------------- 画面：受付
 function renderIntake() {
-  const st = S.intake || (S.intake = { title: '', detail: '', due: '', form: 'おまかせ', files: [], busy: false, result: '' });
+  const st = S.intake || (S.intake = { title: '', detail: '', due: '', form: 'おまかせ', files: [], busy: false });
   const err = h('p', { class: 'err', role: 'alert' });
   const titleIn = h('input', { type: 'text', id: 'in-title', value: st.title, maxlength: '100', required: true,
     oninput: e => { st.title = e.target.value; } });
@@ -476,7 +485,7 @@ function renderIntake() {
   const drawFiles = () => {
     clear(fileList);
     if (!st.files.length) return;
-    fileList.append(h('ul', {}, st.files.map(f => {
+    fileList.add(h('ul', {}, st.files.map(f => {
       const c = checkFileName(f);
       return h('li', {}, `${f.name}（${sizeText(f.size)}）`, c.error ? h('span', { class: 'err', text: `　保存しない：${c.error}` }) : null);
     })));
@@ -500,7 +509,7 @@ function renderIntake() {
       }
       await writeJson(r.dir, r.name, { kind: 'quest', title: st.title.trim(), detail: st.detail.trim(),
         due: st.due || null, form: st.form, files: saved });
-      st.result = `依頼を送りました。${report}`;
+      S.intakeResult = `依頼を送りました。${report}`;
       S.intake = null;
       toast('依頼を送りました。');
       render();
@@ -516,8 +525,8 @@ function renderIntake() {
       h('div', {}, h('label', { for: 'in-form' }, '納品物の形'), formIn)),
     h('label', { for: 'in-files' }, '素材にするファイル（保存先：素材）'), fileIn, dest, fileList,
     err, h('p', {}, send));
-  const done = st.result ? h('p', { class: 'ok', role: 'status', text: st.result }) : null;
-  if (done) st.result = '';
+  const done = S.intakeResult ? h('p', { class: 'ok', role: 'status', text: S.intakeResult }) : null;
+  S.intakeResult = '';
   return h('section', { 'aria-labelledby': 'h-intake' },
     h('h2', { id: 'h-intake' }, '依頼を出す'),
     h('p', { class: 'muted', text: '依頼を送ると、ギルドが聞き取りを始めます。' }),
@@ -528,8 +537,8 @@ function renderIntake() {
 function renderQuests() {
   const list = questList();
   const sec = h('section', { 'aria-labelledby': 'h-quests' }, h('h2', { id: 'h-quests' }, 'クエスト'));
-  sec.append(renderSetting());
-  if (!list.length) { sec.append(h('p', { class: 'muted', text: 'クエストは、まだありません。受付で依頼を出してください。' })); return sec; }
+  sec.add(renderSetting());
+  if (!list.length) { sec.add(h('p', { class: 'muted', text: 'クエストは、まだありません。受付で依頼を出してください。' })); return sec; }
   if (!S.selQuest || !questOf(S.selQuest)) S.selQuest = (list.find(q => !QUEST_TERMINAL.includes(q.status)) || list[0]).id;
   const live = list.filter(q => !QUEST_TERMINAL.includes(q.status));
   const ended = list.filter(q => QUEST_TERMINAL.includes(q.status));
@@ -537,10 +546,10 @@ function renderQuests() {
     onclick: () => { S.selQuest = q.id; render(); } },
     h('strong', { text: `${q.id} ${q.title}` }), ' ', h('span', { class: 'state', text: questLabel(q) }),
     q.priority === '優先' ? h('span', { class: 'tag', text: ' 優先' }) : null));
-  sec.append(h('ul', { class: 'qlist', 'aria-label': 'クエストの一覧' }, live.map(item)));
-  if (ended.length) sec.append(h('details', {}, h('summary', { text: `終わったクエスト（${ended.length} 件）` }),
+  sec.add(h('ul', { class: 'qlist', 'aria-label': 'クエストの一覧' }, live.map(item)));
+  if (ended.length) sec.add(h('details', {}, h('summary', { text: `終わったクエスト（${ended.length} 件）` }),
     h('ul', { class: 'qlist' }, ended.map(item))));
-  sec.append(renderQuestDetail(questOf(S.selQuest)));
+  sec.add(renderQuestDetail(questOf(S.selQuest)));
   return sec;
 }
 function renderSetting() {
@@ -570,7 +579,7 @@ function actionButton(label, key, sig, run, cls) {
 }
 function renderQuestDetail(q) {
   const box = h('div', { class: 'card', role: 'region', 'aria-label': `クエスト ${q.title} の詳しい様子` });
-  box.append(h('h2', {}, `${q.id} ${q.title}`),
+  box.add(h('h2', {}, `${q.id} ${q.title}`),
     h('p', {}, h('span', { class: 'state', text: questLabel(q) }),
       q.priority === '優先' ? h('span', { class: 'tag', text: ' 優先' }) : null,
       q.due ? ` 期限：${jpDate(q.due)}` : ''),
@@ -581,35 +590,35 @@ function renderQuestDetail(q) {
   const ended = QUEST_TERMINAL.includes(q.status);
   if (!ended) {
     const toPri = q.priority === '優先' ? '通常' : '優先';
-    acts.append(actionButton(toPri === '優先' ? '優先にする' : '通常に戻す', `P:${q.id}`, q.priority || '通常',
+    acts.add(actionButton(toPri === '優先' ? '優先にする' : '通常に戻す', `P:${q.id}`, q.priority || '通常',
       () => writeRequest('P', { kind: 'priority', quest: q.id, priority: toPri })));
     if (q.status === '保留') {
-      acts.append(actionButton('再開する', `H:${q.id}`, q.status, () => writeRequest('H', { kind: 'hold', quest: q.id, action: 'resume' })));
+      acts.add(actionButton('再開する', `H:${q.id}`, q.status, () => writeRequest('H', { kind: 'hold', quest: q.id, action: 'resume' })));
     } else if (HOLDABLE.includes(q.status)) {
-      acts.append(actionButton('止める', `H:${q.id}`, q.status, () => writeRequest('H', { kind: 'hold', quest: q.id, action: 'hold' })));
+      acts.add(actionButton('止める', `H:${q.id}`, q.status, () => writeRequest('H', { kind: 'hold', quest: q.id, action: 'hold' })));
     }
     if (q.status === '進行中') {
-      acts.append(actionButton('最終鑑定を頼む', `W:${q.id}`, q.status, () => writeRequest('W', { kind: 'final_review', quest: q.id })));
+      acts.add(actionButton('最終鑑定を頼む', `W:${q.id}`, q.status, () => writeRequest('W', { kind: 'final_review', quest: q.id })));
     }
-    acts.append(actionButton('取り下げる', `C:${q.id}`, q.status, async () => {
+    acts.add(actionButton('取り下げる', `C:${q.id}`, q.status, async () => {
       if (!window.confirm(`クエスト「${q.title}」を取り下げます。取り下げたあとは、続けられません。取り下げますか？`)) throw new Error('取り下げをやめました');
       await writeRequest('C', { kind: 'cancel', quest: q.id });
     }, 'danger'));
-    box.append(acts, h('p', { class: 'muted small', text: '最終鑑定では、鑑定士が達成条件どうしの矛盾を確かめます。時間と費用が増えます。' }));
+    box.add(acts, h('p', { class: 'muted small', text: '最終鑑定では、鑑定士が達成条件どうしの矛盾を確かめます。時間と費用が増えます。' }));
   }
   // 道のり図
-  box.append(h('h3', {}, '道のり'));
+  box.add(h('h3', {}, '道のり'));
   const diag = h('div');
-  box.append(diag);
+  box.add(diag);
   fillDiagram(diag, `diagrams/route-${q.id}.svg`, `diagrams/route-${q.id}.txt`);
   // 達成条件の表
-  box.append(h('h3', {}, '達成条件'), renderGoals(q));
+  box.add(h('h3', {}, '達成条件'), renderGoals(q));
   // 場所
-  box.append(h('h3', {}, '場所'));
+  box.add(h('h3', {}, '場所'));
   const places = [['素材', 'input'], ['納品物', 'output'], ['冒険日誌', 'adventure log']];
-  box.append(h('ul', {}, places.map(([name, sub]) => h('li', {}, pathItem(name, `${q.dir}/${sub}`))),
+  box.add(h('ul', {}, places.map(([name, sub]) => h('li', {}, pathItem(name, `${q.dir}/${sub}`))),
     h('li', {}, pathItem('クエスト票', `${q.dir}/quest.md`))));
-  box.append(renderUpload(q));
+  box.add(renderUpload(q));
   return box;
 }
 function outputsOf(q, g) {
@@ -635,7 +644,7 @@ function renderGoals(q) {
         } catch (e) { toast(`送れませんでした：${e.message}`); }
       } }, careful ? '念入りに作る：オン' : '念入りに作る：オフ'),
       h('span', { id: `care-${g.id}`, class: 'muted small', text: ' 念入りに作ると、時間と費用が増えます。品質は上がります。' })) : null;
-    body.append(h('tr', {},
+    body.add(h('tr', {},
       h('td', { 'data-label': '順', text: String(i + 1) }),
       h('td', { 'data-label': '達成条件' }, h('strong', { text: g.title }),
         h('ul', { class: 'small' }, (g.done_when || []).map(t => h('li', { text: t }))), carefulBtn),
@@ -652,10 +661,10 @@ function renderUpload(q) {
   const fileIn = h('input', { type: 'file', id: `up-${q.id}`, multiple: true, onchange: e => { S.pickedFiles[q.id] = Array.from(e.target.files); render(); } });
   let destText = '';
   try { destText = `guild/${questDirParts(q).join('/')}/input/`; } catch (e) { destText = ''; }
-  box.append(h('h3', {}, '素材を足す'),
+  box.add(h('h3', {}, '素材を足す'),
     h('label', { for: `up-${q.id}` }, 'ファイルを選ぶ（保存先：素材）'), fileIn);
   if (picked.length) {
-    box.append(h('p', {}, '保存先：素材（', h('code', { text: destText }), '）'),
+    box.add(h('p', {}, '保存先：素材（', h('code', { text: destText }), '）'),
       h('ul', {}, picked.map(f => { const c = checkFileName(f); return h('li', {}, `${f.name}（${sizeText(f.size)}）`,
         c.error ? h('span', { class: 'err', text: `　保存しない：${c.error}` }) : null); })));
     const msg = h('p', { role: 'status' });
@@ -670,7 +679,7 @@ function renderUpload(q) {
         render();
       } catch (e) { msg.textContent = `保存できませんでした：${e.message}`; btn.disabled = false; }
     } }, '素材に保存する');
-    box.append(h('p', {}, btn), msg);
+    box.add(h('p', {}, btn), msg);
   }
   return box;
 }
@@ -686,24 +695,24 @@ function renderQuestions() {
   const sec = h('section', { 'aria-labelledby': 'h-q' }, h('h2', { id: 'h-q' }, '質問'));
   // 答えたばかりのもの
   for (const [id, a] of Object.entries(S.answered)) {
-    sec.append(h('div', { class: 'card', role: 'status' },
+    sec.add(h('div', { class: 'card', role: 'status' },
       h('span', { class: 'ok', text: `あなたの選択：${a.label}` }), ` （${a.text}）　`,
       h('button', { type: 'button', class: 'mini', onclick: () => reopen(id) }, a.label === LATER ? '選び直す' : '取り消す')));
   }
   const list = unanswered();
   if (!list.length) {
-    sec.append(h('p', { class: 'muted', text: '答える質問は、いまありません。' }));
+    sec.add(h('p', { class: 'muted', text: '答える質問は、いまありません。' }));
   } else {
     let idx = list.findIndex(q => q.id === S.selQuestion);
     if (idx < 0) idx = 0;
     S.selQuestion = list[idx].id;
     const nav = h('div', { class: 'row' }, h('span', { class: 'muted', text: `${list.length} 件中 ${idx + 1} 件目` }),
       list.length > 1 ? h('button', { type: 'button', class: 'mini', onclick: () => { S.selQuestion = list[(idx + 1) % list.length].id; render(); } }, '次の質問') : null);
-    sec.append(nav, renderOneQuestion(list[idx]));
+    sec.add(nav, renderOneQuestion(list[idx]));
   }
   const later = laterList();
   if (later.length) {
-    sec.append(h('h3', {}, 'あとで決める質問'),
+    sec.add(h('h3', {}, 'あとで決める質問'),
       h('ul', {}, later.map(q => h('li', {}, `${q.text}　`,
         h('button', { type: 'button', class: 'mini', onclick: () => reopen(q.id) }, '選び直す')))));
   }
@@ -713,17 +722,17 @@ function renderOneQuestion(q) {
   const scope = q.scope || 'none';
   const draft = S.drafts[q.id] || (S.drafts[q.id] = { comment: '', score: '', reason: BAD_REASONS[0] });
   const box = h('div', { class: 'card', role: 'group', 'aria-labelledby': `qh-${q.id}` });
-  box.append(h('h3', { id: `qh-${q.id}` }, `${SCOPE_NAMES[scope] || '質問'}：${questTitle(q.quest)}`),
+  box.add(h('h3', { id: `qh-${q.id}` }, `${SCOPE_NAMES[scope] || '質問'}：${questTitle(q.quest)}`),
     q.goal && goalOf(q.goal) ? h('p', { class: 'muted', text: `達成条件：${goalOf(q.goal).title}` }) : null,
     h('p', { text: q.text }));
   if (scope === 'route' || q.diagram) {
     const d = h('div');
-    box.append(d);
+    box.add(d);
     fillDiagram(d, q.diagram || `diagrams/route-${q.quest}.svg`, `diagrams/route-${q.quest}.txt`);
   }
-  if (scope === 'output' || scope === 'execute') box.append(renderCovered(q, scope));
-  if (scope === 'execute') box.append(h('p', { class: 'warn', text: '元に戻せない操作です。内容を確かめてから、答えてください。' }));
-  box.append(h('p', { class: 'muted small', text: dueText(q) }));
+  if (scope === 'output' || scope === 'execute') box.add(renderCovered(q, scope));
+  if (scope === 'execute') box.add(h('p', { class: 'warn', text: '元に戻せない操作です。内容を確かめてから、答えてください。' }));
+  box.add(h('p', { class: 'muted small', text: dueText(q) }));
   const comment = h('textarea', { id: `c-${q.id}`, oninput: e => { draft.comment = e.target.value; } });
   comment.value = draft.comment;
   const err = h('p', { class: 'err', role: 'alert' });
@@ -732,9 +741,9 @@ function renderOneQuestion(q) {
     try { await submitAnswer(q, choice, draft, extra); } catch (e) { err.textContent = `送れませんでした：${e.message}`; }
   };
   if (q.kind === 'approval') {
-    if (scope === 'output') box.append(renderEvaluation(q, draft));
-    box.append(h('label', { for: `c-${q.id}` }, scope === 'output' ? '一言（空でもかまいません）' : 'やり直す点・一言（空でもかまいません）'), comment);
-    box.append(h('div', { class: 'row' },
+    if (scope === 'output') box.add(renderEvaluation(q, draft));
+    box.add(h('label', { for: `c-${q.id}` }, scope === 'output' ? '一言（空でもかまいません）' : 'やり直す点・一言（空でもかまいません）'), comment);
+    box.add(h('div', { class: 'row' },
       h('button', { type: 'button', class: 'primary', onclick: () => {
         if (scope === 'execute' && !window.confirm('元に戻せない操作を承認します。よろしいですか？')) return;
         answer(APPROVE);
@@ -744,20 +753,20 @@ function renderOneQuestion(q) {
   } else {
     const opts = (q.options || []).slice(0, 4);
     if (opts.length) {
-      box.append(h('div', { role: 'group', 'aria-label': '選択肢' }, opts.map(o => h('button', {
+      box.add(h('div', { role: 'group', 'aria-label': '選択肢' }, opts.map(o => h('button', {
         type: 'button', class: o.recommended ? 'opt rec' : 'opt', onclick: () => answer(o.label) },
         h('strong', { text: o.label }), o.recommended ? h('span', { class: 'tag', text: ' 推奨' }) : null,
         o.reason ? h('span', { class: 'reason', text: o.reason }) : null))));
     }
-    box.append(h('label', { for: `c-${q.id}` }, opts.length ? '自由に書く（選択肢に足す一言にも使えます）' : '答えを書く'), comment);
-    box.append(h('div', { class: 'row' },
+    box.add(h('label', { for: `c-${q.id}` }, opts.length ? '自由に書く（選択肢に足す一言にも使えます）' : '答えを書く'), comment);
+    box.add(h('div', { class: 'row' },
       h('button', { type: 'button', class: opts.length ? null : 'primary', onclick: () => {
         if (!draft.comment.trim()) { err.textContent = '答えを書いてください。'; comment.focus(); return; }
         answer(FREE_CHOICE);
       } }, '書いた内容で答える'),
       h('button', { type: 'button', onclick: () => answer(LATER) }, LATER)));
   }
-  box.append(err);
+  box.add(err);
   return box;
 }
 function renderCovered(q, scope) {
@@ -779,7 +788,7 @@ function renderEvaluation(q, draft) {
   const fs = h('fieldset', {}, h('legend', { text: '納品物の評価（付けなくてもかまいません）' }),
     radio('good', 'good'), radio('bad', 'bad'), radio('', '付けない'));
   if (draft.score === 'bad') {
-    fs.append(h('label', { for: `r-${q.id}` }, 'bad の理由'),
+    fs.add(h('label', { for: `r-${q.id}` }, 'bad の理由'),
       h('select', { id: `r-${q.id}`, onchange: e => { draft.reason = e.target.value; } },
         BAD_REASONS.map(r => h('option', { value: r, selected: r === draft.reason }, r))));
   }
@@ -821,32 +830,32 @@ async function reopen(id) {
 // ---------------------------------------------------------------- 画面：全体
 function renderFolder() {
   const bar = clear($('folderbar'));
-  if (S.root) bar.append(h('span', { class: 'muted', text: `フォルダ：${S.root.name}` }));
-  if (S.root) bar.append(h('button', { type: 'button', class: 'mini', onclick: pickFolder }, 'フォルダを選び直す'));
+  if (S.root) bar.add(h('span', { class: 'muted', text: `フォルダ：${S.root.name}` }));
+  if (S.root) bar.add(h('button', { type: 'button', class: 'mini', onclick: pickFolder }, 'フォルダを選び直す'));
 }
 function renderConnect() {
   const box = clear($('connect'));
   if (typeof window.showDirectoryPicker !== 'function') {
-    box.append(h('div', { class: 'card', role: 'alert' }, h('h2', {}, 'このブラウザでは使えません'),
+    box.add(h('div', { class: 'card', role: 'alert' }, h('h2', {}, 'このブラウザでは使えません'),
       h('p', { text: 'Microsoft Edge または Google Chrome で、この画面を開いてください。' }),
       h('p', { class: 'muted', text: 'フォルダの読み書きに、ブラウザの機能を使うためです。' })));
     return false;
   }
   if (S.access === 'ok') {
-    if (S.error) box.append(h('p', { class: 'warn', role: 'status', text: S.error }));
+    if (S.error) box.add(h('p', { class: 'warn', role: 'status', text: S.error }));
     return true;
   }
   const card = h('div', { class: 'card' }, h('h2', {}, 'ギルドのフォルダを開く'),
     h('p', { text: 'ギルドの guild フォルダを選んでください。画面は、そのフォルダを読み書きします。' }));
   if (S.access === 'prompt') {
-    card.append(h('p', { text: '前に選んだフォルダがあります。もう一度、許可してください。' }),
+    card.add(h('p', { text: '前に選んだフォルダがあります。もう一度、許可してください。' }),
       h('div', { class: 'row' }, h('button', { type: 'button', class: 'primary', onclick: regrant }, '前のフォルダを許可する'),
         h('button', { type: 'button', onclick: pickFolder }, '別のフォルダを選ぶ')));
   } else {
-    card.append(h('button', { type: 'button', class: 'primary', onclick: pickFolder }, 'フォルダを選ぶ'));
+    card.add(h('button', { type: 'button', class: 'primary', onclick: pickFolder }, 'フォルダを選ぶ'));
   }
-  if (S.error) card.append(h('p', { class: 'err', role: 'alert', text: S.error }));
-  box.append(card);
+  if (S.error) card.add(h('p', { class: 'err', role: 'alert', text: S.error }));
+  box.add(card);
   return false;
 }
 function render() {
@@ -857,7 +866,7 @@ function render() {
   renderNow();
   renderTabs();
   const body = S.tab === '受付' ? renderIntake() : S.tab === 'クエスト' ? renderQuests() : renderQuestions();
-  panels.append(h('div', { id: 'panel', role: 'tabpanel', 'aria-labelledby': `tab-${S.tab}` }, body));
+  panels.add(h('div', { id: 'panel', role: 'tabpanel', 'aria-labelledby': `tab-${S.tab}` }, body));
 }
 function isTyping() {
   const a = document.activeElement;

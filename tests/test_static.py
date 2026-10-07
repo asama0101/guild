@@ -137,29 +137,46 @@ class TestBoardHtml(unittest.TestCase):
         self.assertIsNone(re.search(r"(src|href)=\"https?://", self.text))
 
     def test_タブは3つで定数と一致する(self):
-        tabs = re.findall(r'role="tab"[^>]*>\s*([^<]+?)\s*(?:<|$)', self.text)
-        names = [re.sub(r"\s+", "", t) for t in tabs]
-        self.assertEqual(names, C.TABS_0_1)
-        self.assertEqual(len(re.findall(r'role="tabpanel"', self.text)), len(C.TABS_0_1))
+        m = re.search(r"const TABS = \[(.*?)\];", self.text, re.S)
+        self.assertIsNotNone(m)
+        self.assertEqual(re.findall(r"'([^']+)'", m.group(1)), C.TABS_0_1)
+        self.assertIn("role: 'tab'", self.text)
+        self.assertIn("role: 'tabpanel'", self.text)
+        for t in ("予定表", "魔導書"):
+            self.assertNotIn(f"'{t}'", m.group(1))
 
     def test_状態名とラベルが定数と一致する(self):
-        for k, v in list(C.QUEST_LABELS.items()) + list(C.GOAL_LABELS.items()):
-            self.assertIn(k, self.text)
-            self.assertIn(v, self.text)
+        def table(name):
+            body = re.search(r"const " + name + r" = \{(.*?)\};", self.text, re.S).group(1)
+            return dict(re.findall(r"'([^']+)':\s*'([^']+)'", body))
+        self.assertEqual(table("QUEST_LABELS"), C.QUEST_LABELS)
+        self.assertEqual(table("GOAL_LABELS"), C.GOAL_LABELS)
+        for name, states in (("QUEST_STATES", C.QUEST_STATES), ("GOAL_STATES", C.GOAL_STATES)):
+            m = re.search(rf"const {name} = \[(.*?)\];", self.text, re.S)
+            self.assertEqual(re.findall(r"'([^']+)'", m.group(1)), states)
 
-    def test_値をエスケープして描く(self):
+    def test_値は_innerHTMLに入れない(self):
         js = "\n".join(self.scripts())
-        self.assertRegex(js, r"function\s+esc\w*\s*\(|const\s+esc\w*\s*=")
-        inner = re.findall(r"\.innerHTML\s*[+]?=\s*([^;\n]+)", js)
-        for expr in inner:
-            # innerHTML への代入は、空文字・エスケープ関数・定数だけ
-            self.assertRegex(expr.strip(), r"^(''|\"\"|``|esc\w*\(|sanitize\w*\(|\w*[Ss]afe\w*)", f"未エスケープの疑い: {expr}")
+        self.assertNotIn("innerHTML", js)
+        self.assertNotIn("outerHTML", js)
+        self.assertNotIn("document.write", js)
+        self.assertIn("textContent", js)
+
+    def test_SVGは取り込み前に無害化する(self):
+        js = "\n".join(self.scripts())
+        self.assertIn("DOMParser", js)
+        self.assertIn("sanitizeSvg", js)
+        for danger in ("'script'", "'foreignobject'"):
+            self.assertIn(danger, js.lower())
 
     def test_boardjsonを書かない(self):
         js = "\n".join(self.scripts())
-        self.assertNotRegex(js, r"getFileHandle\(\s*['\"]board\.json['\"]\s*,\s*\{\s*create")
+        for m in re.finditer(r"write(?:Json|Blob)\(([^;]*)\)", js):
+            self.assertNotIn("board.json", m.group(1))
         self.assertIn("answers", js)
         self.assertIn("requests", js)
+        self.assertIn("showDirectoryPicker", js)
+        self.assertIn("readwrite", js)
 
     def test_ボタンはbutton要素(self):
         self.assertIsNone(re.search(r"<div[^>]+onclick=", self.text))
