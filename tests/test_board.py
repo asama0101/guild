@@ -903,6 +903,14 @@ class TestMisc(Base):
         self.assertIn("input/", text)  # 素材は場所だけ
         self.assertEqual(f.name, f"{g}-adventurer.md")
 
+    def test_make_briefはクエスト単位でも作れる(self):
+        q = self.quest()
+        aid = self.ok("add-question", "--quest", q, "--text", "形式は", "--options", json.dumps([{"label": "Excel"}, {"label": "Word"}]))
+        self.ok("answer", aid, "--choice", "Excel")
+        text = Path(self.ok("make-brief", q, "receptionist")).read_text(encoding="utf-8")
+        self.assertIn("形式は → Excel", text)
+        self.assertIn(f"{q}-receptionist.md", text)
+
     def test_usage_log(self):
         self.ok("usage-log", "--role", "adventurer", "--model", "sonnet", "--tokens", "1200")
         row = json.loads((self.p.logs / "usage.jsonl").read_text(encoding="utf-8").splitlines()[0])

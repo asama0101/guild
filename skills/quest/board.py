@@ -1391,8 +1391,13 @@ def profile_brief(b, limit=10):
 def make_brief(b, gid, role):
     if role not in ACTORS:
         raise GuildError(f"不明な役です: {role}")
-    g = b.goal(gid)
-    q = b.quest(g["quest"])
+    if gid.startswith("Q"):
+        g = {"id": gid, "title": b.quest(gid)["title"], "effort": "中", "form": "おまかせ", "done_when": [],
+             "findings": []}
+        q = b.quest(gid)
+    else:
+        g = b.goal(gid)
+        q = b.quest(g["quest"])
     n = len(list(b.p.briefs.glob(f"{gid}-{role}*.md"))) if b.p.briefs.exists() else 0
     name = f"{gid}-{role}.md" if n == 0 else f"{gid}-{role}{n + 1}.md"
     L = [f"# 依頼書：{gid} {g['title']}（役：{role}）", "",
@@ -1401,6 +1406,10 @@ def make_brief(b, gid, role):
          "- done_when：", *[f"  - {d}" for d in g.get("done_when", [])],
          f"- 素材の場所：{q['dir']}/input/", f"- 納品物の場所：{q['dir']}/output/",
          f"- 報告書の場所：.system/reports/{gid}-{role}.md"]
+    if gid.startswith("Q"):
+        done = [x for x in b.d["questions"] if x["quest"] == gid and x["status"] == "回答済"]
+        if done:
+            L += ["- 聞き取りの答え：", *[f"  - {x['text']} → {x['answer']}" + (f"（{x['comment']}）" if x["comment"] else "") for x in done]]
     if g.get("findings"):
         L += ["- これまでの指摘：", *[f"  - {f['fix_kind']}／{f['point_code']}／{f['target']}：{f['point']}" for f in g["findings"][-3:]]]
     rules = []

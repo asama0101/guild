@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" role="img" aria-labelledby="t d">
+<title id="t">状態遷移図</title><desc id="d">受付→分解中、分解中→承認待ち、承認待ち→進行中、承認待ち→分解中、進行中→分解中、進行中→達成、進行中→最終鑑定、進行中→最終鑑定、最終鑑定→達成、最終鑑定→進行中、受付→保留、保留→受付、分解中→保留、保留→分解中、承認待ち→保留、保留→承認待ち、進行中→保留、保留→進行中、最終鑑定→保留、保留→最終鑑定 ほか</desc>
+<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"/></marker></defs>
+<text x="20" y="34" font-size="14" fill="currentColor">クエスト</text>
+<line x1="90" y1="66" x2="265" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>受付→分解中（guildmaster）</title></line>
+<line x1="265" y1="66" x2="440" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>分解中→承認待ち（guildmaster）</title></line>
+<line x1="440" y1="66" x2="615" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>承認待ち→進行中（client）</title></line>
+<line x1="440" y1="66" x2="265" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>承認待ち→分解中（client）</title></line>
+<line x1="615" y1="66" x2="265" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>進行中→分解中（guildmaster）</title></line>
+<line x1="615" y1="66" x2="90" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>進行中→達成（guildmaster）</title></line>
+<line x1="615" y1="66" x2="790" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>進行中→最終鑑定（guildmaster）</title></line>
+<line x1="615" y1="66" x2="790" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>進行中→最終鑑定（client）</title></line>
+<line x1="790" y1="66" x2="90" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>最終鑑定→達成（appraiser）</title></line>
+<line x1="790" y1="66" x2="615" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>最終鑑定→進行中（appraiser）</title></line>
+<line x1="90" y1="66" x2="615" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>受付→保留（client／tick）</title></line>
+<line x1="615" y1="156" x2="90" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>保留→受付（client）</title></line>
+<line x1="265" y1="66" x2="615" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>分解中→保留（client／tick）</title></line>
+<line x1="615" y1="156" x2="265" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>保留→分解中（client）</title></line>
+<line x1="440" y1="66" x2="615" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>承認待ち→保留（client／tick）</title></line>
+<line x1="615" y1="156" x2="440" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>保留→承認待ち（client）</title></line>
+<line x1="615" y1="66" x2="615" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>進行中→保留（client／tick）</title></line>
+<line x1="615" y1="156" x2="615" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>保留→進行中（client）</title></line>
+<line x1="790" y1="66" x2="615" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>最終鑑定→保留（client／tick）</title></line>
+<line x1="615" y1="156" x2="790" y2="66" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>保留→最終鑑定（client）</title></line>
+<line x1="90" y1="66" x2="440" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>受付→中止（client）</title></line>
+<line x1="265" y1="66" x2="440" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>分解中→中止（client）</title></line>
+<line x1="440" y1="66" x2="440" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>承認待ち→中止（client）</title></line>
+<line x1="615" y1="66" x2="440" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>進行中→中止（client）</title></line>
+<line x1="790" y1="66" x2="440" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>最終鑑定→中止（client）</title></line>
+<line x1="615" y1="156" x2="440" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>保留→中止（client）</title></line>
+<line x1="615" y1="66" x2="265" y2="156" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>進行中→失敗（client）</title></line>
+<rect x="20" y="50" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="90" y="71" text-anchor="middle" font-size="13" fill="currentColor">受付</text>
+<rect x="195" y="50" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="265" y="71" text-anchor="middle" font-size="13" fill="currentColor">分解中</text>
+<rect x="370" y="50" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="440" y="71" text-anchor="middle" font-size="13" fill="currentColor">承認待ち</text>
+<rect x="545" y="50" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="615" y="71" text-anchor="middle" font-size="13" fill="currentColor">進行中</text>
+<rect x="720" y="50" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="790" y="71" text-anchor="middle" font-size="13" fill="currentColor">最終鑑定</text>
+<rect x="20" y="140" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="90" y="161" text-anchor="middle" font-size="13" fill="currentColor">達成</text>
+<rect x="195" y="140" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="265" y="161" text-anchor="middle" font-size="13" fill="currentColor">失敗</text>
+<rect x="370" y="140" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="440" y="161" text-anchor="middle" font-size="13" fill="currentColor">中止</text>
+<rect x="545" y="140" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="615" y="161" text-anchor="middle" font-size="13" fill="currentColor">保留</text>
+<text x="20" y="264" font-size="14" fill="currentColor">達成条件</text>
+<line x1="90" y1="296" x2="265" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>案→待機（guildmaster）</title></line>
+<line x1="265" y1="296" x2="440" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>待機→冒険中（guildmaster）</title></line>
+<line x1="265" y1="296" x2="440" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>待機→冒険中（workshop）</title></line>
+<line x1="440" y1="296" x2="615" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>冒険中→鑑定中（guildmaster）</title></line>
+<line x1="440" y1="296" x2="790" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>冒険中→要手直し（guildmaster）</title></line>
+<line x1="440" y1="296" x2="90" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>冒険中→確認待ち（workshop）</title></line>
+<line x1="265" y1="296" x2="90" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>待機→案（guildmaster）</title></line>
+<line x1="440" y1="296" x2="90" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>冒険中→案（guildmaster）</title></line>
+<line x1="790" y1="296" x2="90" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>要手直し→案（guildmaster）</title></line>
+<line x1="615" y1="296" x2="90" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>鑑定中→案（guildmaster）</title></line>
+<line x1="90" y1="386" x2="90" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>確認待ち→案（guildmaster）</title></line>
+<line x1="265" y1="386" x2="90" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>実行承認待ち→案（guildmaster）</title></line>
+<line x1="615" y1="386" x2="90" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>失敗→案（guildmaster）</title></line>
+<line x1="615" y1="296" x2="90" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>鑑定中→確認待ち（appraiser）</title></line>
+<line x1="615" y1="296" x2="790" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>鑑定中→要手直し（appraiser）</title></line>
+<line x1="790" y1="296" x2="440" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>要手直し→冒険中（guildmaster／workshop）</title></line>
+<line x1="790" y1="296" x2="615" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>要手直し→失敗（client）</title></line>
+<line x1="615" y1="386" x2="790" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>失敗→要手直し（client）</title></line>
+<line x1="90" y1="386" x2="440" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>確認待ち→達成（client）</title></line>
+<line x1="90" y1="386" x2="790" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>確認待ち→要手直し（client）</title></line>
+<line x1="90" y1="386" x2="265" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>確認待ち→実行承認待ち（client）</title></line>
+<line x1="265" y1="386" x2="440" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>実行承認待ち→達成（client）</title></line>
+<line x1="265" y1="386" x2="615" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>実行承認待ち→失敗（client）</title></line>
+<line x1="265" y1="386" x2="790" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>実行承認待ち→要手直し（guildmaster）</title></line>
+<line x1="440" y1="386" x2="790" y2="296" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>達成→要手直し（appraiser）</title></line>
+<line x1="90" y1="296" x2="790" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>案→中止（client）</title></line>
+<line x1="265" y1="296" x2="790" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>待機→中止（client）</title></line>
+<line x1="440" y1="296" x2="790" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>冒険中→中止（client）</title></line>
+<line x1="615" y1="296" x2="790" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>鑑定中→中止（client）</title></line>
+<line x1="790" y1="296" x2="790" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>要手直し→中止（client）</title></line>
+<line x1="90" y1="386" x2="790" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>確認待ち→中止（client）</title></line>
+<line x1="265" y1="386" x2="790" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>実行承認待ち→中止（client）</title></line>
+<line x1="615" y1="386" x2="790" y2="386" stroke="currentColor" stroke-width="0.8" opacity="0.55" marker-end="url(#ar)"><title>失敗→中止（client）</title></line>
+<rect x="20" y="280" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="90" y="301" text-anchor="middle" font-size="13" fill="currentColor">案</text>
+<rect x="195" y="280" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="265" y="301" text-anchor="middle" font-size="13" fill="currentColor">待機</text>
+<rect x="370" y="280" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="440" y="301" text-anchor="middle" font-size="13" fill="currentColor">冒険中</text>
+<rect x="545" y="280" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="615" y="301" text-anchor="middle" font-size="13" fill="currentColor">鑑定中</text>
+<rect x="720" y="280" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="790" y="301" text-anchor="middle" font-size="13" fill="currentColor">要手直し</text>
+<rect x="20" y="370" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="90" y="391" text-anchor="middle" font-size="13" fill="currentColor">確認待ち</text>
+<rect x="195" y="370" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="265" y="391" text-anchor="middle" font-size="13" fill="currentColor">実行承認待ち</text>
+<rect x="370" y="370" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="440" y="391" text-anchor="middle" font-size="13" fill="currentColor">達成</text>
+<rect x="545" y="370" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="615" y="391" text-anchor="middle" font-size="13" fill="currentColor">失敗</text>
+<rect x="720" y="370" width="140" height="32" rx="6" fill="Canvas" stroke="currentColor"/><text x="790" y="391" text-anchor="middle" font-size="13" fill="currentColor">中止</text>
+</svg>
