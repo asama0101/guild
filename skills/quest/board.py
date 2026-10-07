@@ -16,7 +16,7 @@ import time
 import zipfile
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION = "0.3.0"
 HERE = Path(__file__).resolve().parent
 
 # ---------------------------------------------------------------- 定数
@@ -189,6 +189,10 @@ class Board:
 
     def save(self):
         self.refresh_blocked()
+        try:
+            refresh_derived(self)
+        except (GuildError, OSError):
+            pass
         self.d["updated"] = iso(now())
         validate(self.d)
         self.p.backup.mkdir(parents=True, exist_ok=True)
@@ -761,6 +765,8 @@ def post_goal(b, g, frm, to, who, text, reason, stamp):
         if frm == "確認待ち":
             record_finding(b, g, "brief", "", "output", text or "依頼主が直す点を伝えた", None, None, quiet_rule=True)
         g["finding_pending"] = False
+        if g.get("refs"):
+            spell_recheck_questions(b, g["refs"], q["id"], "この達成条件の手直しで使われました。")
         over = g["retries"] > b.limit("retries") + g.get("retry_bonus", 0) \
             or q["rework_total"] > b.limit("rework_total") + q.get("rework_bonus", 0)
         if over:
@@ -772,6 +778,8 @@ def post_goal(b, g, frm, to, who, text, reason, stamp):
                          default=None, tag="rework_limit")
     if to == "達成":
         g["closed_at"] = stamp
+        if g.get("started_at"):
+            g["actual_min"] = max(1, int((parse_dt(stamp) - parse_dt(g["started_at"])).total_seconds() // 60))
     if to in ("失敗", "中止"):
         g["closed_at"] = stamp
         propagate_dependents(b, g)
@@ -895,6 +903,7 @@ def answer_question(b, aid, choice, comment="", auto=False, point_code=None):
 
 
 def apply_answer_effects(b, q, choice):
+    apply_ext_effects(b, q, choice)
     if q["kind"] == "rule" and choice == "掟に足す":
         add_rule(b, q)
         q["handled"] = True
@@ -911,6 +920,35 @@ def apply_answer_effects(b, q, choice):
     if q["kind"] in ("rule", "term", "choice") and choice not in ("掟に足す",):
         if q["kind"] in ("rule", "term"):
             q["handled"] = True
+
+
+def apply_ext_effects(b, q, choice):
+    tag = q.get("tag")
+    if tag in ("spell", "spell_recheck"):
+        if choice == "確定":
+            spell_apply(b, q["item"], "confirm")
+        elif choice == "修正する":
+            if q.get("comment", "").strip():
+                spell_apply(b, q["item"], "fix", q["comment"])
+            else:
+                return
+        q["handled"] = True
+    elif tag == "shared_move":
+        if choice == "移す":
+            shared_move(b, q["move"])
+        q["handled"] = True
+    elif tag == "housekeeping":
+        apply_hk(b, q, choice)
+        q["handled"] = True
+    elif tag == "profile":
+        if choice == "覚える":
+            pr = q["profile"]
+            profile_add(b, pr["text"], pr["kind"], pr["evidence"])
+        q["handled"] = True
+    elif tag == "template":
+        if choice == "設計図にする":
+            template_add(b, q["template_src"])
+        q["handled"] = True
 
 
 def reopen_question(b, aid):
@@ -1005,6 +1043,10 @@ def tick(b):
             done["defaulted"].append(q["id"])
         elif t - asked >= datetime.timedelta(days=HOLD_DAYS):
             hold_quest(b, q["quest"], "返事が 14 日たっても届かないため、止めた。", done)
+    today = iso(t)[:10]
+    if b.d.get("last_housekeeping") != today:
+        b.d["last_housekeeping"] = today
+        done["housekeeping"] = housekeeping(b)
     return done
 
 
@@ -1020,7 +1062,7 @@ def hold_quest(b, qid, text, done):
         pass
 
 
-REQUEST_KINDS = {"setting", "priority", "goal_setting", "cancel", "evaluation", "hold", "final_review"}
+REQUEST_KINDS = {"setting", "priority", "goal_setting", "cancel", "evaluation", "hold", "final_review", "spellbook"}
 
 
 def pending_requests(paths):
@@ -1102,6 +1144,8 @@ def apply_simple(b):
             elif kind == "final_review":
                 decide(b, r["quest"], "最終鑑定を頼む")
                 set_status(b, r["quest"], "最終鑑定", "client")
+            elif kind == "spellbook":
+                spell_apply(b, r["item"], r.get("action"), r.get("text", ""))
             elif kind == "evaluation":
                 fid = b.next_id("F")
                 if r.get("score") not in ("good", "bad"):
@@ -1116,6 +1160,8 @@ def apply_simple(b):
         except (GuildError, KeyError, ValueError) as e:
             summary["skipped"].append({"file": f.name, "error": str(e)})
             move_request(b.p, f, "保留")
+    summary["spell_questions"] = spell_questions(b)
+    summary["shared_questions"] = shared_questions(b)
     return summary
 
 
@@ -1161,6 +1207,10 @@ def need_claude(b):
             reasons.append(f"decompose:{q['id']}")
         elif st == "最終鑑定":
             reasons.append(f"final_review:{q['id']}")
+        elif st == "達成":
+            todo, acc = accumulate_todo(b, q["id"]), acc_state(q)
+            if (todo["wizard"] and not acc["wizard"]) or (todo["bard"] and not acc["bard"]):
+                reasons.append(f"accumulate:{q['id']}")
         elif st == "進行中":
             gs = goal_graph(b, q["id"])
             if gs and all(g["status"] == "達成" for g in gs.values()):
@@ -1426,6 +1476,20 @@ def make_brief(b, gid, role):
         pb = profile_brief(b)
         if pb:
             L += ["", "## 人物伝（要約）", *pb]
+    if role in ("fortune_teller", "adventurer", "alchemist", "appraiser", "workshop"):
+        L += spell_brief_lines(b, g, q)
+    if role == "fortune_teller":
+        cl = calib_line(b)
+        if cl:
+            L += ["", cl]
+        td = b.p.root / "templates"
+        tl = [f"{f.name}（使用 {b.d.get('template_use', {}).get(f.name, {}).get('count', 0)} 回）"
+              for f in sorted(td.iterdir()) if f.is_file()] if td.exists() else []
+        if tl:
+            L += ["", "## 設計図（templates/）", *[f"- {t}" for t in tl]]
+    if role == "smith" and g.get("template"):
+        L += ["", f"- 設計図：templates/{g['template']}"]
+        template_use(b, g["template"])
     b.p.briefs.mkdir(parents=True, exist_ok=True)
     (b.p.briefs / name).write_text("\n".join(L) + "\n", encoding="utf-8")
     return b.p.briefs / name
@@ -1590,7 +1654,8 @@ def new_board(vault_path="", python=""):
 def init_board(paths, vault_path="", python=""):
     for d in (paths.sys, paths.backup, paths.answers, paths.requests / "files", paths.requests / "済",
               paths.requests / "保留", paths.reports / "済", paths.briefs, paths.rules, paths.logs, paths.sys / "auto",
-              paths.root / "quests", paths.root / "shared", paths.root / "templates"):
+              paths.root / "quests", paths.root / "shared", paths.root / "templates", paths.root / "spellbook",
+              paths.sys / "diagrams"):
         d.mkdir(parents=True, exist_ok=True)
     if paths.board.exists():
         return False
@@ -1679,6 +1744,898 @@ def set_top(b, key, value):
         raise GuildError(f"set-top できるキーは limits／profile_pending／python／vault_path です: {key}")
 
 
+# ================================================================ 0.2：魔導書・資料室・予定表・集計・整理・人物伝
+SPELL_TYPES = ["用語", "設備", "取り決め"]
+SPELL_STATUS = ["候補", "確定"]
+SPELL_BASIS = ["原文", "推論"]
+SPELL_CONF = ["高", "中", "低"]
+SPELL_MAX = 200
+SPELL_INDEX = "魔導書.md"
+SPELL_FIND_MAX = 5
+YEAR_DAYS = 365
+RULE_REVIEW_DAYS = 180
+HK_MAX = 5
+PROFILE_MAX = 50
+MAX_FILE_BYTES = 50 * 1024 * 1024
+OFFICE_FORMS = ["Word", "Excel", "PowerPoint", "PDF"]
+
+
+def parse_val(v):
+    v = v.strip()
+    if v.startswith("["):
+        try:
+            return json.loads(v)
+        except ValueError:
+            return [x.strip().strip("\"'") for x in v.strip("[]").split(",") if x.strip()]
+    return v.strip("\"'")
+
+
+def parse_note(path):
+    text = Path(path).read_text(encoding="utf-8")
+    m = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n?", text, re.S)
+    meta, body = {}, text
+    if m:
+        body = text[m.end():]
+        for ln in m.group(1).splitlines():
+            if ":" in ln:
+                k, v = ln.split(":", 1)
+                meta[k.strip()] = parse_val(v)
+    return meta, body
+
+
+def dump_note(meta, body):
+    lines = ["---"]
+    for k, v in meta.items():
+        lines.append(f"{k}: {json.dumps(v, ensure_ascii=False)}" if isinstance(v, list) else f"{k}: {v}")
+    lines.append("---")
+    return "\n".join(lines) + "\n" + body.lstrip("\n")
+
+
+def note_problems(meta):
+    p = []
+    if meta.get("type") not in SPELL_TYPES:
+        p.append(f"type は {SPELL_TYPES} のどれか")
+    if meta.get("status") not in SPELL_STATUS:
+        p.append(f"status は {SPELL_STATUS} のどれか")
+    src = meta.get("sources")
+    if not isinstance(src, list) or not [s for s in src if str(s).strip()]:
+        p.append("sources（出典）が 1 件以上ない")
+    if meta.get("basis") not in SPELL_BASIS:
+        p.append(f"basis は {SPELL_BASIS} のどれか")
+    if meta.get("confidence") not in SPELL_CONF:
+        p.append(f"confidence は {SPELL_CONF} のどれか")
+    return p
+
+
+def spell_dir(b):
+    return b.p.root / "spellbook"
+
+
+def spell_notes(b):
+    d = spell_dir(b)
+    out = []
+    if d.exists():
+        for f in sorted(d.glob("*.md")):
+            if f.name == SPELL_INDEX:
+                continue
+            meta, body = parse_note(f)
+            out.append((f, meta, body))
+    return out
+
+
+def spellbook_index(b):
+    valid, invalid = [], []
+    for f, meta, body in spell_notes(b):
+        pr = note_problems(meta)
+        (invalid if pr else valid).append((f, meta, pr))
+    d = spell_dir(b)
+    d.mkdir(parents=True, exist_ok=True)
+    rows = ["# 魔導書", "", "| 名前 | aliases | 種別 | 状態 | 使用クエスト数 |", "|---|---|---|---|---|"]
+    for f, meta, _ in valid:
+        al = meta.get("aliases") or []
+        al = al if isinstance(al, list) else [al]
+        ub = meta.get("used_by") or []
+        rows.append(f"| [[{f.stem}]] | {', '.join(al)} | {meta['type']} | {meta['status']} | {len(ub) if isinstance(ub, list) else 0} |")
+    (d / SPELL_INDEX).write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return {"items": len(valid), "invalid": [{"note": f.name, "problems": pr} for f, _, pr in invalid],
+            "over_limit": len(valid) > SPELL_MAX}
+
+
+def note_names(meta, stem):
+    al = meta.get("aliases") or []
+    al = al if isinstance(al, list) else [al]
+    return [stem] + [a for a in al if a]
+
+
+def spellbook_find_text(b, text, limit=SPELL_FIND_MAX):
+    hits = []
+    for f, meta, body in spell_notes(b):
+        if note_problems(meta):
+            continue
+        ub = meta.get("used_by") or []
+        if meta["status"] == "候補" and not ub:
+            continue
+        if any(len(n) >= 2 and n in text for n in note_names(meta, f.stem)):
+            hits.append((0 if meta["status"] == "確定" else 1, f.stem, f, meta, body))
+    hits.sort(key=lambda x: (x[0], x[1]))
+    return [(f, meta, body) for _, _, f, meta, body in hits[:limit]]
+
+
+def spellbook_find_terms(b, terms):
+    out = []
+    for f, meta, body in spell_notes(b):
+        if note_problems(meta):
+            continue
+        names = note_names(meta, f.stem)
+        if any(t and (t in n or n in t) for t in terms for n in names):
+            out.append((f, meta, body))
+    return out[:SPELL_FIND_MAX]
+
+
+def touch_used(b, f, meta, body, qid):
+    ub = meta.get("used_by") if isinstance(meta.get("used_by"), list) else []
+    if qid not in ub:
+        ub.append(qid)
+    meta["used_by"] = ub
+    meta["last_used"] = iso(now())[:10]
+    Path(f).write_text(dump_note(meta, body), encoding="utf-8")
+
+
+def spell_brief_lines(b, goal, quest, limit=SPELL_FIND_MAX):
+    text = " ".join([quest.get("title", ""), quest.get("detail") or "", goal.get("title", "")] + list(goal.get("done_when", [])))
+    hits = spellbook_find_text(b, text, limit)
+    if not hits:
+        return []
+    L = ["", "## 魔導書（一致した項目）"]
+    for f, meta, body in hits:
+        mark = "確定" if meta["status"] == "確定" else "候補（未確定）"
+        src = meta.get("sources") or []
+        lines = [ln for ln in body.splitlines() if ln.strip() and not ln.startswith("#")][:5]
+        L += [f"### {f.stem}（{meta['type']}・{mark}）", *lines, f"出典：{'、'.join(map(str, src))}"]
+        if goal.get("id", "").startswith("G"):
+            if f.stem not in goal.setdefault("refs", []):
+                goal["refs"].append(f.stem)
+            touch_used(b, f, meta, body, quest["id"])
+    return L
+
+
+def spell_apply(b, item, action, text=""):
+    if not item or re.search(r"[\\/]|\.\.", item):
+        raise GuildError("item は項目名だけにしてください")
+    f = spell_dir(b) / f"{item}.md"
+    if not f.exists():
+        raise GuildError(f"魔導書にありません: {item}")
+    meta, body = parse_note(f)
+    today = iso(now())[:10]
+    if action == "later":
+        return "later"
+    if action not in ("confirm", "fix"):
+        raise GuildError("action は confirm／fix／later です")
+    if action == "fix":
+        if not text.strip():
+            raise GuildError("修正の内容（text）が要ります")
+        body = body.rstrip("\n") + f"\n\n## 修正（{today}）\n{text.strip()}\n"
+    meta["status"] = "確定"
+    meta["verified_on"] = today
+    f.write_text(dump_note(meta, body), encoding="utf-8")
+    return action
+
+
+def anchor_quest(b, prefer=None):
+    if prefer and prefer in b.d["quests"]:
+        return prefer
+    ids = sorted(b.d["quests"], key=idnum)
+    return ids[-1] if ids else None
+
+
+def spell_questions(b):
+    made = []
+    asked = b.d.setdefault("spell_asked", [])
+    for f, meta, body in spell_notes(b):
+        if note_problems(meta) or meta["status"] != "候補" or f.stem in asked:
+            continue
+        ub = meta.get("used_by") or []
+        q = anchor_quest(b, ub[-1] if ub else None)
+        if not q:
+            continue
+        asked.append(f.stem)
+        made.append(add_question(
+            b, kind="term", scope="none", quest=q,
+            text=f"魔導書の候補「{f.stem}」を確定しますか？（根拠：{meta['basis']}、出典：{'、'.join(map(str, meta['sources']))}）",
+            options=[{"label": "確定", "reason": "出典と根拠を確かめた", "recommended": False},
+                     {"label": "修正する", "reason": "内容を直してから確定する", "recommended": False},
+                     {"label": "あとで決める", "reason": "候補のまま使う", "recommended": True}],
+            default="あとで決める", tag="spell", extra={"item": f.stem}))
+    return made
+
+
+def spell_recheck_questions(b, refs, qid, reason):
+    made = []
+    for name in refs:
+        f = spell_dir(b) / f"{name}.md"
+        if not f.exists():
+            continue
+        if any(x.get("tag") == "spell_recheck" and x.get("item") == name and x["status"] == "未回答" for x in b.d["questions"]):
+            continue
+        made.append(add_question(
+            b, kind="term", scope="none", quest=qid,
+            text=f"魔導書「{name}」を、もう一度確かめてください。{reason}",
+            options=[{"label": "確定", "reason": "内容は正しい", "recommended": False},
+                     {"label": "修正する", "reason": "内容を直す", "recommended": False},
+                     {"label": "あとで決める", "reason": "いまは決めない", "recommended": True}],
+            default="あとで決める", tag="spell_recheck", extra={"item": name}))
+    return made
+
+
+# ---------------------------------------------------------------- 資料室
+def safe_rel(b, rel):
+    """guild フォルダの中の相対パスだけを通す。.. ・絶対パス・シンボリックリンクを拒否する。"""
+    if not rel or os.path.isabs(rel) or re.match(r"^[A-Za-z]:", rel) or ".." in Path(rel).parts:
+        raise GuildError(f"パスが不正です（.. と絶対パスは使えません）: {rel}")
+    p = b.p.root / rel
+    cur = b.p.root
+    for part in Path(rel).parts:
+        cur = cur / part
+        if cur.is_symlink():
+            raise GuildError(f"シンボリックリンクは使えません: {rel}")
+    return p
+
+
+def clean_filename(name):
+    name = FORBIDDEN_NAME_CHARS.sub("", Path(name).name).strip(" .")
+    if not name:
+        raise GuildError("ファイル名が空です")
+    return name
+
+
+def unique_dest(d, name):
+    dest = d / name
+    n = 2
+    while dest.exists():
+        dest = d / f"{Path(name).stem}-{n}{Path(name).suffix}"
+        n += 1
+    return dest
+
+
+def shared_candidates(b):
+    out = []
+    for f, meta, body in spell_notes(b):
+        ub = meta.get("used_by") or []
+        if note_problems(meta) or len(ub) < 2:
+            continue
+        for s in meta["sources"]:
+            s = str(s).strip("[]")
+            parts = Path(s).parts
+            p = b.p.root / s
+            if len(parts) >= 4 and parts[0] == "quests" and parts[2] == "input" and p.is_file() \
+                    and not p.name.endswith(".shared.md") and ".." not in parts:
+                out.append({"file": Path(s).as_posix(), "note": f.stem, "used_by": len(ub)})
+    return out
+
+
+def shared_move(b, rel):
+    p = safe_rel(b, rel)
+    parts = Path(rel).parts
+    if not (len(parts) >= 4 and parts[0] == "quests" and parts[2] == "input"):
+        raise GuildError("資料室へ移せるのは、クエストの素材（input/）のファイルだけです")
+    if not p.is_file():
+        raise GuildError(f"ファイルがありません: {rel}")
+    shared = b.p.root / "shared"
+    shared.mkdir(parents=True, exist_ok=True)
+    dest = unique_dest(shared, p.name)
+    shutil.move(str(p), str(dest))
+    link = p.parent / f"{p.name}.shared.md"
+    link.write_text(f"資料室にあります：shared/{dest.name}\n", encoding="utf-8")
+    new = f"shared/{dest.name}"
+    for f, meta, body in spell_notes(b):
+        srcs = meta.get("sources")
+        if isinstance(srcs, list) and any(str(s).strip("[]") == Path(rel).as_posix() for s in srcs):
+            meta["sources"] = [new if str(s).strip("[]") == Path(rel).as_posix() else s for s in srcs]
+            f.write_text(dump_note(meta, body), encoding="utf-8")
+    return new
+
+
+def shared_questions(b):
+    made = []
+    asked = b.d.setdefault("shared_asked", [])
+    for c in shared_candidates(b):
+        if c["file"] in asked:
+            continue
+        q = anchor_quest(b, c["file"].split("/")[1].split(" ")[0])
+        if not q:
+            continue
+        asked.append(c["file"])
+        made.append(add_question(
+            b, kind="confirm", scope="none", quest=q,
+            text=f"素材「{Path(c['file']).name}」は、{c['used_by']} 件のクエストで使われています。資料室へ移しますか？",
+            options=[{"label": "移す", "reason": "ほかのクエストでも使える", "recommended": True},
+                     {"label": "移さない", "reason": "いまの場所に置く", "recommended": False}],
+            default="移す", tag="shared_move", extra={"move": c["file"]}))
+    return made
+
+
+# ---------------------------------------------------------------- 予定表
+def render_schedule_svg(b):
+    base = now().replace(hour=0, minute=0, second=0)
+    rows = []
+    for q in sorted(b.d["quests"].values(), key=lambda x: idnum(x["id"])):
+        if q["status"] in QUEST_TERMINAL:
+            continue
+        slack = route_check(b, q["id"])["slack"]
+        for gid in q["goals"]:
+            g = b.d["goals"][gid]
+            if g["status"] in GOAL_TERMINAL or not g.get("deadline"):
+                continue
+            dl = datetime.datetime.fromisoformat(g["deadline"]).replace(hour=0, minute=0, second=0)
+            rows.append((dl, idnum(gid), q, g, slack.get(gid)))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    late = [r for r in rows if r[4] is not None and r[4] < 0]
+    LW, BW, RH = 280, 560, 34
+    days = max([(r[0] - base).days for r in rows] + [7]) + 1
+    width = LW + BW + 40
+    height = 60 + RH * max(len(rows), 1)
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-labelledby="t d">',
+           '<title id="t">予定表</title>',
+           f'<desc id="d">{x(f"締切のある達成条件 {len(rows)} 件。間に合わないおそれのあるもの {len(late)} 件。")}</desc>']
+    step = max(1, days // 8)
+    for d in range(0, days + 1, step):
+        px = LW + int(BW * d / days)
+        dt = base + datetime.timedelta(days=d)
+        out.append(f'<line x1="{px}" y1="30" x2="{px}" y2="{height - 10}" stroke="currentColor" opacity="0.2"/>'
+                   f'<text x="{px}" y="22" font-size="11" text-anchor="middle" fill="currentColor">{dt.month}月{dt.day}日</text>')
+    for i, (dl, _, q, g, slack) in enumerate(rows):
+        y = 40 + i * RH
+        px = LW + int(BW * max((dl - base).days, 0) / days)
+        is_late = slack is not None and slack < 0
+        mark = "！間に合わないおそれ" if is_late else (f"ゆとり {slack} 分" if slack is not None else "")
+        label = f"{q['title'][:8]}／{g['title'][:12]}"
+        out.append(f'<g><title>{x(q["title"])}の{x(g["title"])}：締切 {x(jp_date(g["deadline"]))}　{x(mark)}</title>'
+                   f'<text x="8" y="{y + 16}" font-size="12" fill="currentColor">{x(label)}</text>'
+                   f'<rect x="{LW}" y="{y + 4}" width="{max(px - LW, 2)}" height="16" rx="3" fill="none" stroke="currentColor" '
+                   f'stroke-width="{3 if is_late else 1}"' + (' stroke-dasharray="5 3"' if is_late else '') + '/>'
+                   f'<path d="M{px},{y + 2} l8,10 l-8,10 l-8,-10 z" fill="{"currentColor" if is_late else "none"}" stroke="currentColor"/>'
+                   f'<text x="{min(px + 14, width - 150)}" y="{y + 16}" font-size="11" fill="currentColor">{x(jp_date(g["deadline"]))}　{x(mark)}</text></g>')
+    if not rows:
+        out.append('<text x="8" y="50" font-size="13" fill="currentColor">締切のある達成条件はありません。</text>')
+    out.append("</svg>")
+    sentence = f"締切のある達成条件は {len(rows)} 件。間に合わないおそれのあるものは {len(late)} 件。"
+    return "\n".join(out), sentence
+
+
+def write_schedule(b):
+    d = b.p.sys / "diagrams"
+    d.mkdir(parents=True, exist_ok=True)
+    svg, sentence = render_schedule_svg(b)
+    (d / "schedule.svg").write_text(svg + "\n", encoding="utf-8")
+    (d / "schedule.txt").write_text(sentence + "\n", encoding="utf-8")
+    return d / "schedule.svg"
+
+
+def refresh_slack(b):
+    for g in b.d["goals"].values():
+        g.pop("slack_min", None)
+    for q in b.d["quests"].values():
+        if q["status"] in QUEST_TERMINAL or not q["goals"]:
+            continue
+        for gid, v in route_check(b, q["id"])["slack"].items():
+            b.d["goals"][gid]["slack_min"] = v
+
+
+# ---------------------------------------------------------------- 利用記録の集計・補正係数
+def read_usage(b):
+    f = b.p.logs / "usage.jsonl"
+    rows = []
+    if f.exists():
+        for ln in f.read_text(encoding="utf-8").splitlines():
+            try:
+                rows.append(json.loads(ln))
+            except ValueError:
+                continue
+    return rows
+
+
+def usage_summary(b, quest=None):
+    rows = [r for r in read_usage(b) if r.get("tokens") is not None and r.get("role") != "guild-run"
+            and (not quest or r.get("quest") == quest)]
+    by_role, by_model = {}, {}
+    for r in rows:
+        by_role.setdefault(r["role"], {"calls": 0, "tokens": 0})
+        by_role[r["role"]]["calls"] += 1
+        by_role[r["role"]]["tokens"] += int(r.get("tokens") or 0)
+        by_model[r["model"]] = by_model.get(r["model"], 0) + 1
+    return {"calls": len(rows), "tokens": sum(int(r.get("tokens") or 0) for r in rows), "by_role": by_role, "by_model": by_model}
+
+
+def calib(b):
+    ratios = []
+    by_effort = {e: {"goals": 0, "with_findings": 0, "retries": 0} for e in EFFORTS}
+    for g in list(b.d["goals"].values()):
+        e = by_effort[g.get("effort", "中")]
+        if g["status"] == "達成":
+            e["goals"] += 1
+            e["with_findings"] += 1 if g.get("findings") else 0
+            e["retries"] += g.get("retries", 0)
+            if g.get("estimate_min") and g.get("actual_min"):
+                ratios.append(g["actual_min"] / g["estimate_min"])
+    ratios.sort()
+    factor = round(ratios[len(ratios) // 2], 2) if ratios else 1.0
+    for e in by_effort.values():
+        n = e["goals"]
+        e["ng_rate"] = round(e["with_findings"] / n, 2) if n else None
+        e["avg_retries"] = round(e["retries"] / n, 2) if n else None
+    hints = []
+    if (by_effort["中"]["ng_rate"] or 0) >= 0.5 and by_effort["中"]["goals"] >= 3:
+        hints.append("effort が中の NG 率が高い。錬金術師を opus に上げる条件を、中にも広げる案がある。")
+    if by_effort["高"]["goals"] >= 3 and (by_effort["高"]["ng_rate"] or 0) <= 0.1:
+        hints.append("effort が高の NG 率が低い。opus に上げる条件を、狭める案がある。")
+    data = {"factor": factor, "by_effort": by_effort, "samples": len(ratios), "hints": hints, "updated": iso(now())}
+    (b.p.sys / "calib.json").write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return data
+
+
+def calib_line(b):
+    f = b.p.sys / "calib.json"
+    if not f.exists():
+        return ""
+    try:
+        return f"見積の補正係数：{json.loads(f.read_text(encoding='utf-8'))['factor']}（見積に掛ける）"
+    except (ValueError, KeyError):
+        return ""
+
+
+# ---------------------------------------------------------------- 整理（housekeeping）
+def hk_question(b, key, text, extra):
+    asked = b.d.setdefault("hk_asked", [])
+    if key in asked:
+        return None
+    q = anchor_quest(b)
+    if not q:
+        return None
+    asked.append(key)
+    return add_question(b, kind="confirm", scope="none", quest=q, text=text,
+                        options=[{"label": "整理する", "reason": "使われていない", "recommended": False},
+                                 {"label": "見送る", "reason": "このまま残す", "recommended": True}],
+                        default="見送る", tag="housekeeping", extra=extra)
+
+
+def housekeeping(b):
+    made, t = [], now()
+    old = lambda s: s and (t - datetime.datetime.fromisoformat(s[:10])).days >= YEAR_DAYS
+    notes = [(f, m) for f, m, _ in spell_notes(b) if not note_problems(m)]
+    if len(notes) > SPELL_MAX:
+        for f, m in sorted(notes, key=lambda x: str(x[1].get("last_used") or x[1].get("verified_on") or ""))[: len(notes) - SPELL_MAX]:
+            made.append(hk_question(b, f"spell-over:{f.stem}", f"魔導書が {SPELL_MAX} 項目を超えました。「{f.stem}」を整理しますか？", {"hk": "spellbook", "item": f.stem}))
+    for f, m in notes:
+        if old(str(m.get("last_used") or "")):
+            made.append(hk_question(b, f"spell-unused:{f.stem}", f"魔導書「{f.stem}」は 1 年使われていません。整理しますか？", {"hk": "spellbook", "item": f.stem}))
+        elif old(str(m.get("verified_on") or "")):
+            made.extend(spell_recheck_questions(b, [f.stem], anchor_quest(b), "確かめてから 1 年たちました。") if anchor_quest(b) else [])
+    for sub, label in (("shared", "資料室"), ("templates", "設計図")):
+        d = b.p.root / sub
+        if d.exists():
+            for f in sorted(d.iterdir()):
+                if f.is_file() and not f.name.startswith("."):
+                    last = (b.d.get("template_use", {}).get(f.name, {}) or {}).get("last") if sub == "templates" else None
+                    ref = last or datetime.datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d")
+                    if old(ref):
+                        made.append(hk_question(b, f"{sub}:{f.name}", f"{label}の「{f.name}」は 1 年使われていません。整理しますか？", {"hk": sub, "file": f.name}))
+    for r in b.d.get("rules", {}).values():
+        if (t - datetime.datetime.fromisoformat(r["added"])).days >= RULE_REVIEW_DAYS and r.get("recurrences", 0) == 0 \
+                or r.get("recurrences", 0) >= 3:
+            made.append(hk_question(b, f"rule:{r['id']}", f"掟「{r['text']}」を見直しますか？（再発 {r.get('recurrences', 0)} 回）", {"hk": "rule", "rule": r["id"]}))
+    made = [m for m in made if m]
+    return made[:HK_MAX]
+
+
+def archive_file(path):
+    d = Path(path).parent / ".archive"
+    d.mkdir(exist_ok=True)
+    shutil.move(str(path), str(unique_dest(d, Path(path).name)))
+
+
+def apply_hk(b, q, choice):
+    if choice != "整理する":
+        return
+    hk = q.get("hk")
+    if hk == "spellbook":
+        archive_file(spell_dir(b) / f"{q['item']}.md")
+    elif hk in ("shared", "templates"):
+        archive_file(b.p.root / hk / q["file"])
+    elif hk == "rule":
+        b.d.get("rules", {}).pop(q["rule"], None)
+        write_rules(b)
+
+
+# ---------------------------------------------------------------- 人物伝・教訓・インタビュー
+def parse_result_lines(text):
+    sec = md_section(text, "result") or ""
+    return [re.sub(r"^\s*([-*]|\d+[.)])\s+", "", ln).strip() for ln in bullets(sec)]
+
+
+def profile_items(b):
+    p = b.p.profile
+    if not p.exists():
+        return []
+    return [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.startswith("- ")]
+
+
+def profile_add(b, text, kind, evidence):
+    items = profile_items(b)
+    if len(items) >= PROFILE_MAX:
+        add_notice(b, f"人物伝が {PROFILE_MAX} 項目に達しました。古い項目を整理してください。")
+        return False
+    p = b.p.profile
+    head = p.read_text(encoding="utf-8") if p.exists() else "# 人物伝\n\n"
+    p.write_text(head.rstrip("\n") + f"\n- {text}｜kind: {kind}｜evidence: {evidence}\n", encoding="utf-8")
+    return True
+
+
+def bard_apply(b, qid, file):
+    text = Path(file).read_text(encoding="utf-8")
+    res = {"lessons": 0, "profile_questions": 0, "held": 0, "templates": 0}
+    obs = b.d.setdefault("profile_obs", {})
+    for ln in parse_result_lines(text):
+        parts = [x.strip() for x in ln.split("｜")]
+        if parts[0] == "教訓" and len(parts) >= 4:
+            lessons_append(b, parts[2], parts[1] if parts[1] in POINT_CODES else "", parts[3])
+            res["lessons"] += 1
+        elif parts[0] == "人物伝" and len(parts) >= 4:
+            kind, body, evid = parts[1], parts[2], parts[3]
+            if kind not in ("明言", "観察", "推測"):
+                continue
+            obs[body] = obs.get(body, 0) + 1
+            if kind == "推測" and obs[body] < 2:
+                res["held"] += 1
+                continue
+            if any(body in x["text"] for x in b.d["questions"] if x.get("tag") == "profile") or any(body in ln2 for ln2 in profile_items(b)):
+                continue
+            add_question(b, kind="confirm", scope="none", quest=qid,
+                         text=f"好みとして覚えますか？：{body}（根拠：{evid}）",
+                         options=[{"label": "覚える", "reason": f"種類：{kind}", "recommended": False},
+                                  {"label": "見送る", "reason": "覚えない", "recommended": True}],
+                         default="見送る", tag="profile", extra={"profile": {"text": body, "kind": kind, "evidence": evid}})
+            res["profile_questions"] += 1
+    for fid, fb in b.d["feedbacks"].items():
+        if fb.get("quest") == qid:
+            fb["handled"] = True
+    res["templates"] = len(template_propose(b, qid))
+    return res
+
+
+def interview_add(b, topic):
+    iid = b.next_id("I")
+    b.d["interviews"][iid] = {"id": iid, "topic": topic, "questions": [], "answers": [], "status": "質問づくり"}
+    return iid
+
+
+def interview_ask(b, iid, qid, file):
+    iv = b.d["interviews"].get(iid)
+    if not iv:
+        raise GuildError(f"不明なインタビューです: {iid}")
+    text = Path(file).read_text(encoding="utf-8")
+    sec = md_section(text, "依頼主への質問") or ""
+    made = []
+    for blk in re.split(r"^###\s+", sec, flags=re.M)[1:]:
+        title = blk.splitlines()[0].strip()
+        title = re.sub(r"^\d+\.\s*", "", title)
+        made.append(add_question(b, kind="todo", scope="none", quest=qid, text=title, options=[],
+                                 tag="interview", extra={"interview": iid}))
+    iv["questions"] += made
+    iv["status"] = "質問中"
+    return made
+
+
+def interview_refresh(b):
+    for iv in b.d["interviews"].values():
+        if iv["status"] == "質問中":
+            qs = [x for x in b.d["questions"] if x["id"] in iv["questions"]]
+            if qs and all(x["status"] == "回答済" for x in qs):
+                iv["answers"] = [{"question": x["text"], "answer": x.get("comment") or x.get("answer")} for x in qs]
+                iv["status"] = "回答済"
+
+
+# ---------------------------------------------------------------- 蓄積の取り出し（魔法使い・吟遊詩人）
+def memo_section(text, name):
+    s = md_section(text, name)
+    return [re.sub(r"^\s*([-*]|\d+[.)])\s+", "", ln) for ln in bullets(s)] if s else []
+
+
+def memos(b):
+    return b.d.setdefault("memos", {})
+
+
+def register_memo(b, name, gid):
+    m = memos(b)
+    m.setdefault(name, {"goal": gid, "wizard_done": False, "bard_done": False, "applied": False})
+    return m[name]
+
+
+def accumulate_todo(b, qid):
+    q = b.quest(qid)
+    wiz, brd = [], []
+    for g in b.goals_of(qid):
+        for fpath in report_files(b, g["id"], "adventurer"):
+            wiz += [f"{g['id']}：{ln}" for ln in memo_section(fpath.read_text(encoding="utf-8", errors="replace"), "用語")]
+    for name, m in memos(b).items():
+        if m.get("goal") in q["goals"]:
+            text = (b.p.reports / name).read_text(encoding="utf-8") if (b.p.reports / name).exists() else ""
+            if not m.get("wizard_done"):
+                wiz += [f"{name}：{ln}" for ln in memo_section(text, "用語・取り決め")]
+            if not m.get("bard_done"):
+                brd += [f"{name}：{ln}" for ln in memo_section(text, "好み・直しの傾向")]
+    for fb in b.d["feedbacks"].values():
+        if fb.get("quest") == qid and not fb.get("handled"):
+            brd.append(f"{fb.get('score')}：{fb.get('reason') or fb.get('comment') or ''}")
+    for iv in b.d["interviews"].values():
+        if iv["status"] == "回答済":
+            brd.append(f"インタビュー {iv['id']}")
+    return {"wizard": wiz, "bard": brd}
+
+
+def acc_state(q):
+    return q.setdefault("accumulated", {"wizard": False, "bard": False})
+
+
+def wizard_brief(b, qid):
+    todo = accumulate_todo(b, qid)["wizard"]
+    names = [f.stem for f, _, _ in spell_notes(b)]
+    L = [f"# 依頼書：魔導書の候補づくり（役：wizard、{qid}）", "",
+         "- 書く場所：spellbook/（1 項目 1 ファイル、フラットに置く）。1 回に 10 項目まで。",
+         "- 必須の項目：type（用語／設備／取り決め）、aliases、status: 候補、sources（1 件以上。なければ書かない）、basis（原文／推論）、confidence（高／中／低）、verified_on、used_by、last_used。",
+         "- 入れるもの：2 つ目のクエストでも使えそうな知識だけ。クエスト限りの事実、依頼主個人の好みは入れない。",
+         f"- いまある項目（重複させない）：{'、'.join(names) or 'なし'}", "", "## 材料（用語・取り決め）", *(todo or ["なし"])]
+    b.p.briefs.mkdir(parents=True, exist_ok=True)
+    f = b.p.briefs / f"{qid}-wizard.md"
+    f.write_text("\n".join(L) + "\n", encoding="utf-8")
+    return f
+
+
+def bard_brief(b, qid):
+    todo = accumulate_todo(b, qid)["bard"]
+    L = [f"# 依頼書：教訓と人物伝の案づくり（役：bard、{qid}）", "",
+         f"- 報告書の場所：.system/reports/{qid}-bard.md（`## result` に 1 行 1 件）",
+         "- 教訓の書式：`- 教訓｜分類（欠落・矛盾・誤り・形式・出典なし・範囲外）｜失敗 または 成功｜1 行`",
+         "- 人物伝の書式：`- 人物伝｜明言・観察・推測｜好みの文｜evidence（依頼主の発言の引用、または納品物の id と観察した回数）`",
+         "- 推測は 2 回以上観察されるまで案のままになる。依頼主の意見と事実を混ぜない。", "",
+         "## 材料", *(todo or ["なし"]), "", "## いまの人物伝（要約）", *(profile_brief(b) or ["なし"])]
+    ls = lessons_brief(b)
+    if ls:
+        L += ["", "## 教訓帳（抜粋）", *ls]
+    b.p.briefs.mkdir(parents=True, exist_ok=True)
+    f = b.p.briefs / f"{qid}-bard.md"
+    f.write_text("\n".join(L) + "\n", encoding="utf-8")
+    return f
+
+
+# ================================================================ 0.3：設計図・工房・文の検査
+def template_add(b, rel, name=None):
+    p = safe_rel(b, rel)
+    if not p.is_file():
+        raise GuildError(f"ファイルがありません: {rel}")
+    d = b.p.root / "templates"
+    d.mkdir(parents=True, exist_ok=True)
+    dest = unique_dest(d, clean_filename(name or p.name))
+    shutil.copy2(p, dest)
+    b.d.setdefault("template_use", {})[dest.name] = {"count": 0, "last": None}
+    return f"templates/{dest.name}"
+
+
+def template_use(b, name):
+    u = b.d.setdefault("template_use", {}).setdefault(name, {"count": 0, "last": None})
+    u["count"] += 1
+    u["last"] = iso(now())[:10]
+
+
+def template_propose(b, qid):
+    made = []
+    asked = b.d.setdefault("template_asked", [])
+    for fb in b.d["feedbacks"].values():
+        if fb.get("quest") != qid or fb.get("score") != "good" or not fb.get("goal"):
+            continue
+        g = b.d["goals"].get(fb["goal"])
+        if not g or g.get("form") not in OFFICE_FORMS or g["id"] in asked:
+            continue
+        outs = [o for o in goal_link(b, g) if (b.qdir(qid) / o).is_file()]
+        if not outs:
+            continue
+        asked.append(g["id"])
+        rel = (Path(b.quest(qid)["dir"]) / outs[0]).as_posix()
+        made.append(add_question(
+            b, kind="confirm", scope="none", quest=qid, goal=g["id"],
+            text=f"納品物「{Path(outs[0]).name}」を、設計図（ひな形）にしますか？",
+            options=[{"label": "設計図にする", "reason": "次から同じ形で作れる", "recommended": False},
+                     {"label": "しない", "reason": "このまま残す", "recommended": True}],
+            default="しない", tag="template", extra={"template_src": rel}))
+    return made
+
+
+def input_add(b, gid, src, text=None, name=None):
+    g = b.goal(gid)
+    qd = b.qdir(g["quest"]) / "input"
+    qd.mkdir(parents=True, exist_ok=True)
+    if text is not None:
+        fname = clean_filename(name or "メモ.md")
+        data = text.encode("utf-8")
+        if len(data) > MAX_FILE_BYTES:
+            raise GuildError("大きさの上限（50 MB）を超えています")
+        dest = unique_dest(qd, fname)
+        dest.write_bytes(data)
+    else:
+        if ".." in Path(src).parts:
+            raise GuildError(f"パスに .. は使えません: {src}")
+        sp = Path(src)
+        if sp.is_symlink() or any(p.is_symlink() for p in sp.parents if str(p) not in ("/", "")) and False:
+            raise GuildError(f"シンボリックリンクは使えません: {src}")
+        if sp.is_symlink():
+            raise GuildError(f"シンボリックリンクは使えません: {src}")
+        if not sp.is_file():
+            raise GuildError(f"ファイルがありません: {src}")
+        if sp.stat().st_size > MAX_FILE_BYTES:
+            raise GuildError("大きさの上限（50 MB）を超えています")
+        dest = unique_dest(qd, clean_filename(sp.name))
+        shutil.copy2(sp, dest)
+    g["workshop_added"] = g.get("workshop_added", 0) + 1
+    return dest
+
+
+def workshop_brief(b, gid):
+    g = b.goal(gid)
+    if g["status"] not in ("待機", "要手直し", "冒険中"):
+        raise GuildError(f"工房で作れるのは、待機・要手直し（と作業中）の達成条件だけです（いま：{g['status']}）")
+    q = b.quest(g["quest"])
+    L = [f"# 工房の前置き：{g['title']}", "", f"- クエスト：{q['title']}", "- done_when：", *[f"  - {d}" for d in g["done_when"]],
+         f"- 納品物の場所：{q['dir']}/output/（途中の版は output/.work/<名前>.v1.md の形）", f"- 手直し：{g.get('retries', 0)} 回"]
+    log = [e["text"] for e in g.get("log", []) if e.get("text")][-5:]
+    if log:
+        L += ["", "## これまでの経過（抜粋）", *[f"- {t}" for t in log]]
+    if g.get("findings"):
+        L += ["", "## これまでの指摘", *[f"- {f['fix_kind']}／{f['point_code']}／{f['target']}：{f['point']}" for f in g["findings"][-3:]]]
+    pb = profile_brief(b)
+    if pb:
+        L += ["", "## 人物伝（要約）", *pb]
+    rules = []
+    for rf in (b.p.rules / "alchemist.md", b.p.rules / "workshop.md", b.p.rules / "_all.md"):
+        if rf.exists():
+            rules += rf.read_text(encoding="utf-8").splitlines()[:RULE_FILE_MAX_LINES]
+    if rules:
+        L += ["", "## 掟", *rules]
+    L += spell_brief_lines(b, g, q, 3)
+    ms = sorted(b.p.reports.glob("W*-workshop*.md")) if b.p.reports.exists() else []
+    ms = [m for m in ms if memos(b).get(m.name, {}).get("goal") in q["goals"]]
+    if ms:
+        L += ["", f"## 前回の知見メモ（{ms[-1].name}）", *ms[-1].read_text(encoding="utf-8").splitlines()[:30]]
+    return "\n".join(L) + "\n"
+
+
+def workshop_close(b, gid, abort=False, review=False, summary=""):
+    g = b.goal(gid)
+    if g["status"] != "冒険中":
+        raise GuildError(f"工房を閉じられるのは、冒険中の達成条件だけです（いま：{g['status']}）")
+    q = b.quest(g["quest"])
+    qd = b.qdir(g["quest"])
+    work = qd / "output" / ".work"
+    stamp = now().strftime("%Y%m%d-%H%M%S")
+    latest = {}
+    if work.exists():
+        for f in work.iterdir():
+            m = re.fullmatch(r"(.+)\.v(\d+)(\.[^.]+)", f.name)
+            if m and (m.group(1) not in latest or int(m.group(2)) > latest[m.group(1)][0]):
+                latest[m.group(1)] = (int(m.group(2)), f, m.group(3))
+    memo = f"W{stamp}-workshop.md"
+    mp = b.p.reports / memo
+    b.p.reports.mkdir(parents=True, exist_ok=True)
+    if not list(b.p.reports.glob(f"W{stamp[:8]}*-workshop*.md")) or not mp.exists():
+        mp.write_text(f"goal: {gid}\n\n## 素材\n\n## 用語・取り決め\n\n## 好み・直しの傾向\n\n## 直した点\n\n## 設計図にできるか\n", encoding="utf-8")
+    register_memo(b, memo, gid)
+    if abort:
+        g.setdefault("log", []).append({"time": iso(now()), "who": "workshop", "edge": "workshop",
+                                        "text": f"あなたと一緒に工房で作業した：「{summary or '途中で閉じた'}」。素材を {g.get('workshop_added', 0)} 件足した。"})
+        return {"closed": "abort", "versions": sorted(latest), "memo": memo}
+    placed = []
+    outs = goal_link(b, g)
+    for base, (n, f, suf) in latest.items():
+        target = None
+        for o in outs:
+            if Path(o).stem == base:
+                target = qd / o
+        if target is None:
+            target = qd / "output" / f"{base}{suf}"
+            if f"output/{target.name}" not in outs:
+                outs.append(f"output/{target.name}")
+        if target.suffix.lower() != suf.lower() and target.exists():
+            continue  # 器（Word など）は鍛冶師が作った版を使う
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, target if target.suffix.lower() == suf.lower() else target.with_suffix(suf))
+        placed.append(target.name)
+    g["output_path"] = outs
+    r = pre_check(b, gid)
+    if not r["ok"]:
+        raise GuildError("pre-check が NG です（工房は閉じていません）: " + " / ".join(r["issues"]))
+    rep = b.p.reports / f"{gid}-adventurer.md"
+    if not rep.exists():
+        rep.write_text("## result\n- 事実｜工房で依頼主と一緒に作成｜" + iso(now())[:10] + f"\n\n## log\n### やったこと\n- 工房で作業した\n", encoding="utf-8")
+    g.setdefault("log", []).append({"time": iso(now()), "who": "workshop", "edge": "workshop",
+                                    "text": f"あなたと一緒に工房で作業した：「{summary or '納品物を作った'}」。素材を {g.get('workshop_added', 0)} 件足した。"})
+    if review:
+        set_status(b, gid, "鑑定中", "guildmaster")
+    else:
+        set_status(b, gid, "確認待ち", "workshop", text=summary)
+    return {"closed": "done", "placed": placed, "memo": memo, "next": "鑑定中" if review else "確認待ち"}
+
+
+def memo_done(b, name, by):
+    m = memos(b).get(name)
+    if m is None:
+        raise GuildError(f"不明な知見メモです: {name}")
+    if by not in ("wizard", "bard"):
+        raise GuildError("by は wizard か bard です")
+    m[f"{by}_done"] = True
+    f = b.p.reports / name
+    if by == "bard" and not m.get("applied") and f.exists():
+        text = f.read_text(encoding="utf-8")
+        g = b.d["goals"].get(m.get("goal"))
+        for ln in memo_section(text, "直した点"):
+            parts = [x.strip() for x in re.sub(r"^\s*([-*]|\d+[.)])\s+", "", ln).split("｜")]
+            if g and len(parts) >= 4 and parts[0] in FIX_KINDS and parts[1] in POINT_CODES:
+                record_finding(b, g, parts[0], parts[1], parts[2], parts[3], None, None)
+                g["finding_pending"] = False
+        m["applied"] = True
+    if m.get("wizard_done") and m.get("bard_done") and f.exists():
+        dest = b.p.reports / "済"
+        dest.mkdir(exist_ok=True)
+        shutil.move(str(f), str(unique_dest(dest, name)))
+        memos(b).pop(name)
+        return "済"
+    return "OK"
+
+
+def refresh_derived(b):
+    refresh_slack(b)
+    interview_refresh(b)
+    b.d["profile_pending"] = len([x for x in b.d["questions"] if x.get("tag") == "profile" and x["status"] == "未回答"])
+    if b.d["quests"]:
+        write_schedule(b)
+
+
+# ---------------------------------------------------------------- 簡易日本語の検査
+AMBIGUOUS = ["適宜", "など", "いろいろ", "様々", "いろんな", "ある程度", "適当", "多少"]
+DEICTIC = re.compile(r"(?:^|[^ぁ-んァ-ヶ一-龥])(これ|それ|あれ)(?:は|を|が|の|に|で|と|も|ら|、|。|$)")
+PASSIVE = re.compile(r"(?:され|られ)(?:る|た|て|ない|ます|ません)")
+
+
+def lint_sentences(text):
+    out = []
+    in_code = False
+    for ln in text.splitlines():
+        if ln.strip().startswith("```"):
+            in_code = not in_code
+            continue
+        s = ln.strip()
+        if in_code or not s or s.startswith(("|", "#", "---", "<")):
+            continue
+        s = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", s)
+        s = re.sub(r"^\s*([-*]|\d+[.)])\s+", "", s)
+        s = re.sub(r"^[0-9]+月[0-9]+日[^　]*　", "", s)
+        out += [x for x in re.split(r"[。！？!?]", s) if x.strip()]
+    return out
+
+
+def lint_text(text, max_len=40):
+    problems = []
+    for s in lint_sentences(text):
+        if len(s) > max_len:
+            problems.append({"rule": "長い文", "sentence": s})
+        m = DEICTIC.search(s)
+        if m:
+            problems.append({"rule": "指示語", "sentence": s, "word": m.group(1)})
+        for w in AMBIGUOUS:
+            if w in s:
+                problems.append({"rule": "曖昧語", "sentence": s, "word": w})
+        if PASSIVE.search(s):
+            problems.append({"rule": "受け身の目印", "sentence": s})
+    return problems
+
+
 # ---------------------------------------------------------------- CLI
 def out(obj):
     if isinstance(obj, str):
@@ -1742,13 +2699,38 @@ def build_parser():
     add("budget", ("--use", {"type": int, "default": 0}), ("--quest",), ("--reset", {"action": "store_true"}))
     add("usage-log", ("--role", {"required": True}), ("--model", {"required": True}), ("--tokens", {"default": 0}),
         ("--quest",), ("--goal",))
+    add("spellbook-index")
+    add("spellbook-find", ("terms", {"nargs": "+"}))
+    add("spellbook-apply", ("--item", {"required": True}), ("--action", {"required": True}), ("--text", {"default": ""}))
+    add("spellbook-questions")
+    add("shared-candidates")
+    add("shared-move", "path")
+    add("render-schedule", ("--out",))
+    add("usage", ("--quest",))
+    add("calib")
+    add("housekeeping")
+    add("wizard-brief", "quest")
+    add("bard-brief", "quest")
+    add("bard-apply", "quest", ("--file", {"required": True}))
+    add("accumulate-todo", "quest")
+    add("accumulate-done", "quest", ("--who", {"required": True}))
+    add("interview-add", ("--topic", {"required": True}))
+    add("interview-ask", "interview", ("--quest", {"required": True}), ("--file", {"required": True}))
+    add("template-add", "path", ("--name",))
+    add("template-propose", "quest")
+    add("input-add", "goal", ("src", {"nargs": "?"}), ("--text",), ("--name",))
+    add("workshop-brief", "goal")
+    add("workshop-close", "goal", ("--abort", {"action": "store_true"}), ("--review", {"action": "store_true"}), ("--summary", {"default": ""}))
+    add("memo-done", "memo", ("--by", {"required": True}))
+    add("lint-text", "file", ("--max", {"type": int, "default": 40}))
     add("recover")
     add("check-write", "role", "place")
     add("gen-transitions", ("--skill",), ("--svg",), ("--check", {"action": "store_true"}))
     return ap
 
 
-READONLY = {"version", "get", "route-check-ro", "ready", "pre-check", "cross-check", "lessons-brief", "profile-brief",
+READONLY = {"spellbook-index", "spellbook-find", "shared-candidates", "render-schedule", "usage", "calib",
+            "wizard-brief", "bard-brief", "accumulate-todo", "lint-text", "version", "get", "route-check-ro", "ready", "pre-check", "cross-check", "lessons-brief", "profile-brief",
             "model-for", "render-route", "check-write", "gen-transitions", "need-claude", "recover", "init-board"}
 
 
@@ -1800,7 +2782,7 @@ def dispatch(b, a, paths):
             return summary(b)
         if a.quest:
             q = b.quest(a.quest)
-            return {"quest": q, "goals": b.goals_of(a.quest),
+            return {"quest": q, "goals": b.goals_of(a.quest), "usage": usage_summary(b, a.quest),
                     "questions": [x for x in b.d["questions"] if x["quest"] == a.quest]}
         if a.goal:
             return b.goal(a.goal)
@@ -1917,6 +2899,75 @@ def dispatch(b, a, paths):
         return f"ok 残り {left}" if ok else f"stop 残り {left}"
     if c == "usage-log":
         usage_log(b, a.role, a.model, a.tokens, a.quest, a.goal)
+        return "OK"
+    if c == "spellbook-index":
+        r = spellbook_index(b)
+        if r["invalid"] or r["over_limit"]:
+            print(json.dumps(r, ensure_ascii=False, indent=1))
+            raise GuildError("魔導書に問題があります（出典のない項目など）")
+        return r
+    if c == "spellbook-find":
+        return "\n".join(f"{f.stem}｜{m['type']}｜{m['status']}｜spellbook/{f.name}" for f, m, _ in spellbook_find_terms(b, a.terms))
+    if c == "spellbook-apply":
+        return spell_apply(b, a.item, a.action, a.text)
+    if c == "spellbook-questions":
+        return spell_questions(b)
+    if c == "shared-candidates":
+        return shared_candidates(b)
+    if c == "shared-move":
+        return shared_move(b, a.path)
+    if c == "render-schedule":
+        svg, sentence = render_schedule_svg(b)
+        if a.out:
+            Path(a.out).write_text(svg + "\n", encoding="utf-8")
+            return sentence
+        return svg
+    if c == "usage":
+        return usage_summary(b, a.quest)
+    if c == "calib":
+        return calib(b)
+    if c == "housekeeping":
+        return housekeeping(b)
+    if c == "wizard-brief":
+        return str(wizard_brief(b, a.quest))
+    if c == "bard-brief":
+        return str(bard_brief(b, a.quest))
+    if c == "bard-apply":
+        r = bard_apply(b, a.quest, a.file)
+        acc_state(b.quest(a.quest))["bard"] = True
+        return r
+    if c == "accumulate-todo":
+        return accumulate_todo(b, a.quest)
+    if c == "accumulate-done":
+        if a.who not in ("wizard", "bard"):
+            raise GuildError("who は wizard か bard です")
+        acc_state(b.quest(a.quest))[a.who] = True
+        return "OK"
+    if c == "interview-add":
+        return interview_add(b, a.topic)
+    if c == "interview-ask":
+        return interview_ask(b, a.interview, a.quest, a.file)
+    if c == "template-add":
+        return template_add(b, a.path, a.name)
+    if c == "template-propose":
+        return template_propose(b, a.quest)
+    if c == "input-add":
+        if a.src is None and a.text is None:
+            raise GuildError("場所（src）か --text が要ります")
+        return str(input_add(b, a.goal, a.src, a.text, a.name))
+    if c == "workshop-brief":
+        return workshop_brief(b, a.goal)
+    if c == "workshop-close":
+        r = workshop_close(b, a.goal, a.abort, a.review, a.summary)
+        render_quest(b, b.goal(a.goal)["quest"])
+        return r
+    if c == "memo-done":
+        return memo_done(b, a.memo, a.by)
+    if c == "lint-text":
+        probs = lint_text(Path(a.file).read_text(encoding="utf-8"), a.max)
+        if probs:
+            print(json.dumps(probs, ensure_ascii=False, indent=1))
+            raise GuildError(f"簡易日本語の規則に合わない文が {len(probs)} 件あります")
         return "OK"
     raise GuildError(f"未対応のコマンドです: {c}")
 

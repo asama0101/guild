@@ -37,8 +37,10 @@ argument-hint: "[auto]"
 9. **承認②**：合格なら `set-status G1 確認待ち --who appraiser`。承認の質問を出し、依頼主を待つ。→ `references/approval.md`
 10. **記録**：冒険者の `## log` を `board.py log-append G1 --file …` で冒険日誌に足す。`quest.md` は `board.py` が自動で作り直す（あなたは書かない）。
 11. **締め**：すべて達成したら `board.py cross-check Q1`。`clean` なら `set-status Q1 達成`。`suspect` なら最終鑑定。→ `references/approval.md`
-12. **学習**：bad の理由は `board.py lessons-append`。同じ指摘が 2 回目なら、掟の案の質問が自動で出る。→ `references/rules.md`
-13. 最後に、依頼主向けの報告（下の「報告」）を書く。
+12. **蓄積**：クエストが達成したら、`board.py need-claude` の `accumulate:Q1` を見る。`board.py accumulate-todo Q1` に材料があるときだけ、魔法使いと吟遊詩人を 1 回ずつ呼ぶ（材料がなければ呼ばない）。→ `references/spellbook.md`
+13. **学習**：同じ指摘が 2 回目なら、掟の案の質問が自動で出る。bad の理由の教訓は、吟遊詩人の報告から `bard-apply` が帳に足す。→ `references/rules.md`
+14. **片付け**：取り込み済みの依頼は `board.py apply-simple` が `済/` に移す。達成・中止から 30 日たったものは `board.py archive --days 30`。
+15. 最後に、依頼主向けの報告（下の「報告」）を書く。
 
 障害（サブエージェントの失敗・無返答・タイムアウト）は、報告書がない回として扱う：`set-status G1 要手直し --reason no_report|timeout|report_error`。
 
@@ -51,12 +53,16 @@ Agent ツールで、`subagent_type` に下の名前を指定して呼ぶ。プ�
 | 占い師 | `guild:fortune-teller` | 返事がそろったあとの分解 | 報告書 | `<Q>-fortune_teller.md` |
 | 冒険者 | `guild:adventurer` | 達成条件の作業のはじめ | 報告書 | `<G>-adventurer.md` |
 | 錬金術師 | `guild:alchemist` | 冒険者の報告のあと | 納品物（`output/`） | — |
-| 鑑定士 | `guild:appraiser` | `pre-check` OK のあと | 報告書 | `<G>-appraiser.md` |
+| 鑑定士 | `guild:appraiser` | `pre-check` OK のあと（最終鑑定も） | 報告書 | `<G>-appraiser.md` |
+| 鍛冶師 | `guild:smith` | 納品物の形が Word・Excel・PowerPoint・PDF で、錬金術師の Markdown ができたあと | 納品物（`output/`） | — |
+| 魔法使い | `guild:wizard` | クエストの達成後、材料があるときだけ 1 回 | `spellbook/`（候補） | — |
+| 吟遊詩人 | `guild:bard` | クエストの達成後、材料があるときだけ 1 回 | 報告書 | `<Q>-bard.md` |
 
 - 報告書は `.system/reports/` に置く。依頼書は `.system/quests/` に置く。
 - 呼び出しの前に `board.py budget --use 1 --quest Q1` を呼ぶ。`stop` が返ったら、その回を止める（質問は出さない）。1 回の実行で呼ぶのは 20 回まで（手直しも数える）。
 - 呼び出しのあとに `board.py usage-log --role … --model … --tokens … --quest Q1 --goal G1`（取れる範囲で）。
-- 受付嬢・占い師・冒険者・鑑定士には、依頼書に素材の場所だけを書く。魔導書は 0.1 にはない。
+- 依頼書には、素材の中身でなく場所だけを書く。魔導書は、`board.py make-brief` が一致した項目（5 件まで）だけを依頼書に付ける。索引は読まない。
+- 鍛冶師の依頼書は `board.py make-brief G1 smith`。設計図があれば、使用回数が数えられる。
 - 錬金術師には、冒険者の報告書の場所を依頼書に書く。鑑定士には、冒険者の報告書を渡さない。
 
 ## 質問
@@ -67,6 +73,7 @@ Agent ツールで、`subagent_type` に下の名前を指定して呼ぶ。プ�
 - 手直し：達成条件ごとに 3 回、クエスト全体で 6 回。超えたら質問（続ける／工房で直す／諦める）。
 - 道のりの差し戻し（`fix_kind: goal`）：クエストごとに 2 回まで。
 - サブエージェントの呼び出し：1 回の実行で 20 まで。超えたら止める。3 回続けて止まったら、依頼主に聞く。
+- 最終鑑定は、`cross-check` が `suspect` のときと、依頼主が頼んだときだけ。
 - 同時数：1〜8（既定 4）。依頼主が画面で変える。
 
 ## 依頼主向けの文（簡易日本語）
@@ -84,7 +91,7 @@ Agent ツールで、`subagent_type` に下の名前を指定して呼ぶ。プ�
 - `board.json`・`quest.md`・`transitions.json` を直接書く。
 - 承認の辺を、回答の記録なしで通そうとする。依頼主の代わりに承認する。
 - 依頼主の確認が要る操作（確定、実行）を、勝手に実行する。
-- 納品物を、錬金術師・鍛冶師（と工房の間のメイン）以外が書く。
+- 納品物を、錬金術師・鍛冶師（と、`/guild:workshop` の間のメイン）以外が書く。
 - サブエージェントに、依頼主へ質問させる。
 
 ## 状態と遷移
@@ -188,4 +195,5 @@ Agent ツールで、`subagent_type` に下の名前を指定して呼ぶ。プ�
 | `approval.md` | 鑑定・補正・承認②③・締め |
 | `questions.md` | 質問を出す・答えを記録する |
 | `rules.md` | 掟・教訓帳・人物伝・予算 |
-| `auto.md` | `/guild:quest auto` |
+| `spellbook.md` | 魔導書・蓄積（魔法使い・吟遊詩人）・資料室・設計図・人物伝 |
+| `auto.md` | `/guild:quest auto`・自動実行 |

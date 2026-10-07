@@ -112,7 +112,7 @@ input[type=radio], input[type=checkbox] { width: 20px; height: 20px; }
 'use strict';
 
 // ---------------------------------------------------------------- 定数（tests/constants.py と一致させる）
-const TABS = ['受付', 'クエスト', '質問'];
+const TABS = ['受付', 'クエスト', '質問', '予定表', '資料室・魔導書'];
 const QUEST_STATES = ['受付', '分解中', '承認待ち', '進行中', '最終鑑定', '達成', '失敗', '中止', '保留'];
 const GOAL_STATES = ['案', '待機', '冒険中', '鑑定中', '要手直し', '確認待ち', '実行承認待ち', '達成', '失敗', '中止'];
 const QUEST_TERMINAL = ['達成', '失敗', '中止'];
@@ -135,6 +135,7 @@ const APPROVE = '承認する';
 const REDO = 'やり直す';
 const FREE_CHOICE = '自由入力';
 const SCOPE_NAMES = { route: '道のりの承認', output: '納品物の承認', execute: '実行の承認', none: '質問' };
+const TERM_FIX = '修正する';
 const POLL_MS = 10000;
 const MAX_FILE = 50 * 1024 * 1024;
 const FOLDER_NAMES = { input: '素材', output: '納品物', 'adventure log': '冒険日誌' };
@@ -143,7 +144,7 @@ const FOLDER_NAMES = { input: '素材', output: '納品物', 'adventure log': '�
 const S = {
   root: null, board: null, raw: '', tab: TABS[0], selQuest: null, selQuestion: null,
   access: 'none',       // none | prompt | ok
-  error: '', drafts: {}, answered: {}, reopened: {}, pending: {}, pickedFiles: {}, intake: null,
+  error: '', drafts: {}, answered: {}, reopened: {}, pending: {}, pickedFiles: {}, intake: null, sharedPicked: [], resToken: 0,
   dirty: false, timer: null, diagToken: 0
 };
 
@@ -359,7 +360,8 @@ function diagramPath(rel) {
   return /^diagrams\/[A-Za-z0-9._-]+\.svg$/.test(String(rel || '')) ? rel : null;
 }
 // 図と 1 行要約を box に入れる。読めないときは案内を出す。
-async function fillDiagram(box, svgRel, txtRel) {
+async function fillDiagram(box, svgRel, txtRel, opts) {
+  const o = opts || {};
   const token = ++S.diagToken;
   clear(box).add(h('p', { class: 'muted small', text: '図を読み込んでいます。' }));
   try {
@@ -371,11 +373,11 @@ async function fillDiagram(box, svgRel, txtRel) {
     if (txtRel) { try { sentence = (await readText(['.system', ...txtRel.split('/')])).trim(); } catch (e) { sentence = ''; } }
     if (token !== S.diagToken) return;
     clear(box).add(
-      h('div', { class: 'diagram', tabindex: '0', role: 'group', 'aria-label': '道のりの図（横にスクロールできます）' }, node),
+      h('div', { class: 'diagram', tabindex: '0', role: 'group', 'aria-label': `${o.label || '道のりの図'}（横にスクロールできます）` }, node),
       sentence ? h('p', { text: sentence }) : null);
   } catch (e) {
     if (token !== S.diagToken) return;
-    clear(box).add(h('p', { class: 'muted', text: '道のりの図は、まだありません。' }));
+    clear(box).add(h('p', { class: 'muted', text: o.empty || '道のりの図は、まだありません。' }));
   }
 }
 
@@ -621,6 +623,10 @@ function renderQuestDetail(q) {
   box.add(renderUpload(q));
   return box;
 }
+function hasSlack(g) { return typeof g.slack_min === 'number' && isFinite(g.slack_min); }
+function slackText(n) {
+  return n < 0 ? `▲ 間に合わないおそれ（ゆとり：${n} 分）` : `ゆとり：${n} 分`;
+}
 function outputsOf(q, g) {
   const op = g.output_path || [];
   return (Array.isArray(op) ? op : [op]).filter(Boolean).map(p => ({ name: String(p).split('/').pop(), rel: `${q.dir}/${p}` }));
@@ -647,7 +653,9 @@ function renderGoals(q) {
     body.add(h('tr', {},
       h('td', { 'data-label': '順', text: String(i + 1) }),
       h('td', { 'data-label': '達成条件' }, h('strong', { text: g.title }),
-        h('ul', { class: 'small' }, (g.done_when || []).map(t => h('li', { text: t }))), carefulBtn),
+        h('ul', { class: 'small' }, (g.done_when || []).map(t => h('li', { text: t }))),
+        hasSlack(g) ? h('p', { class: g.slack_min < 0 ? 'err small' : 'small', text: slackText(g.slack_min) }) : null,
+        carefulBtn),
       h('td', { 'data-label': '締切', text: g.deadline ? jpDate(g.deadline) : 'なし' }),
       h('td', { 'data-label': 'いまの様子' }, goalLabel(g), g.blocked_on === 'client' ? '（あなたの返事を待っている）' : ''),
       h('td', { 'data-label': '納品物' }, outs.length ? outs.map(o => h('div', {}, pathItem(o.name, o.rel))) : h('span', { class: 'muted', text: 'まだありません' }))));
@@ -754,13 +762,19 @@ function renderOneQuestion(q) {
     const opts = (q.options || []).slice(0, 4);
     if (opts.length) {
       box.add(h('div', { role: 'group', 'aria-label': '選択肢' }, opts.map(o => h('button', {
-        type: 'button', class: o.recommended ? 'opt rec' : 'opt', onclick: () => answer(o.label) },
+        type: 'button', class: o.recommended ? 'opt rec' : 'opt', onclick: () => {
+          if (q.kind === 'term' && o.label === TERM_FIX && !draft.comment.trim()) {
+            err.textContent = '修正案を書いてください。'; comment.focus(); return;
+          }
+          answer(o.label);
+        } },
         h('strong', { text: o.label }), o.recommended ? h('span', { class: 'tag', text: ' 推奨' }) : null,
         o.reason ? h('span', { class: 'reason', text: o.reason }) : null))));
     }
-    box.add(h('label', { for: `c-${q.id}` }, opts.length ? '自由に書く（選択肢に足す一言にも使えます）' : '答えを書く'), comment);
+    const isTerm = q.kind === 'term';
+    box.add(h('label', { for: `c-${q.id}` }, isTerm ? `修正案（「${TERM_FIX}」を選ぶときに書きます）` : opts.length ? '自由に書く（選択肢に足す一言にも使えます）' : '答えを書く'), comment);
     box.add(h('div', { class: 'row' },
-      h('button', { type: 'button', class: opts.length ? null : 'primary', onclick: () => {
+      isTerm ? null : h('button', { type: 'button', class: opts.length ? null : 'primary', onclick: () => {
         if (!draft.comment.trim()) { err.textContent = '答えを書いてください。'; comment.focus(); return; }
         answer(FREE_CHOICE);
       } }, '書いた内容で答える'),
@@ -827,6 +841,148 @@ async function reopen(id) {
   } catch (e) { toast(`戻せませんでした：${e.message}`); }
 }
 
+// ---------------------------------------------------------------- 画面：予定表
+function deadlineGoals() {
+  return Object.values((S.board && S.board.goals) || {})
+    .filter(g => g.deadline && !GOAL_TERMINAL.includes(g.status) && g.status !== '失敗')
+    .sort((a, b) => String(a.deadline).localeCompare(String(b.deadline)) || idNum(a.id) - idNum(b.id));
+}
+function renderSchedule() {
+  const sec = h('section', { 'aria-labelledby': 'h-sched' }, h('h2', { id: 'h-sched' }, '予定表'));
+  const d = h('div');
+  sec.add(d);
+  fillDiagram(d, 'diagrams/schedule.svg', 'diagrams/schedule.txt', { label: '予定表の図', empty: '予定表はまだありません。' });
+  sec.add(h('h3', {}, '締切のある達成条件'));
+  const list = deadlineGoals();
+  if (!list.length) { sec.add(h('p', { class: 'muted', text: '締切のある達成条件は、まだありません。' })); return sec; }
+  const body = h('tbody');
+  list.forEach(g => {
+    const late = hasSlack(g) && g.slack_min < 0;
+    body.add(h('tr', {},
+      h('td', { 'data-label': 'クエスト', text: questTitle(g.quest) }),
+      h('td', { 'data-label': '達成条件', text: g.title }),
+      h('td', { 'data-label': '締切', text: jpDate(g.deadline) }),
+      h('td', { 'data-label': 'いまの様子', text: goalLabel(g) }),
+      h('td', { 'data-label': 'ゆとり' }, hasSlack(g) ? h('span', { class: late ? 'err' : null, text: slackText(g.slack_min) })
+        : h('span', { class: 'muted', text: 'まだ分かりません' }))));
+  });
+  sec.add(h('table', { class: 'goals' }, h('caption', { class: 'sr', text: '締切のある達成条件の表（締切順）' }),
+    h('thead', {}, h('tr', {}, ['クエスト', '達成条件', '締切', 'いまの様子', 'ゆとり'].map(t => h('th', { scope: 'col', text: t })))), body));
+  return sec;
+}
+
+// ---------------------------------------------------------------- 画面：資料室・魔導書
+function parseFrontmatter(text) {
+  const m = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  const out = {};
+  if (!m) return out;
+  let key = null;
+  const strip = v => String(v).trim().replace(/^["']|["']$/g, '');
+  for (const line of m[1].split(/\r?\n/)) {
+    const li = /^\s+-\s*(.*)$/.exec(line);
+    if (li && key) { (out[key] = Array.isArray(out[key]) ? out[key] : []).push(strip(li[1])); continue; }
+    const kv = /^([A-Za-z_]+):\s*(.*)$/.exec(line);
+    if (!kv) continue;
+    key = kv[1];
+    const v = kv[2].trim();
+    if (v === '') out[key] = [];
+    else if (v.startsWith('[') && v.endsWith(']')) out[key] = v.slice(1, -1).split(',').map(strip).filter(Boolean);
+    else out[key] = strip(v);
+  }
+  return out;
+}
+function asList(v) { return Array.isArray(v) ? v : v ? [String(v)] : []; }
+async function listFiles(parts, ext) {
+  let dir;
+  try { dir = await dirAt(parts, false); } catch (e) { return []; }
+  const names = [];
+  for await (const [name, handle] of dir.entries()) {
+    if (handle.kind === 'file' && !name.startsWith('.') && (!ext || name.toLowerCase().endsWith(ext))) names.push(name);
+  }
+  return names.sort((a, b) => a.localeCompare(b, 'ja'));
+}
+function renderLibrary() {
+  const sec = h('section', { 'aria-labelledby': 'h-lib' }, h('h2', { id: 'h-lib' }, '資料室・魔導書'));
+  const shared = h('div');
+  const book = h('div');
+  sec.add(h('div', { class: 'card' }, h('h3', { id: 'h-shared' }, '資料室'), shared),
+    h('div', { class: 'card' }, h('h3', { id: 'h-book' }, '魔導書'), book));
+  const token = ++S.resToken;
+  fillShared(shared, token);
+  fillBook(book, token);
+  return sec;
+}
+async function fillShared(box, token) {
+  const names = await listFiles(['shared']);
+  if (token !== S.resToken) return;
+  clear(box).add(h('p', { class: 'muted small', text: '会社で共有するファイルを置く場所です。' }));
+  box.add(names.length ? h('ul', { 'aria-label': '資料室のファイル' }, names.map(n => h('li', {}, pathItem(n, `shared/${n}`))))
+    : h('p', { class: 'muted', text: '資料室に、ファイルはまだありません。' }));
+  const picked = S.sharedPicked;
+  box.add(h('label', { for: 'up-shared' }, 'ファイルを選ぶ（保存先：資料室）'),
+    h('input', { type: 'file', id: 'up-shared', multiple: true, onchange: e => { S.sharedPicked = Array.from(e.target.files); render(); } }));
+  if (picked.length) {
+    box.add(h('p', {}, '保存先：資料室（', h('code', { text: 'guild/shared/' }), '）'),
+      h('ul', {}, picked.map(f => { const c = checkFileName(f); return h('li', {}, `${f.name}（${sizeText(f.size)}）`,
+        c.error ? h('span', { class: 'err', text: `　保存しない：${c.error}` }) : null); })));
+    const msg = h('p', { role: 'status' });
+    const btn = h('button', { type: 'button', class: 'primary', onclick: async () => {
+      btn.disabled = true;
+      try {
+        const dir = await dirAt(['shared'], true);
+        const res = await saveFiles(dir, picked);
+        if (res.saved.length) await writeRequest('U', { kind: 'upload', quest: null, target: 'shared', files: res.saved.map(s => s.to) });
+        S.sharedPicked = [];
+        toast(saveReport(res) || '保存できるファイルがありませんでした。');
+        render();
+      } catch (e) { msg.textContent = `保存できませんでした：${e.message}`; btn.disabled = false; }
+    } }, '資料室に保存する');
+    box.add(h('p', {}, btn), msg);
+  }
+}
+async function fillBook(box, token) {
+  const names = (await listFiles(['spellbook'], '.md')).filter(n => n !== '魔導書.md');
+  const items = [];
+  for (const n of names) {
+    let fm = {};
+    try { fm = parseFrontmatter((await readText(['spellbook', n])).slice(0, 6000)); } catch (e) { fm = {}; }
+    items.push({ name: n.replace(/\.md$/i, ''), file: n, fm });
+  }
+  if (token !== S.resToken) return;
+  const waiting = ((S.board && S.board.questions) || []).filter(q => q.kind === 'term' && (q.status === '未回答' || S.reopened[q.id]) && !S.answered[q.id]).length;
+  clear(box).add(h('p', { class: waiting ? 'warn' : 'muted small', text: `確定待ち ${waiting} 件は質問タブにあります。` }),
+    h('p', { class: 'muted small', text: '項目の確定・修正・あとで決めるは、質問タブで答えます。ノートの本文は、ここには出しません。' }));
+  if (!items.length) { box.add(h('p', { class: 'muted', text: '魔導書に、項目はまだありません。' })); return; }
+  box.add(h('ul', { class: 'qlist', 'aria-label': '魔導書の項目' }, items.map(it => {
+    const t = it.fm.type ? String(it.fm.type) : '種別なし';
+    const st = it.fm.status ? String(it.fm.status) : '状態なし';
+    const src = asList(it.fm.sources);
+    const al = asList(it.fm.aliases);
+    const key = `sb:${it.name}`;
+    const draft = S.drafts[key] || (S.drafts[key] = { text: '' });
+    const inp = h('input', { type: 'text', id: `sb-${it.name}`, maxlength: '300', oninput: e => { draft.text = e.target.value; } });
+    inp.value = draft.text;
+    const msg = h('span', { class: 'err', role: 'alert' });
+    return h('li', { class: 'card' },
+      h('div', { class: 'row' }, pathItem(it.name, `spellbook/${it.file}`),
+        h('span', { class: 'state', text: t }),
+        h('span', { class: st === '確定' ? 'tag' : 'state', text: st }),
+        it.fm.confidence ? h('span', { class: 'muted small', text: `確信：${it.fm.confidence}` }) : null),
+      al.length ? h('p', { class: 'small muted', text: `別名：${al.join('、')}` }) : null,
+      h('p', { class: 'small', text: `出典：${src.length ? src.join('、') : 'なし'}` }),
+      h('label', { for: `sb-${it.name}` }, `${it.name} の修正案（任意）`),
+      h('div', { class: 'row' }, inp, h('button', { type: 'button', class: 'mini', onclick: async () => {
+        msg.textContent = '';
+        if (!draft.text.trim()) { msg.textContent = '修正案を書いてください。'; inp.focus(); return; }
+        try {
+          await writeRequest('D', { kind: 'spellbook', item: it.name, action: 'fix', text: draft.text.trim() });
+          draft.text = ''; inp.value = '';
+          toast('修正案を送りました。');
+        } catch (e) { msg.textContent = `送れませんでした：${e.message}`; }
+      } }, '修正する'), msg));
+  })));
+}
+
 // ---------------------------------------------------------------- 画面：全体
 function renderFolder() {
   const bar = clear($('folderbar'));
@@ -865,7 +1021,8 @@ function render() {
   if (!connected || !S.board) { clear($('nowbar')); clear($('tabs')); return; }
   renderNow();
   renderTabs();
-  const body = S.tab === '受付' ? renderIntake() : S.tab === 'クエスト' ? renderQuests() : renderQuestions();
+  const body = S.tab === '受付' ? renderIntake() : S.tab === 'クエスト' ? renderQuests() : S.tab === '質問' ? renderQuestions()
+    : S.tab === '予定表' ? renderSchedule() : renderLibrary();
   panels.add(h('div', { id: 'panel', role: 'tabpanel', 'aria-labelledby': `tab-${S.tab}` }, body));
 }
 function isTyping() {

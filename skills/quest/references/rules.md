@@ -15,9 +15,9 @@
 - 読む：占い師と鑑定士だけ。`board.py lessons-brief [--point-code <分類>]`（`make-brief` が自動で付ける）。
 
 ## 人物伝（`profile.md`）
-0.1 では、依頼主が自分で書く。`board.py profile-brief` が 10 行の要約を作り、受付嬢・占い師・錬金術師の依頼書に付く。0.2 で吟遊詩人が案を書く。
+吟遊詩人が案を書き、依頼主が確定する（`references/spellbook.md`）。`board.py profile-brief` が 10 行の要約を作り、受付嬢・占い師・錬金術師・工房の依頼書に付く。
 
 ## 見積と費用
 - 呼び出しのたびに `board.py usage-log --role … --model … --tokens … [--quest … --goal …]` を呼ぶ（取れる範囲で。失敗しても回は失敗にしない）。
 - 1 回の実行で呼ぶサブエージェントは 20 まで。`board.py budget --use 1 --quest Q1` を呼び出しの前に呼び、`stop` が返ったらその回を止める。次の回は続きから始める。質問は出さない。同じクエストで 3 回続けて止まると、`board.py` が依頼主への質問を出す。
-- 集計（`usage`・`calib`）は 0.2。
+- 集計は `board.py usage`・`board.py calib`（`references/spellbook.md`）。

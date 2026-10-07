@@ -16,8 +16,11 @@ HTML = ROOT / "skills" / "init" / "board.html"
 AGENTS = sorted((ROOT / "agents").glob("*.md"))
 SKILLS = sorted((ROOT / "skills").glob("*/SKILL.md"))
 
-# spec 表の役ごとのツール（0.1.0 の 5 役）
+# spec 表の役ごとのツール（8 役）
 AGENT_TOOLS = {
+    "smith": {"Read", "Glob", "Grep", "Write", "Edit", "Bash", "Skill"},
+    "wizard": {"Read", "Glob", "Grep", "Write", "Edit"},
+    "bard": {"Read", "Glob", "Grep", "Write"},
     "receptionist": {"Read", "Glob", "Grep", "Write"},
     "fortune-teller": {"Read", "Glob", "Grep", "Write"},
     "adventurer": {"Read", "Glob", "Grep", "Write", "WebSearch", "WebFetch"},
@@ -55,7 +58,7 @@ class TestSkills(unittest.TestCase):
             self.assertEqual(meta["name"], p.parent.name)
             self.assertTrue(meta["description"])
             names.add(meta["name"])
-        self.assertEqual(names, {"init", "quest", "help"})
+        self.assertEqual(names, {"init", "quest", "help", "workshop"})
 
     def test_referencesの参照先がある(self):
         text = (ROOT / "skills" / "quest" / "SKILL.md").read_text(encoding="utf-8")
@@ -64,9 +67,9 @@ class TestSkills(unittest.TestCase):
         for m in re.finditer(r"`([\w\-]+\.md)`", text.split("## references/")[-1]):
             self.assertTrue((ROOT / "skills" / "quest" / "references" / m.group(1)).exists(), m.group(1))
 
-    def test_plugin_jsonの版は0_1_0(self):
+    def test_plugin_jsonの版は0_3_0(self):
         for f in ("plugin.json", "marketplace.json"):
-            self.assertIn('"version": "0.1.0"', (ROOT / ".claude-plugin" / f).read_text(encoding="utf-8"))
+            self.assertIn('"version": "0.3.0"', (ROOT / ".claude-plugin" / f).read_text(encoding="utf-8"))
 
     def test_subagent_typeの名前はエージェントと一致する(self):
         text = (ROOT / "skills" / "quest" / "SKILL.md").read_text(encoding="utf-8")
@@ -75,7 +78,7 @@ class TestSkills(unittest.TestCase):
 
 
 class TestAgents(unittest.TestCase):
-    def test_5役がそろっている(self):
+    def test_8役がそろっている(self):
         self.assertEqual({front(p)[0]["name"] for p in AGENTS}, set(AGENT_TOOLS))
 
     def test_ツールは最小(self):
@@ -84,9 +87,11 @@ class TestAgents(unittest.TestCase):
             tools = {t.strip() for t in meta["tools"].split(",")}
             self.assertEqual(tools, AGENT_TOOLS[meta["name"]], p.name)
 
-    def test_既定のモデルはsonnet(self):
+    def test_既定のモデルはsonnet_魔法使いだけhaiku(self):
         for p in AGENTS:
-            self.assertEqual(front(p)[0]["model"], "sonnet", p.name)
+            meta = front(p)[0]
+            self.assertEqual(meta["model"], "haiku" if meta["name"] == "wizard" else "sonnet", p.name)
+            self.assertNotEqual(meta["model"], "opus")
 
     def test_報告書の節名は固定(self):
         allowed = set(C.REPORT_SECTIONS) | set(C.DELIVERABLE_SECTIONS)
@@ -97,7 +102,7 @@ class TestAgents(unittest.TestCase):
                 if name in allowed:
                     continue
                 # エージェント文書自身の見出し（守ること・手順・報告書の書式・納品物の書式）は除く
-                self.assertIn(name, {"守ること", "手順", "報告書の書式（節の名前は固定）", "納品物の書式（節の名前は固定）"}, f"{p.name}: ## {name}")
+                self.assertIn(name, {"守ること", "手順", "報告書の書式（節の名前は固定。1 行 1 件）", "報告書の書式（節の名前は固定）", "納品物の書式（節の名前は固定）", "ノートの書式（1 項目 1 ファイル。`spellbook/<名前>.md`）"}, f"{p.name}: ## {name}")
 
     def test_サブエージェントは対話できないと書いてある(self):
         for p in AGENTS:
@@ -136,14 +141,12 @@ class TestBoardHtml(unittest.TestCase):
         self.assertIsNone(re.search(r"<script[^>]+src=|<link[^>]+href=\"https?:", self.text))
         self.assertIsNone(re.search(r"(src|href)=\"https?://", self.text))
 
-    def test_タブは3つで定数と一致する(self):
+    def test_タブは5つで定数と一致する(self):
         m = re.search(r"const TABS = \[(.*?)\];", self.text, re.S)
         self.assertIsNotNone(m)
-        self.assertEqual(re.findall(r"'([^']+)'", m.group(1)), C.TABS_0_1)
+        self.assertEqual(re.findall(r"'([^']+)'", m.group(1)), C.TABS_0_2)
         self.assertIn("role: 'tab'", self.text)
         self.assertIn("role: 'tabpanel'", self.text)
-        for t in ("予定表", "魔導書"):
-            self.assertNotIn(f"'{t}'", m.group(1))
 
     def test_状態名とラベルが定数と一致する(self):
         def table(name):

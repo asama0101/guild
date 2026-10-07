@@ -9,7 +9,7 @@
 
 ## 鑑定（冒険中 → 鑑定中）
 1. 冒険者が `.system/reports/<G番号>-adventurer.md` に `## result`（事実表）と `## log` を書く。
-2. 錬金術師が納品物（Markdown）を `output_path` に書く（書式は SKILL.md の 4.1 に当たる節）。
+2. 錬金術師が納品物（Markdown）を `output_path` に書く（`guild:alchemist` の書式）。納品物の形が Word・Excel・PowerPoint・PDF なら、そのあと鍛冶師（`guild:smith`、依頼書は `make-brief G1 smith`）が器にして、`output_path` のファイルを作る。
 3. `board.py pre-check G1`。NG なら鑑定士を呼ばず、`board.py set-status G1 要手直し --reason precheck_ng`。
 4. OK なら `board.py set-status G1 鑑定中`。鑑定士に、納品物の場所と出典の一覧だけを渡す。冒険者の報告は渡さない。
 5. 鑑定士は `.system/reports/<G番号>-appraiser.md` に結果を書く。合格なら、ギルドマスターが `set-status G1 確認待ち --who appraiser`。不合格なら、鑑定士の指摘（`fix_kind`・`point_code`・`target`・`point`）を `board.py add-finding G1 …` で記録し、`set-status G1 要手直し --who appraiser`。

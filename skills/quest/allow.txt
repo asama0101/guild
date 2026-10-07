@@ -1,0 +1,15 @@
+# guild 自動実行（guild-run.py）が claude -p に許すツールの一覧。
+# 1 行に 1 つ。# から行末まではコメント。空行は無視する。
+# Bash を丸ごと許す行は書かない。必要な範囲だけにする。
+
+Read      # ファイルを読む
+Glob      # ファイル名で探す
+Grep      # 中身で探す
+Write     # 納品物・依頼書・報告書を書く
+Edit      # 既存ファイルを直す
+Agent     # ギルド員（サブエージェント）を呼ぶ
+Skill     # /guild:quest などのスキルを呼ぶ
+Bash(python:*)   # board.py を呼ぶ（python）
+Bash(py:*)       # board.py を呼ぶ（Windows の py）
+WebSearch        # 調べもの
+WebFetch         # 調べもの（ページの取得）

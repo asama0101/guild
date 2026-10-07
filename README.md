@@ -1,4 +1,4 @@
-# guild 0.1
+# guild 0.3
 
 Claude Code のプラグイン。依頼主（非エンジニアの日本語話者）の依頼を、ギルドの仲間（役ごとのサブエージェント）が分担して片付け、成果物（納品物）を納めます。
 
@@ -21,6 +21,7 @@ Claude Code のプラグイン。依頼主（非エンジニアの日本語話�
 | `/guild:init` | `guild/` を作り、画面・`board.py`・`transitions.json` を写す |
 | `/guild:quest` | 1 回分を進める |
 | `/guild:quest auto` | 確認なしで進める（承認は自動で進まない） |
+| `/guild:workshop` | 工房。会話しながら素材を足し、納品物を作る。得た知見は次回以降に使われる |
 | `/guild:help` | 使い方と状態の見方 |
 
 Python は標準ライブラリだけ（3.9 以上）。Windows・Mac・Linux で動きます。
@@ -29,18 +30,31 @@ Python は標準ライブラリだけ（3.9 以上）。Windows・Mac・Linux �
 入れたデータは、取り扱ってよいものとして扱います。トークン・鍵・パスワードを入れるかどうかは、あなたが決めます。guild は、中身を検査して拒否したり、質問で止めたりしません。
 
 ## 役
-受付嬢（聞き取り）／占い師（分解）／冒険者（事実の収集）／錬金術師（納品物の中身）／鑑定士（結果の判定）。0.1.0 の範囲です。魔法使い・吟遊詩人・鍛冶師は 0.2・0.3 で入ります。
+受付嬢（聞き取り）／占い師（分解）／冒険者（事実の収集）／錬金術師（納品物の中身）／鍛冶師（Word・Excel・PowerPoint・PDF の器）／鑑定士（結果の判定）／魔法使い（魔導書の候補）／吟遊詩人（教訓と人物伝の案）。既定のモデルは sonnet です。魔法使いは haiku、opus は条件を満たす錬金術師だけです。
+
+## 使うほど良くなる仕組み
+失敗・好み・用語・実績を蓄積し、次回以降に読みます。どれも、依頼主が確定します（`docs/spec-v0.1.md` の 15 節）。
+
+| 蓄積 | 場所 |
+|---|---|
+| 掟（同じ指摘が 2 回で案） | `.system/rules/` |
+| 教訓帳 | `.system/lessons.md` |
+| 魔導書（用語・設備・取り決め） | `spellbook/` |
+| 人物伝（好み） | `profile.md` |
+| 資料室（共有素材）・設計図（ひな形） | `shared/`・`templates/` |
+| 見積と費用の実績 | `.system/calib.json`・`logs/usage.jsonl` |
 
 ## 段階
 | 版 | 中身 |
 |---|---|
 | 0.1.0 | 中核の 1 周（`board.py`、`transitions.json`、クエスト票、5 役、承認①②、掟の再発検知、事実と推論の書式、画面 3 タブ） |
-| 0.2.0 | 資料室、魔導書、予定表、人物伝、good／bad の活用、`usage`・`calib`・`housekeeping` |
-| 0.3.0 | 鍛冶師・設計図、実行の承認、工房、`lint-text`、自動実行 |
+| 0.2.0 | 資料室、魔導書（魔法使い）、予定表、人物伝（吟遊詩人）、good／bad の活用、`usage`・`calib`・`housekeeping`、画面 5 タブ |
+| 0.3.0（いまの版） | 鍛冶師・設計図、実行の承認、工房、`lint-text`、自動実行（`guild-run.py`） |
 
 ## 開発
 ```
 python -m unittest discover -s tests
+python -X utf8 -m unittest discover -s tests
 python skills/quest/board.py --root . gen-transitions --skill skills/quest/SKILL.md --svg skills/quest/references/state-diagram.svg
 ```
 `transitions.json` を直したら、`gen-transitions` で SKILL.md の表と状態図を作り直します（テストが一致を確かめます）。
