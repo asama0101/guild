@@ -19,5 +19,17 @@
 ## 承認①の質問
 `board.py add-question --quest Q1 --kind approval --scope route --text "道のりを確認して、承認してください" --options '[{"label":"承認する"},{"label":"やり直す"},{"label":"あとで決める"}]'`。道のり図は、`board.py` が `.system/diagrams/route-Q1.svg` に作る。
 
+## 道のりのやり直し（承認待ち → 分解中）
+依頼主が承認①で「やり直す」を選ぶと、画面は `answers/` に `choice: "やり直す"` と、依頼主の一言（`comment`）を書く。
+1. `board.py apply-simple` で回答を取り込む（`need-claude` が `answered_question` を返す）。
+2. `board.py set-status Q1 分解中 --who client`。回答の記録がなければ通らない。通ると、依頼主の一言が回答の記録から使われる。
+3. `board.py make-brief Q1 fortune_teller`。依頼書の「聞き取りの答え」に、「やり直す（依頼主の一言）」が付く。占い師は、その一言に沿って達成条件案を直す。
+4. 直し方は、ギルドマスターが `board.py` で行う：
+   - 直す項目は `board.py set G1 <項目> <json>`（題名・`done_when`・締切・前提など）。
+   - 足す達成条件は `board.py add-goal …`。
+   - いらなくなった案の達成条件は `board.py set-status G1 中止`（分解中のあいだだけ、ギルドマスターが外せる。その達成条件を前提にする案が残っていると通らない。先に前提を直す）。
+5. `board.py route-check Q1 --write` で検査し、`set-status Q1 承認待ち`。承認①の質問を、もう一度出す。前の質問は回答済みで残る。
+6. 「やり直す」は、道のりの差し戻し（下）の回数には数えない。何度でも、依頼主が決める。
+
 ## 差し戻し（fix_kind が goal）
 鑑定士が `fix_kind: goal` を書いたら、依頼主に理由を伝える通知を出し、`board.py set-status Q1 分解中`。差し戻しは 1 クエストに 2 回まで。達成済みの達成条件は達成のまま、ほかは案に戻る。承認①をやり直す。

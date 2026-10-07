@@ -357,6 +357,8 @@ class TestGoalFlow(Base):
         d = self.data()
         self.assertEqual(d["goals"][g]["retries"], 1)
         self.assertEqual(d["goals"][g]["findings"][-1]["fix_kind"], "brief")
+        brief = Path(self.ok("make-brief", g, "alchemist")).read_text(encoding="utf-8")
+        self.assertIn("brief／output：金額を直す", brief)  # 分類が空のときは、区切りを重ねない
         self.assertEqual(d["quests"][q]["rework_total"], 1)
 
     def test_同じ指摘が2回出ると掟の案の質問が出る(self):
@@ -902,6 +904,41 @@ class TestMisc(Base):
         self.assertIn("R1", text)
         self.assertIn("input/", text)  # 素材は場所だけ
         self.assertEqual(f.name, f"{g}-adventurer.md")
+
+    def test_道のりのやり直し(self):
+        q = self.quest()
+        a = self.goal(q, "単価表")
+        b2 = self.goal(q, "本体", depends_on=a)
+        self.ok("set-status", q, "分解中")
+        self.ok("set-status", q, "承認待ち")
+        aid = self.ok("add-question", "--quest", q, "--kind", "approval", "--scope", "route", "--text", "承認してください",
+                      "--options", json.dumps([{"label": "承認する"}, {"label": "やり直す"}], ensure_ascii=False))
+        self.ok("answer", aid, "--choice", "やり直す", "--comment", "PDF の達成条件は要らない。本体だけにしてほしい")
+        self.ok("set-status", q, "分解中", "--who", "client")
+        self.assertEqual(self.data()["quests"][q]["status"], "分解中")
+        self.assertEqual(self.data()["quests"][q]["replans"], 0)  # 差し戻しの回数には数えない
+        brief = Path(self.ok("make-brief", q, "fortune_teller")).read_text(encoding="utf-8")
+        self.assertIn("PDF の達成条件は要らない", brief)
+        # 分解中のあいだ、ギルドマスターは案の達成条件を外せる（前提にされているものは外せない）
+        self.ng("set-status", a, "中止")
+        self.ok("set", b2, "depends_on", "[]")
+        self.ok("set-status", a, "中止")
+        self.assertIn("計画を見直して、この達成条件を外した。", [e["text"] for e in self.data()["goals"][a]["log"]])
+        c = self.goal(q, "本体だけ")
+        self.ok("route-check", q, "--write")
+        self.ok("set-status", q, "承認待ち")
+        self.approve("route", q)
+        self.ok("set-status", q, "進行中", "--who", "client")
+        self.assertEqual(self.data()["goals"][c]["status"], "待機")
+        self.assertEqual(self.data()["goals"][a]["status"], "中止")
+
+    def test_案の達成条件を外せるのは分解中のあいだだけ(self):
+        q = self.quest()
+        a = self.goal(q, "単価表")
+        self.ok("set-status", q, "分解中")
+        self.ok("set-status", q, "承認待ち")
+        self.ng("set-status", a, "中止")  # 承認待ちでは外せない
+        self.ng("set-status", a, "中止", "--who", "adventurer")
 
     def test_錬金術師の依頼書には冒険者の報告書の場所が付き_鑑定士には付かない(self):
         q, (g,) = self.to_running()

@@ -348,10 +348,10 @@ class TestProfileAndBard(ExtBase):
     def test_bard_briefに評価が入る(self):
         q, (g,) = self.to_running()
         self.p.requests.mkdir(parents=True, exist_ok=True)
-        (self.p.requests / "E1.json").write_text(json.dumps({"kind": "evaluation", "quest": q, "goal": g, "score": "bad", "reason": "金額が違う", "comment": ""}, ensure_ascii=False), encoding="utf-8")
+        (self.p.requests / "E1.json").write_text(json.dumps({"kind": "evaluation", "quest": q, "goal": g, "score": "bad", "reason": "金額が違う", "comment": "直す"}, ensure_ascii=False), encoding="utf-8")
         self.ok("apply-simple")
         text = Path(self.ok("bard-brief", q)).read_text(encoding="utf-8")
-        self.assertIn("bad：金額が違う", text)
+        self.assertIn("bad：金額が違う／直す", text)  # 理由と一言の両方
 
     def test_達成後のやることがあるときだけClaudeが要る(self):
         q, (g,) = self.to_running()

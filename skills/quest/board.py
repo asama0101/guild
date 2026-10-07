@@ -681,7 +681,7 @@ def goal_log_text(g, frm, to, who, text, reason):
     if to == "失敗" and frm not in ("実行承認待ち",):
         return f"この達成条件は達成できなかった。理由：「{text or ''}」。"
     if to == "中止":
-        return "あなたが中止した。"
+        return "あなたが中止した。" if who == "client" else "計画を見直して、この達成条件を外した。"
     if who == "workshop" and to in ("冒険中", "確認待ち"):
         return f"あなたと一緒に工房で作業した：「{text or ''}」。"
     if to == "案":
@@ -1491,7 +1491,7 @@ def make_brief(b, gid, role):
     if role == "alchemist" and gid.startswith("G") and report_files(b, gid, "adventurer"):
         L.append(f"- 冒険者の報告書：.system/reports/{report_files(b, gid, 'adventurer')[-1].name}")
     if g.get("findings"):
-        L += ["- これまでの指摘：", *[f"  - {f['fix_kind']}／{f['point_code']}／{f['target']}：{f['point']}" for f in g["findings"][-3:]]]
+        L += ["- これまでの指摘：", *[f"  - " + "／".join(x for x in (f["fix_kind"], f["point_code"], f["target"]) if x) + f"：{f['point']}" for f in g["findings"][-3:]]]
     rules = []
     for rf in (b.p.rules / f"{role}.md", b.p.rules / "_all.md"):
         if rf.exists():
@@ -2399,7 +2399,8 @@ def accumulate_todo(b, qid):
                 brd += [f"{name}：{ln}" for ln in memo_section(text, "好み・直しの傾向")]
     for fb in b.d["feedbacks"].values():
         if fb.get("quest") == qid and not fb.get("handled"):
-            brd.append(f"{fb.get('score')}：{fb.get('reason') or fb.get('comment') or ''}")
+            note = "／".join(x for x in (fb.get("reason"), fb.get("comment")) if x)
+            brd.append(f"{fb.get('score')}：{note}")
     for iv in b.d["interviews"].values():
         if iv["status"] == "回答済":
             brd.append(f"インタビュー {iv['id']}")
@@ -2523,7 +2524,7 @@ def workshop_brief(b, gid):
     if log:
         L += ["", "## これまでの経過（抜粋）", *[f"- {t}" for t in log]]
     if g.get("findings"):
-        L += ["", "## これまでの指摘", *[f"- {f['fix_kind']}／{f['point_code']}／{f['target']}：{f['point']}" for f in g["findings"][-3:]]]
+        L += ["", "## これまでの指摘", *["- " + "／".join(x for x in (f["fix_kind"], f["point_code"], f["target"]) if x) + f"：{f['point']}" for f in g["findings"][-3:]]]
     pb = profile_brief(b)
     if pb:
         L += ["", "## 人物伝（要約）", *pb]

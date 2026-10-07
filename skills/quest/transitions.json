@@ -818,6 +818,21 @@
    "from": "案",
    "to": "中止",
    "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "quest_replanning",
+    "dependents_confirmed"
+   ],
+   "note": "計画の見直しで、いらなくなった案の達成条件を外す（実装で足した辺）",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "案",
+   "to": "中止",
+   "actor": [
     "client"
    ],
    "guards": [

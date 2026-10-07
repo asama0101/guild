@@ -178,6 +178,7 @@ Agent ツールで、`subagent_type` に下の名前を指定して呼ぶ。プ�
 | 実行承認待ち→失敗 | client | — | 実行を承認しなかった |
 | 実行承認待ち→要手直し | guildmaster | — | 実行がエラーになった |
 | 達成→要手直し | appraiser | quest_final_review | 最終鑑定で矛盾が見つかり、直す達成条件として指定された |
+| 案→中止 | guildmaster | quest_replanning, dependents_confirmed | 計画の見直しで、いらなくなった案の達成条件を外す（実装で足した辺） |
 | 案→中止 | client | dependents_confirmed | 取り下げ |
 | 待機→中止 | client | dependents_confirmed | 取り下げ |
 | 冒険中→中止 | client | dependents_confirmed | 取り下げ |
