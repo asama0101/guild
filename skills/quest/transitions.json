@@ -572,6 +572,62 @@
   },
   {
    "from": "鑑定中",
+   "to": "案",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "quest_replanning"
+   ],
+   "note": "クエストが分解中に差し戻された（実装で足した辺）",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "確認待ち",
+   "to": "案",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "quest_replanning"
+   ],
+   "note": "クエストが分解中に差し戻された（実装で足した辺）",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "実行承認待ち",
+   "to": "案",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "quest_replanning"
+   ],
+   "note": "クエストが分解中に差し戻された（実装で足した辺）",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "失敗",
+   "to": "案",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "quest_replanning"
+   ],
+   "note": "クエストが分解中に差し戻された（実装で足した辺）",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "鑑定中",
    "to": "確認待ち",
    "actor": [
     "appraiser"
