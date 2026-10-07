@@ -1349,6 +1349,10 @@ def render_quest(b, qid):
 def write_diagram(b, qid):
     """画面が読む道のり図（SVG）。閉路などで描けないときは作らない。"""
     d = b.p.sys / "diagrams"
+    if not goal_graph(b, qid):
+        for ext in ("svg", "txt"):
+            (d / f"route-{qid}.{ext}").unlink(missing_ok=True)
+        return None
     try:
         svg, sentence = render_route_svg(b, qid)
     except GuildError:

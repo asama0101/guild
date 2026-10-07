@@ -928,6 +928,15 @@ class TestMisc(Base):
         self.ok("add-quest", "--title", "y", "--form", "その他（くわしくへ）")
         self.ng("add-quest", "--title", "z", "--form", "毛筆")
 
+    def test_達成条件のないクエストは道のり図を作らない(self):
+        q = self.quest()
+        d = self.p.sys / "diagrams"
+        self.assertFalse((d / f"route-{q}.svg").exists())
+        self.assertFalse((d / f"route-{q}.txt").exists())
+        self.goal(q, "表を作る")
+        self.assertTrue((d / f"route-{q}.svg").exists())
+        self.assertIn("1 個の達成条件", (d / f"route-{q}.txt").read_text(encoding="utf-8"))
+
     def test_make_briefはクエスト単位でも作れる(self):
         q = self.quest()
         aid = self.ok("add-question", "--quest", q, "--text", "形式は", "--options", json.dumps([{"label": "Excel"}, {"label": "Word"}]))

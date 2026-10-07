@@ -79,6 +79,12 @@ th { color: var(--muted); font-weight: normal; font-size: .8rem; }
 .nowbar .last { font-size: .8rem; color: var(--muted); }
 .nowbar .it { display: flex; gap: 6px 10px; align-items: center; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .nowbar .it > span:first-child { flex: 1 1 260px; }
+.nowbar .tog { display: none; padding-top: 6px; }
+@media (max-width: 600px) {
+  .nowbar:not(.open) .it.more { display: none; }
+  .nowbar .tog { display: block; }
+  .nowbar .last { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
 .body { padding: 18px var(--gut) 40px; display: flex; flex-direction: column; gap: 16px; }
 :root { --gut: max(24px, calc((100vw - 1280px) / 2)); }
 
@@ -619,9 +625,13 @@ function turnItems() {
   const actions = [];
   let count = open.length;
   if (open.length) actions.push({ badge: ['ask', '質問'], text: `質問が ${open.length} 件あります。`, btn: '質問に答える', go: () => goAsk(null) });
+  const sentOf = pred => { const x = visibleQs().find(v => !v.st.open && pred(v.q)); return x ? x.st.label : null; };
+  const sentRow = (what, label) => ({ badge: ['go', '送った'], text: `${what}について、「${label}」と答えました。次の /guild:quest で進みます。`, btn: null, sent: true });
   for (const g of allGoals()) {
     if (g.status !== '確認待ち' && g.status !== '実行承認待ち') continue;
     const q = open.find(x => (x.scope === 'output' || x.scope === 'execute') && (x.goal === g.id || (x.covers || []).includes(g.id)));
+    const sent = !q && sentOf(x => (x.scope === 'output' || x.scope === 'execute') && (x.goal === g.id || (x.covers || []).includes(g.id)));
+    if (sent) { actions.push(sentRow(`「${g.title}」の納品物`, sent)); continue; }
     if (!q) count += 1;
     actions.push({ badge: ['ask', g.status === '実行承認待ち' ? '実行の承認' : '確認待ち'],
       text: `「${g.title}」の納品物${g.status === '実行承認待ち' ? '（実行）' : ''}を確認してください。`, btn: '確認する', go: () => goAsk(q ? q.id : null) });
@@ -629,6 +639,8 @@ function turnItems() {
   for (const qu of questList()) {
     if (qu.status !== '承認待ち') continue;
     const q = open.find(x => x.quest === qu.id && x.scope === 'route');
+    const sent = !q && sentOf(x => x.quest === qu.id && x.scope === 'route');
+    if (sent) { actions.push(sentRow(`「${qu.title}」の道のり`, sent)); continue; }
     if (!q) count += 1;
     actions.push({ badge: ['ask', '道のりの承認'], text: `「${qu.title}」の道のり（計画）を確認して、承認してください。`, btn: '確認する', go: () => goAsk(q ? q.id : null) });
   }
@@ -647,13 +659,19 @@ function renderNow() {
     h('b', {}, 'あなたの番', h('span', { class: t.count ? 'nb' : 'nb zero', text: String(t.count) })),
     h('span', { class: 'last', text: news ? `最新の知らせ：${jpStamp(news.time)}　${news.text}` : 'ギルドからの知らせは、まだありません。' })));
   if (!t.actions.length) box.add(h('div', { class: 'it' }, h('span', { text: 'いま：あなたがすることは、ありません。' })));
-  for (const a of t.actions) {
-    box.add(h('div', { class: 'it' }, h('span', {}, badge(a.badge[0], a.badge[1]), ` ${a.text}`), h('button', { type: 'button', onclick: a.go }, a.btn)));
-  }
+  box.classList.toggle('open', !!S.nowOpen);
+  t.actions.forEach((a, i) => {
+    box.add(h('div', { class: i ? 'it more' : 'it' }, h('span', {}, badge(a.badge[0], a.badge[1]), ` ${a.text}`), a.btn ? h('button', { type: 'button', onclick: a.go }, a.btn) : null));
+  });
   for (const r of t.refs.slice(0, 3)) {
-    box.add(h('div', { class: 'it' }, h('span', {}, badge(r.badge[0], r.badge[1]), ` ${r.text}`)));
+    box.add(h('div', { class: 'it more' }, h('span', {}, badge(r.badge[0], r.badge[1]), ` ${r.text}`)));
   }
-  if (t.refs.length > 3) box.add(h('div', { class: 'it' }, h('span', { class: 'note', text: `ほか ${t.refs.length - 3} 件` })));
+  if (t.refs.length > 3) box.add(h('div', { class: 'it more' }, h('span', { class: 'note', text: `ほか ${t.refs.length - 3} 件` })));
+  const hidden = Math.max(t.actions.length - 1, 0) + Math.min(t.refs.length, 3);
+  if (hidden > 0) {
+    box.add(h('div', { class: 'tog' }, h('button', { type: 'button', class: 'ghost sm', 'aria-expanded': S.nowOpen ? 'true' : 'false',
+      onclick: () => { S.nowOpen = !S.nowOpen; renderNow(); } }, S.nowOpen ? '閉じる' : `ほか ${hidden} 件を見る`)));
+  }
 }
 
 // ---------------------------------------------------------------- 画面：クエスト（依頼を出す）

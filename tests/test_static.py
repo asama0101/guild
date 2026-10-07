@@ -160,6 +160,15 @@ class TestBoardHtml(unittest.TestCase):
             self.assertIn(f"'{form}': '{text}'", self.text)
         self.assertIn("aria-describedby", self.text)
 
+    def test_答えを送った承認は_あなたの番で送りましたと出し数に入れない(self):
+        js = self.text
+        self.assertIn("sentRow", js)
+        self.assertIn("次の /guild:quest で進みます", js)
+
+    def test_狭い画面ではあなたの番を畳める(self):
+        self.assertIn(".nowbar:not(.open) .it.more", self.text)
+        self.assertIn("aria-expanded", self.text)
+
     def test_CDNなし(self):
         self.assertIsNone(re.search(r"<script[^>]+src=|<link[^>]+href=\"https?:", self.text))
         self.assertIsNone(re.search(r"(src|href)=\"https?://", self.text))
