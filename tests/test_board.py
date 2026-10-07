@@ -911,6 +911,15 @@ class TestMisc(Base):
         appr = Path(self.ok("make-brief", g, "appraiser")).read_text(encoding="utf-8")
         self.assertNotIn("adventurer.md", appr)
 
+    def test_錬金術師の依頼書に形ごとの書き方が付く(self):
+        for form, key in (("ノート", "[[ ]]"), ("テキスト", "そのまま貼れる本文"), ("回答だけ", "結論を先頭の 1 文")):
+            q = self.quest()
+            g = self.goal(q, "x", form=form)
+            text = Path(self.ok("make-brief", g, "alchemist")).read_text(encoding="utf-8")
+            self.assertIn(f"書き方（形：{form}）", text)
+            self.assertIn(key, text)
+            self.assertNotIn("書き方（形", Path(self.ok("make-brief", g, "appraiser")).read_text(encoding="utf-8"))
+
     def test_依頼の納品物の形と急ぎ度を受け取る(self):
         q = self.ok("add-quest", "--title", "x", "--form", "Excel", "--priority", "優先")
         d = self.data()["quests"][q]

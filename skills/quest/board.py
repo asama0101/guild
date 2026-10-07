@@ -54,6 +54,28 @@ EFFORTS = ["低", "中", "高"]
 PRIORITIES = ["優先", "通常"]
 FORMS = ["おまかせ", "回答だけ", "ノート", "テキスト", "Word", "Excel", "PowerPoint", "PDF", "その他"]
 FIX_KINDS = ["input", "brief", "goal"]
+FORM_HELP = {
+    "おまかせ": "内容を見て、ギルドが形を選びます。",
+    "回答だけ": "調べて答えるだけ。結論を先に、短く書きます。",
+    "ノート": "魔導書やノートに残す形。見出しとリンクを付けます。",
+    "テキスト": "そのまま貼って使える文章。見出しや表は使いません。",
+    "Word": "Word のファイルを作ります。",
+    "Excel": "表計算のファイルを作ります。",
+    "PowerPoint": "スライドのファイルを作ります。",
+    "PDF": "PDF のファイルを作ります。",
+    "その他": "くわしくに、ほしい形を書いてください。",
+}
+FORM_STYLE = {
+    "おまかせ": "形が決まっていない。内容に合う書き方を選び、納品物の最初の行に、選んだ形を書く。",
+    "回答だけ": "結論を先頭の 1 文に書く。全体を短くし、見出しと表を増やさない。",
+    "ノート": "見出しを付ける。関連する語は [[ ]] のリンクにする。あとで探せる題名にする。",
+    "テキスト": "見出し・表・記号の飾りを使わず、そのまま貼れる本文にする。事実・推論・未確認の節は、「根拠」として最後に置く。",
+    "Word": "Markdown で中身を書く。Word の器は鍛冶師が作る。",
+    "Excel": "Markdown の表で中身を書く。Excel の器は鍛冶師が作る。",
+    "PowerPoint": "スライドごとに見出しを付けて中身を書く。器は鍛冶師が作る。",
+    "PDF": "Markdown で中身を書く。PDF の器は鍛冶師が作る。",
+    "その他": "依頼主がくわしくに書いた形に合わせる。分からなければ、報告に 1 行で書く。",
+}
 POINT_CODES = ["欠落", "矛盾", "誤り", "形式", "出典なし", "範囲外"]
 Q_KINDS = ["choice", "approval", "todo", "confirm", "rule", "term"]
 Q_SCOPES = ["route", "output", "execute", "none"]
@@ -1480,6 +1502,8 @@ def make_brief(b, gid, role):
         pb = profile_brief(b)
         if pb:
             L += ["", "## 人物伝（要約）", *pb]
+    if role in ("alchemist", "workshop") and g.get("form") in FORM_STYLE:
+        L.append(f"- 書き方（形：{g['form']}）：{FORM_STYLE[g['form']]}")
     if role in ("fortune_teller", "adventurer", "alchemist", "appraiser", "workshop"):
         L += spell_brief_lines(b, g, q)
     if role == "fortune_teller":

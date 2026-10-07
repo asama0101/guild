@@ -102,7 +102,7 @@ class TestAgents(unittest.TestCase):
                 if name in allowed:
                     continue
                 # エージェント文書自身の見出し（守ること・手順・報告書の書式・納品物の書式）は除く
-                self.assertIn(name, {"守ること", "手順", "報告書の書式（節の名前は固定。1 行 1 件）", "報告書の書式（節の名前は固定）", "納品物の書式（節の名前は固定）", "ノートの書式（1 項目 1 ファイル。`spellbook/<名前>.md`）"}, f"{p.name}: ## {name}")
+                self.assertIn(name, {"守ること", "手順", "報告書の書式（節の名前は固定。1 行 1 件）", "報告書の書式（節の名前は固定）", "納品物の書式（節の名前は固定）", "ノートの書式（1 項目 1 ファイル。`spellbook/<名前>.md`）", "形ごとの書き方"}, f"{p.name}: ## {name}")
 
     def test_サブエージェントは対話できないと書いてある(self):
         for p in AGENTS:
@@ -112,6 +112,24 @@ class TestAgents(unittest.TestCase):
         for p in AGENTS:
             if front(p)[0]["name"] in ("receptionist", "adventurer", "alchemist"):
                 self.assertIn("取り扱ってよいもの", front(p)[1], p.name)
+
+
+class TestForms(unittest.TestCase):
+    def test_形の説明と書き方がboard_pyと定数で一致する(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("board", ROOT / "skills" / "quest" / "board.py")
+        board = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(board)
+        self.assertEqual(board.FORM_HELP, C.FORM_HELP)
+        self.assertEqual(list(board.FORM_HELP), C.REQUEST_FORMS)
+        self.assertEqual(sorted(board.FORM_STYLE), sorted(board.FORMS))
+
+    def test_占い師と錬金術師の定義に形の扱いがある(self):
+        ft = (ROOT / "agents" / "fortune-teller.md").read_text(encoding="utf-8")
+        al = (ROOT / "agents" / "alchemist.md").read_text(encoding="utf-8")
+        self.assertIn("そのまま使う。変えない", ft)
+        for form in ("回答だけ", "ノート", "テキスト"):
+            self.assertIn(f"| {form} |", al)
 
 
 class TestOldWords(unittest.TestCase):
@@ -136,6 +154,11 @@ class TestBoardHtml(unittest.TestCase):
 
     def scripts(self):
         return re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", self.text, re.S)
+
+    def test_納品物の形の説明が画面にある(self):
+        for form, text in C.FORM_HELP.items():
+            self.assertIn(f"'{form}': '{text}'", self.text)
+        self.assertIn("aria-describedby", self.text)
 
     def test_CDNなし(self):
         self.assertIsNone(re.search(r"<script[^>]+src=|<link[^>]+href=\"https?:", self.text))

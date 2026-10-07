@@ -247,6 +247,17 @@ const GOAL_LABELS = {
 const HOLDABLE = ['受付', '分解中', '承認待ち', '進行中', '最終鑑定'];
 const FORMS = ['おまかせ', '回答だけ', 'ノート', 'テキスト', 'Word', 'Excel', 'PowerPoint', 'PDF', 'その他'];
 const FORM_LABELS = { 'その他': 'その他（くわしくへ）' };
+const FORM_HELP = {
+  'おまかせ': '内容を見て、ギルドが形を選びます。',
+  '回答だけ': '調べて答えるだけ。結論を先に、短く書きます。',
+  'ノート': '魔導書やノートに残す形。見出しとリンクを付けます。',
+  'テキスト': 'そのまま貼って使える文章。見出しや表は使いません。',
+  'Word': 'Word のファイルを作ります。',
+  'Excel': '表計算のファイルを作ります。',
+  'PowerPoint': 'スライドのファイルを作ります。',
+  'PDF': 'PDF のファイルを作ります。',
+  'その他': 'くわしくに、ほしい形を書いてください。'
+};
 const BAD_REASONS = ['内容が違う', '足りないものがある', '間違いがある', '形式が合わない', 'その他'];
 const LATER = 'あとで決める';
 const APPROVE = '承認する';
@@ -654,7 +665,8 @@ function renderIntake() {
   const detailIn = h('textarea', { id: 'in-detail', placeholder: '例：部長への稟議に使う', oninput: e => { st.detail = e.target.value; } });
   detailIn.value = st.detail;
   const dueIn = h('input', { type: 'date', id: 'in-due', value: st.due, oninput: e => { st.due = e.target.value; } });
-  const formIn = h('select', { id: 'in-form', onchange: e => { st.form = e.target.value; } },
+  const formHelp = h('span', { class: 'note', id: 'in-form-help', text: FORM_HELP[st.form] || '' });
+  const formIn = h('select', { id: 'in-form', 'aria-describedby': 'in-form-help', onchange: e => { st.form = e.target.value; formHelp.textContent = FORM_HELP[st.form] || ''; } },
     FORMS.map(f => h('option', { value: f, selected: f === st.form }, FORM_LABELS[f] || f)));
   const fileList = h('div');
   const drawFiles = () => {
@@ -700,7 +712,7 @@ function renderIntake() {
     h('div', { class: 'row2', style: 'margin-top:8px' },
       h('div', { class: 'field' }, h('span', { class: 'note', text: '急ぎ度' }), h('div', { class: 'pri', role: 'radiogroup', 'aria-label': '急ぎ度' }, radio('優先'), radio('通常'))),
       h('div', { class: 'field' }, h('label', { for: 'in-due' }, '期限（あれば）'), dueIn),
-      h('div', { class: 'field' }, h('label', { for: 'in-form' }, '納品物の形'), formIn)),
+      h('div', { class: 'field' }, h('label', { for: 'in-form' }, '納品物の形'), formIn, formHelp)),
     h('div', { class: 'field', style: 'margin-top:8px' }, h('label', { for: 'in-detail' }, 'くわしく（任意：背景、関係するノート、使いみち）'), detailIn),
     h('div', { class: 'field', style: 'margin-top:8px' }, h('label', { for: 'in-files' }, '素材を添える（いくつでも。保存先：素材）'), fileIn,
       h('span', { class: 'note' }, '保存先：素材（', h('code', { text: 'guild/.system/requests/files/R<送った日時>/' }), '）。クエストができると、素材の置き場に移ります。'), fileList),
