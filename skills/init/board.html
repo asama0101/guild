@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>ギルドの画面</title>
+<style>
+:root {
+  --bg: #f4f6f8; --card: #ffffff; --fg: #1b1f24; --muted: #4f5762; --border: #aab2bc;
+  --accent: #0b57d0; --accent-fg: #ffffff; --danger: #a8201a; --ok: #146c2e;
+  --warn-bg: #fff3d6; --warn-fg: #4a3200; --focus: #b35900; --soft: #e8eef8;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b; --card: #1e2329; --fg: #eceff3; --muted: #b0b8c2; --border: #5a636e;
+    --accent: #8ab4f8; --accent-fg: #0b1220; --danger: #ff8b84; --ok: #7fd99a;
+    --warn-bg: #3b3012; --warn-fg: #ffe9a8; --focus: #ffb454; --soft: #263042;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); line-height: 1.7;
+  font-family: "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; font-size: 16px; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.35rem; margin: 0; }
+h2 { font-size: 1.15rem; margin: 0 0 8px; }
+h3 { font-size: 1.02rem; margin: 16px 0 6px; }
+p { margin: 6px 0; }
+code { background: var(--soft); padding: 1px 5px; border-radius: 4px; word-break: break-all; font-size: .92em; }
+.muted { color: var(--muted); }
+.small { font-size: .88rem; }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; justify-content: space-between; margin-bottom: 12px; }
+.folder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .9rem; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { min-height: 44px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--card); cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 700; }
+button.danger { color: var(--danger); border-color: var(--danger); }
+button.mini { min-height: 36px; padding: 2px 10px; font-size: .88rem; }
+button[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); font-weight: 700; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+input[type=text], input[type=date], select, textarea { width: 100%; min-height: 44px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+textarea { min-height: 88px; resize: vertical; }
+label, .label { display: block; font-weight: 700; margin: 12px 0 4px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 12px 0; }
+.now { border: 2px solid var(--accent); background: var(--card); border-radius: 12px; padding: 12px 16px; margin: 0 0 12px; }
+.now .line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; justify-content: space-between; }
+.now .line p { margin: 0; font-weight: 700; flex: 1 1 240px; }
+.now ul { margin: 8px 0 0; padding-left: 20px; }
+.warn { background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+.err { color: var(--danger); font-weight: 700; }
+.ok { color: var(--ok); font-weight: 700; }
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin: 12px 0; flex-wrap: wrap; }
+.tabs button { border-radius: 8px 8px 0 0; border-bottom: none; min-width: 96px; font-weight: 700; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.badge { display: inline-block; min-width: 1.6em; padding: 0 6px; margin-left: 6px; border-radius: 99px;
+  background: var(--danger); color: #fff; font-size: .82rem; text-align: center; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.grid2 { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+.qlist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.qitem { width: 100%; text-align: left; display: block; }
+.qitem[aria-current="true"] { border: 2px solid var(--accent); background: var(--soft); }
+.state { display: inline-block; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: .88rem; background: var(--soft); }
+.tag { display: inline-block; padding: 0 6px; border: 1px solid var(--ok); color: var(--ok); border-radius: 6px; font-size: .82rem; font-weight: 700; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: var(--soft); }
+.opt { display: block; width: 100%; text-align: left; margin: 8px 0; padding: 10px 14px; }
+.opt .reason { display: block; font-size: .9rem; color: var(--muted); font-weight: 400; }
+.opt.rec { border: 2px solid var(--ok); }
+.diagram { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); padding: 8px; margin: 8px 0; }
+.diagram svg { display: block; max-width: none; height: auto; }
+.toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--fg); color: var(--bg);
+  padding: 8px 16px; border-radius: 8px; z-index: 10; max-width: 90vw; }
+.toast:empty { display: none; }
+.sr { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 12px 0; padding: 8px 12px; }
+legend { font-weight: 700; padding: 0 6px; }
+fieldset label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; margin: 4px 12px 4px 0; min-height: 36px; }
+input[type=radio], input[type=checkbox] { width: 20px; height: 20px; }
+@media (max-width: 640px) {
+  .grid2 { grid-template-columns: 1fr; }
+  table.goals thead { display: none; }
+  table.goals, table.goals tbody, table.goals tr, table.goals td { display: block; width: 100%; }
+  table.goals tr { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; }
+  table.goals td { border: none; border-bottom: 1px solid var(--border); }
+  table.goals td::before { content: attr(data-label) "："; font-weight: 700; display: block; color: var(--muted); font-size: .85rem; }
+  .tabs button { flex: 1 1 0; min-width: 0; padding: 6px 4px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>ギルドの画面</h1>
+    <div class="folder" id="folderbar"></div>
+  </div>
+  <div id="connect"></div>
+  <div id="nowbar" role="region" aria-label="いま何をするか"></div>
+  <div class="tabs" id="tabs" role="tablist" aria-label="画面の切り替え"></div>
+  <main id="panels"></main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<noscript><p class="wrap">この画面には JavaScript が必要です。</p></noscript>
+
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- 定数（tests/constants.py と一致させる）
+const TABS = ['受付', 'クエスト', '質問'];
+const QUEST_STATES = ['受付', '分解中', '承認待ち', '進行中', '最終鑑定', '達成', '失敗', '中止', '保留'];
+const GOAL_STATES = ['案', '待機', '冒険中', '鑑定中', '要手直し', '確認待ち', '実行承認待ち', '達成', '失敗', '中止'];
+const QUEST_TERMINAL = ['達成', '失敗', '中止'];
+const GOAL_TERMINAL = ['達成', '中止'];
+const QUEST_LABELS = {
+  '受付': '聞き取り中', '分解中': '計画を作っている', '承認待ち': 'あなたの承認を待っている',
+  '進行中': '進めている', '最終鑑定': '全体を確かめている', '達成': '達成',
+  '失敗': '達成できなかった', '中止': '中止', '保留': '止めている'
+};
+const GOAL_LABELS = {
+  '案': '計画の案', '待機': '順番を待っている', '冒険中': '冒険者が作業している',
+  '鑑定中': '鑑定士が確かめている', '要手直し': '直している', '確認待ち': 'あなたの確認を待っている',
+  '実行承認待ち': 'あなたの実行の承認を待っている', '達成': '達成', '失敗': '達成できなかった', '中止': '中止'
+};
+const HOLDABLE = ['受付', '分解中', '承認待ち', '進行中', '最終鑑定'];
+const FORMS = ['おまかせ', '回答だけ', 'ノート', 'テキスト', 'Word', 'Excel', 'PowerPoint', 'PDF', 'その他'];
+const BAD_REASONS = ['内容が違う', '足りないものがある', '間違いがある', '形式が合わない', 'その他'];
+const LATER = 'あとで決める';
+const APPROVE = '承認する';
+const REDO = 'やり直す';
+const FREE_CHOICE = '自由入力';
+const SCOPE_NAMES = { route: '道のりの承認', output: '納品物の承認', execute: '実行の承認', none: '質問' };
+const POLL_MS = 10000;
+const MAX_FILE = 50 * 1024 * 1024;
+const FOLDER_NAMES = { input: '素材', output: '納品物', 'adventure log': '冒険日誌' };
+
+// ---------------------------------------------------------------- 状態
+const S = {
+  root: null, board: null, raw: '', tab: TABS[0], selQuest: null, selQuestion: null,
+  access: 'none',       // none | prompt | ok
+  error: '', drafts: {}, answered: {}, reopened: {}, pending: {}, pickedFiles: {}, intake: null,
+  dirty: false, timer: null, diagToken: 0
+};
+
+// ---------------------------------------------------------------- DOM 部品（値は textContent で入れる）
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k.startsWith('on')) { if (typeof v === 'function') el.addEventListener(k.slice(2), v); }
+    else if (v === true) el.setAttribute(k, '');
+    else el.setAttribute(k, String(v));
+  }
+  for (const c of kids.flat(Infinity)) {
+    if (c === null || c === undefined || c === false) continue;
+    el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
+function $(id) { return document.getElementById(id); }
+let toastTimer = null;
+function toast(text) {
+  const t = $('toast');
+  t.textContent = text;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.textContent = ''; }, 6000);
+}
+
+// ---------------------------------------------------------------- 日付・文
+function jpDate(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
+  return m ? `${Number(m[2])}月${Number(m[3])}日` : '';
+}
+function jpStamp(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s || '');
+  return m ? `${Number(m[2])}月${Number(m[3])}日 ${m[4]}:${m[5]}` : jpDate(s);
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+function isoNow() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function stampOf(d) {
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+function idNum(id) { return Number(String(id).replace(/\D/g, '')) || 0; }
+function sizeText(n) { return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`; }
+
+// ---------------------------------------------------------------- フォルダ操作
+const SEG_BAD = /[\\/:*?"<>|\x00-\x1f\x7f]/;
+function checkSeg(seg) {
+  if (!seg || seg === '.' || seg === '..' || SEG_BAD.test(seg)) throw new Error(`使えない名前です：${seg}`);
+  return seg;
+}
+async function dirAt(parts, create) {
+  let d = S.root;
+  for (const p of parts) d = await d.getDirectoryHandle(checkSeg(p), { create: !!create });
+  return d;
+}
+async function readText(parts) {
+  const name = parts[parts.length - 1];
+  const d = await dirAt(parts.slice(0, -1), false);
+  const fh = await d.getFileHandle(checkSeg(name));
+  return (await fh.getFile()).text();
+}
+async function fileExists(dir, name) {
+  try { await dir.getFileHandle(name); return true; } catch (e) { return false; }
+}
+async function writeBlob(dir, name, data) {
+  const fh = await dir.getFileHandle(checkSeg(name), { create: true });
+  const w = await fh.createWritable();
+  await w.write(data);
+  await w.close();
+}
+async function writeJson(dir, name, obj) {
+  await writeBlob(dir, name, JSON.stringify(obj, null, 1) + '\n');
+}
+function questDirParts(q) {
+  const parts = String(q.dir || '').split('/');
+  parts.forEach(checkSeg);
+  if (parts.length < 2 || parts[0] !== 'quests') throw new Error('クエストのフォルダが分かりません');
+  return parts;
+}
+
+// 依頼ファイル。名前は R<日時>.json。同名があるときは 1 秒ずつずらす。
+async function reserveRequest(prefix) {
+  const dir = await dirAt(['.system', 'requests'], true);
+  let t = new Date();
+  for (let i = 0; i < 120; i++) {
+    const stamp = stampOf(t);
+    const name = `${prefix}${stamp}.json`;
+    if (!(await fileExists(dir, name))) return { dir, name, stamp };
+    t = new Date(t.getTime() + 1000);
+  }
+  throw new Error('依頼の名前が決まりません');
+}
+async function writeRequest(prefix, obj) {
+  const r = await reserveRequest(prefix);
+  await writeJson(r.dir, r.name, obj);
+  return r.name;
+}
+
+// ---------------------------------------------------------------- ファイル追加の安全
+function checkFileName(file) {
+  const raw = String(file.name || '');
+  if (!raw || raw === '.' || raw === '..') return { error: '名前が空です' };
+  if (/(^|[\\/])\.\.([\\/]|$)/.test(raw) || /^[\\/]/.test(raw) || /^[A-Za-z]:/.test(raw) || /[\\/]/.test(raw)) {
+    return { error: 'パスが入っているため、受け付けません' };
+  }
+  const clean = raw.replace(/[\x00-\x1f\x7f]/g, '').replace(/^[ .]+|[ .]+$/g, '');
+  if (!clean || SEG_BAD.test(clean)) return { error: '使えない文字が入っています' };
+  if (file.size > MAX_FILE) return { error: `${sizeText(MAX_FILE)}を超えています` };
+  if (file.webkitRelativePath && /(^|\/)\.\.(\/|$)/.test(file.webkitRelativePath)) return { error: 'パスが入っているため、受け付けません' };
+  return { name: clean };
+}
+function altName(name, n) {
+  const i = name.lastIndexOf('.');
+  return i > 0 ? `${name.slice(0, i)}-${n}${name.slice(i)}` : `${name}-${n}`;
+}
+async function uniqueName(dir, name) {
+  if (!(await fileExists(dir, name))) return name;
+  for (let n = 2; n < 1000; n++) {
+    const c = altName(name, n);
+    if (!(await fileExists(dir, c))) return c;
+  }
+  throw new Error('保存する名前が決まりません');
+}
+// files を dir に保存する。同名は上書きしない。結果：{saved:[{from,to}], rejected:[{name,error}]}
+async function saveFiles(dir, files) {
+  const out = { saved: [], rejected: [] };
+  for (const f of files) {
+    const c = checkFileName(f);
+    if (c.error) { out.rejected.push({ name: f.name, error: c.error }); continue; }
+    const to = await uniqueName(dir, c.name);
+    await writeBlob(dir, to, f);
+    out.saved.push({ from: f.name, to });
+  }
+  return out;
+}
+function saveReport(res) {
+  const parts = [];
+  if (res.saved.length) {
+    parts.push('保存したファイル：' + res.saved.map(s => s.to).join('、') + '。');
+    const ren = res.saved.filter(s => s.from !== s.to);
+    if (ren.length) parts.push('同じ名前があったため、' + ren.map(s => `${s.from} を ${s.to}`).join('、') + ' として保存した。');
+  }
+  if (res.rejected.length) parts.push('保存しなかったファイル：' + res.rejected.map(r => `${r.name}（${r.error}）`).join('、') + '。');
+  return parts.join('');
+}
+
+// ---------------------------------------------------------------- パス
+function absPath(rel) {
+  const v = S.board && S.board.vault_path;
+  if (!v) return null;
+  const sep = v.includes('\\') && !v.includes('/') ? '\\' : '/';
+  const parts = ['guild'].concat(String(rel).split('/').filter(Boolean));
+  return v.replace(/[\\/]+$/, '') + sep + parts.join(sep);
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* 下の方法に進む */ }
+  const ta = h('textarea', { 'aria-hidden': 'true', class: 'sr' });
+  ta.value = text;
+  document.body.append(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+function pathItem(name, rel) {
+  const full = absPath(rel);
+  return h('span', { class: 'row' },
+    h('span', { text: name }),
+    full ? h('button', {
+      type: 'button', class: 'mini', 'aria-label': `${name}のパスをコピー`,
+      onclick: async () => toast((await copyText(full)) ? 'パスをコピーしました。' : 'コピーできませんでした。')
+    }, 'パスをコピー') : h('span', { class: 'muted small', text: '（パスは未設定）' }));
+}
+
+// ---------------------------------------------------------------- 図（SVG）
+function sanitizeSvg(text) {
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+  const root = doc.documentElement;
+  if (!root || root.localName !== 'svg' || doc.getElementsByTagName('parsererror').length) return null;
+  const badTags = ['script', 'foreignobject', 'iframe', 'object', 'embed', 'style', 'image', 'use', 'a', 'animate', 'set'];
+  const all = Array.from(root.querySelectorAll('*'));
+  for (const el of all) {
+    if (badTags.includes(el.localName.toLowerCase())) { el.remove(); continue; }
+    for (const a of Array.from(el.attributes)) {
+      const n = a.name.toLowerCase();
+      if (n.startsWith('on')) el.removeAttribute(a.name);
+      else if ((n === 'href' || n === 'xlink:href') && !String(a.value).trim().startsWith('#')) el.removeAttribute(a.name);
+    }
+  }
+  for (const a of Array.from(root.attributes)) if (a.name.toLowerCase().startsWith('on')) root.removeAttribute(a.name);
+  const node = document.importNode(root, true);
+  const vb = (node.getAttribute('viewBox') || '').split(/[ ,]+/).map(Number);
+  if (vb.length === 4 && vb[2] > 0) node.style.width = `${vb[2]}px`;
+  node.setAttribute('focusable', 'false');
+  return node;
+}
+function diagramPath(rel) {
+  return /^diagrams\/[A-Za-z0-9._-]+\.svg$/.test(String(rel || '')) ? rel : null;
+}
+// 図と 1 行要約を box に入れる。読めないときは案内を出す。
+async function fillDiagram(box, svgRel, txtRel) {
+  const token = ++S.diagToken;
+  clear(box).append(h('p', { class: 'muted small', text: '図を読み込んでいます。' }));
+  try {
+    const rel = diagramPath(svgRel);
+    if (!rel) throw new Error('図の場所が正しくありません');
+    const node = sanitizeSvg(await readText(['.system', ...rel.split('/')]));
+    if (!node) throw new Error('図を読めません');
+    let sentence = '';
+    if (txtRel) { try { sentence = (await readText(['.system', ...txtRel.split('/')])).trim(); } catch (e) { sentence = ''; } }
+    if (token !== S.diagToken) return;
+    clear(box).append(
+      h('div', { class: 'diagram', tabindex: '0', role: 'group', 'aria-label': '道のりの図（横にスクロールできます）' }, node),
+      sentence ? h('p', { text: sentence }) : null);
+  } catch (e) {
+    if (token !== S.diagToken) return;
+    clear(box).append(h('p', { class: 'muted', text: '道のりの図は、まだありません。' }));
+  }
+}
+
+// ---------------------------------------------------------------- 盤のデータ
+function questList() {
+  return Object.values((S.board && S.board.quests) || {}).sort((a, b) => idNum(a.id) - idNum(b.id));
+}
+function goalOf(id) { return S.board && S.board.goals ? S.board.goals[id] : null; }
+function questOf(id) { return S.board && S.board.quests ? S.board.quests[id] : null; }
+function questTitle(id) { const q = questOf(id); return q ? `${q.id} ${q.title}` : String(id || ''); }
+function unanswered() {
+  const qs = (S.board && S.board.questions) || [];
+  const list = qs.filter(q => (q.status === '未回答' && !S.answered[q.id]) || (S.reopened[q.id] && !S.answered[q.id]));
+  const rank = q => (q.kind === 'approval' ? 0 : q.blocking === false ? 2 : 1);
+  return list.sort((a, b) => rank(a) - rank(b) || String(a.due || '').localeCompare(String(b.due || '')) || idNum(a.id) - idNum(b.id));
+}
+function laterList() {
+  return ((S.board && S.board.questions) || []).filter(q => q.status === '保留' && !S.answered[q.id]);
+}
+function isPending(key, sig) { return Object.prototype.hasOwnProperty.call(S.pending, key) && S.pending[key] === sig; }
+function markPending(key, sig) { S.pending[key] = sig; }
+function questLabel(q) { return QUEST_LABELS[q.status] || q.status; }
+function goalLabel(g) { return GOAL_LABELS[g.status] || g.status; }
+
+// ---------------------------------------------------------------- 画面：先頭の「いま何をするか」
+function computeNow() {
+  const qs = unanswered();
+  const first = qs[0];
+  if (first) {
+    const name = SCOPE_NAMES[first.scope] || '質問';
+    const text = first.kind === 'approval'
+      ? `${name}が待っています：${questTitle(first.quest)}`
+      : `あなたの返事を待っています：${questTitle(first.quest)}（質問 ${qs.length} 件）`;
+    return { text, button: first.kind === 'approval' ? '承認の画面を開く' : '質問に答える',
+      go: () => { S.selQuestion = first.id; setTab('質問'); } };
+  }
+  const check = Object.values((S.board && S.board.goals) || {}).find(g => g.status === '確認待ち' || g.status === '実行承認待ち');
+  if (check) {
+    return { text: `納品物の確認が待っています：${check.title}`, button: '納品物を確認する',
+      go: () => { S.selQuest = check.quest; setTab('クエスト'); } };
+  }
+  const held = questList().find(q => q.status === '保留');
+  if (held) {
+    return { text: `止めているクエストがあります：${held.title}`, button: '再開する画面を開く',
+      go: () => { S.selQuest = held.id; setTab('クエスト'); } };
+  }
+  return { text: 'いま、あなたがすることはありません。', button: '新しい依頼を書く', go: () => setTab('受付') };
+}
+function renderNow() {
+  const box = clear($('nowbar'));
+  if (!S.board) return;
+  const n = computeNow();
+  box.append(h('div', { class: 'now' },
+    h('div', { class: 'line' }, h('p', { text: n.text }), h('button', { type: 'button', class: 'primary', onclick: n.go }, n.button))));
+  const notice = (S.board.notices || []).slice(-1)[0];
+  const stops = [];
+  for (const q of questList()) {
+    if (q.blocked_on === 'client' && !QUEST_TERMINAL.includes(q.status)) stops.push(`クエスト「${q.title}」は、あなたの返事を待っている。`);
+  }
+  const wrap = box.firstChild;
+  if (notice) {
+    const stopIds = (notice.stops || []).map(id => String(id)).join('、');
+    wrap.append(h('p', { class: 'small', text: `知らせ（${jpStamp(notice.time)}）：${notice.text}${stopIds ? `　止まっている質問：${stopIds}` : ''}` }));
+  }
+  if (stops.length) wrap.append(h('ul', { class: 'small' }, stops.slice(0, 3).map(t => h('li', { text: t }))));
+}
+
+// ---------------------------------------------------------------- 画面：タブ
+function renderTabs() {
+  const box = clear($('tabs'));
+  const count = unanswered().length;
+  TABS.forEach(name => {
+    const sel = S.tab === name;
+    const btn = h('button', {
+      type: 'button', role: 'tab', id: `tab-${name}`, 'data-tab': name, 'aria-selected': sel ? 'true' : 'false',
+      'aria-controls': 'panel', tabindex: sel ? '0' : '-1', onclick: () => setTab(name),
+      onkeydown: ev => {
+        const i = TABS.indexOf(name);
+        const j = ev.key === 'ArrowRight' ? (i + 1) % TABS.length : ev.key === 'ArrowLeft' ? (i + TABS.length - 1) % TABS.length : -1;
+        if (j >= 0) { ev.preventDefault(); setTab(TABS[j]); const b = $(`tab-${TABS[j]}`); if (b) b.focus(); }
+      }
+    }, name);
+    if (name === '質問' && count > 0) btn.append(h('span', { class: 'badge', 'aria-label': `未回答 ${count} 件`, text: String(count) }));
+    box.append(btn);
+  });
+}
+function setTab(name) {
+  S.tab = name;
+  render();
+  window.scrollTo(0, 0);
+}
+
+// ---------------------------------------------------------------- 画面：受付
+function renderIntake() {
+  const st = S.intake || (S.intake = { title: '', detail: '', due: '', form: 'おまかせ', files: [], busy: false, result: '' });
+  const err = h('p', { class: 'err', role: 'alert' });
+  const titleIn = h('input', { type: 'text', id: 'in-title', value: st.title, maxlength: '100', required: true,
+    oninput: e => { st.title = e.target.value; } });
+  const detailIn = h('textarea', { id: 'in-detail', oninput: e => { st.detail = e.target.value; } });
+  detailIn.value = st.detail;
+  const dueIn = h('input', { type: 'date', id: 'in-due', value: st.due, oninput: e => { st.due = e.target.value; } });
+  const formIn = h('select', { id: 'in-form', onchange: e => { st.form = e.target.value; } },
+    FORMS.map(f => h('option', { value: f, selected: f === st.form }, f)));
+  const fileList = h('div');
+  const dest = h('p', { class: 'small' }, '保存先：素材（', h('code', { text: 'guild/.system/requests/files/R<送った日時>/' }),
+    '）。クエストができると、素材の置き場に移ります。');
+  const drawFiles = () => {
+    clear(fileList);
+    if (!st.files.length) return;
+    fileList.append(h('ul', {}, st.files.map(f => {
+      const c = checkFileName(f);
+      return h('li', {}, `${f.name}（${sizeText(f.size)}）`, c.error ? h('span', { class: 'err', text: `　保存しない：${c.error}` }) : null);
+    })));
+  };
+  const fileIn = h('input', { type: 'file', id: 'in-files', multiple: true, onchange: e => { st.files = Array.from(e.target.files); drawFiles(); } });
+  drawFiles();
+  const send = h('button', { type: 'submit', class: 'primary', disabled: st.busy }, '依頼を送る');
+  const form = h('form', { onsubmit: async ev => {
+    ev.preventDefault();
+    err.textContent = '';
+    if (!st.title.trim()) { err.textContent = '題名を書いてください。'; titleIn.focus(); return; }
+    send.disabled = true;
+    try {
+      const r = await reserveRequest('R');
+      let saved = [], report = '';
+      if (st.files.length) {
+        const fd = await dirAt(['.system', 'requests', 'files', `R${r.stamp}`], true);
+        const res = await saveFiles(fd, st.files);
+        saved = res.saved.map(s => s.to);
+        report = saveReport(res);
+      }
+      await writeJson(r.dir, r.name, { kind: 'quest', title: st.title.trim(), detail: st.detail.trim(),
+        due: st.due || null, form: st.form, files: saved });
+      st.result = `依頼を送りました。${report}`;
+      S.intake = null;
+      toast('依頼を送りました。');
+      render();
+    } catch (e) {
+      err.textContent = `送れませんでした：${e.message}`;
+      send.disabled = false;
+    }
+  } },
+    h('label', { for: 'in-title' }, '題名（必ず書く）'), titleIn,
+    h('label', { for: 'in-detail' }, '内容'), detailIn,
+    h('div', { class: 'grid2' },
+      h('div', {}, h('label', { for: 'in-due' }, '期限'), dueIn),
+      h('div', {}, h('label', { for: 'in-form' }, '納品物の形'), formIn)),
+    h('label', { for: 'in-files' }, '素材にするファイル（保存先：素材）'), fileIn, dest, fileList,
+    err, h('p', {}, send));
+  const done = st.result ? h('p', { class: 'ok', role: 'status', text: st.result }) : null;
+  if (done) st.result = '';
+  return h('section', { 'aria-labelledby': 'h-intake' },
+    h('h2', { id: 'h-intake' }, '依頼を出す'),
+    h('p', { class: 'muted', text: '依頼を送ると、ギルドが聞き取りを始めます。' }),
+    done, h('div', { class: 'card' }, form));
+}
+
+// ---------------------------------------------------------------- 画面：クエスト
+function renderQuests() {
+  const list = questList();
+  const sec = h('section', { 'aria-labelledby': 'h-quests' }, h('h2', { id: 'h-quests' }, 'クエスト'));
+  sec.append(renderSetting());
+  if (!list.length) { sec.append(h('p', { class: 'muted', text: 'クエストは、まだありません。受付で依頼を出してください。' })); return sec; }
+  if (!S.selQuest || !questOf(S.selQuest)) S.selQuest = (list.find(q => !QUEST_TERMINAL.includes(q.status)) || list[0]).id;
+  const live = list.filter(q => !QUEST_TERMINAL.includes(q.status));
+  const ended = list.filter(q => QUEST_TERMINAL.includes(q.status));
+  const item = q => h('li', {}, h('button', { type: 'button', class: 'qitem', 'aria-current': q.id === S.selQuest ? 'true' : 'false',
+    onclick: () => { S.selQuest = q.id; render(); } },
+    h('strong', { text: `${q.id} ${q.title}` }), ' ', h('span', { class: 'state', text: questLabel(q) }),
+    q.priority === '優先' ? h('span', { class: 'tag', text: ' 優先' }) : null));
+  sec.append(h('ul', { class: 'qlist', 'aria-label': 'クエストの一覧' }, live.map(item)));
+  if (ended.length) sec.append(h('details', {}, h('summary', { text: `終わったクエスト（${ended.length} 件）` }),
+    h('ul', { class: 'qlist' }, ended.map(item))));
+  sec.append(renderQuestDetail(questOf(S.selQuest)));
+  return sec;
+}
+function renderSetting() {
+  const cur = Number(((S.board || {}).limits || {}).max_active) || 4;
+  const key = 'M';
+  const sel = h('select', { id: 'in-max', 'aria-describedby': 'max-help' },
+    [1, 2, 3, 4, 5, 6, 7, 8].map(n => h('option', { value: n, selected: n === (Number(S.drafts.max) || cur) }, String(n))));
+  sel.addEventListener('change', () => { S.drafts.max = Number(sel.value); });
+  const btn = h('button', { type: 'button', disabled: isPending(key, String(cur)), onclick: async () => {
+    try {
+      await writeRequest('M', { kind: 'setting', max_active: Number(sel.value) });
+      markPending(key, String(cur));
+      toast('同時に進める数を送りました。');
+      render();
+    } catch (e) { toast(`送れませんでした：${e.message}`); }
+  } }, isPending(key, String(cur)) ? '送りました' : '数を変える');
+  return h('div', { class: 'card' },
+    h('label', { for: 'in-max' }, `同時に進める数（いま ${cur}）`),
+    h('div', { class: 'row' }, sel, btn),
+    h('p', { id: 'max-help', class: 'muted small', text: '1 から 8 まで選べます。数を増やすと、同時に進む達成条件が増えます。' }));
+}
+function actionButton(label, key, sig, run, cls) {
+  const pend = isPending(key, sig);
+  return h('button', { type: 'button', class: cls || null, disabled: pend, onclick: async () => {
+    try { await run(); markPending(key, sig); render(); } catch (e) { toast(`送れませんでした：${e.message}`); }
+  } }, pend ? `${label}（送りました）` : label);
+}
+function renderQuestDetail(q) {
+  const box = h('div', { class: 'card', role: 'region', 'aria-label': `クエスト ${q.title} の詳しい様子` });
+  box.append(h('h2', {}, `${q.id} ${q.title}`),
+    h('p', {}, h('span', { class: 'state', text: questLabel(q) }),
+      q.priority === '優先' ? h('span', { class: 'tag', text: ' 優先' }) : null,
+      q.due ? ` 期限：${jpDate(q.due)}` : ''),
+    q.blocked_on === 'client' ? h('p', { class: 'warn', text: 'あなたの返事を待っています。質問の画面を開いてください。' }) : null,
+    q.detail ? h('p', { text: q.detail }) : null);
+  // 操作
+  const acts = h('div', { class: 'row' });
+  const ended = QUEST_TERMINAL.includes(q.status);
+  if (!ended) {
+    const toPri = q.priority === '優先' ? '通常' : '優先';
+    acts.append(actionButton(toPri === '優先' ? '優先にする' : '通常に戻す', `P:${q.id}`, q.priority || '通常',
+      () => writeRequest('P', { kind: 'priority', quest: q.id, priority: toPri })));
+    if (q.status === '保留') {
+      acts.append(actionButton('再開する', `H:${q.id}`, q.status, () => writeRequest('H', { kind: 'hold', quest: q.id, action: 'resume' })));
+    } else if (HOLDABLE.includes(q.status)) {
+      acts.append(actionButton('止める', `H:${q.id}`, q.status, () => writeRequest('H', { kind: 'hold', quest: q.id, action: 'hold' })));
+    }
+    if (q.status === '進行中') {
+      acts.append(actionButton('最終鑑定を頼む', `W:${q.id}`, q.status, () => writeRequest('W', { kind: 'final_review', quest: q.id })));
+    }
+    acts.append(actionButton('取り下げる', `C:${q.id}`, q.status, async () => {
+      if (!window.confirm(`クエスト「${q.title}」を取り下げます。取り下げたあとは、続けられません。取り下げますか？`)) throw new Error('取り下げをやめました');
+      await writeRequest('C', { kind: 'cancel', quest: q.id });
+    }, 'danger'));
+    box.append(acts, h('p', { class: 'muted small', text: '最終鑑定では、鑑定士が達成条件どうしの矛盾を確かめます。時間と費用が増えます。' }));
+  }
+  // 道のり図
+  box.append(h('h3', {}, '道のり'));
+  const diag = h('div');
+  box.append(diag);
+  fillDiagram(diag, `diagrams/route-${q.id}.svg`, `diagrams/route-${q.id}.txt`);
+  // 達成条件の表
+  box.append(h('h3', {}, '達成条件'), renderGoals(q));
+  // 場所
+  box.append(h('h3', {}, '場所'));
+  const places = [['素材', 'input'], ['納品物', 'output'], ['冒険日誌', 'adventure log']];
+  box.append(h('ul', {}, places.map(([name, sub]) => h('li', {}, pathItem(name, `${q.dir}/${sub}`))),
+    h('li', {}, pathItem('クエスト票', `${q.dir}/quest.md`))));
+  box.append(renderUpload(q));
+  return box;
+}
+function outputsOf(q, g) {
+  const op = g.output_path || [];
+  return (Array.isArray(op) ? op : [op]).filter(Boolean).map(p => ({ name: String(p).split('/').pop(), rel: `${q.dir}/${p}` }));
+}
+function renderGoals(q) {
+  const ids = (q.route && q.route.length ? q.route : []).concat((q.goals || []).filter(id => !(q.route || []).includes(id)));
+  const goals = ids.map(goalOf).filter(Boolean);
+  if (!goals.length) return h('p', { class: 'muted', text: '達成条件は、まだありません。計画ができると、ここに出ます。' });
+  const body = h('tbody');
+  goals.forEach((g, i) => {
+    const outs = outputsOf(q, g);
+    const open = !GOAL_TERMINAL.includes(g.status) && g.status !== '失敗';
+    const careful = Object.prototype.hasOwnProperty.call(S.pending, `G:${g.id}`) && S.pending[`G:${g.id}`].sig === g.effort
+      ? S.pending[`G:${g.id}`].value : g.effort === '高';
+    const carefulBtn = open ? h('div', {}, h('button', { type: 'button', class: 'mini', 'aria-pressed': careful ? 'true' : 'false',
+      'aria-describedby': `care-${g.id}`, onclick: async () => {
+        try {
+          await writeRequest('G', { kind: 'goal_setting', goal: g.id, careful: !careful });
+          S.pending[`G:${g.id}`] = { sig: g.effort, value: !careful };
+          render();
+        } catch (e) { toast(`送れませんでした：${e.message}`); }
+      } }, careful ? '念入りに作る：オン' : '念入りに作る：オフ'),
+      h('span', { id: `care-${g.id}`, class: 'muted small', text: ' 念入りに作ると、時間と費用が増えます。品質は上がります。' })) : null;
+    body.append(h('tr', {},
+      h('td', { 'data-label': '順', text: String(i + 1) }),
+      h('td', { 'data-label': '達成条件' }, h('strong', { text: g.title }),
+        h('ul', { class: 'small' }, (g.done_when || []).map(t => h('li', { text: t }))), carefulBtn),
+      h('td', { 'data-label': '締切', text: g.deadline ? jpDate(g.deadline) : 'なし' }),
+      h('td', { 'data-label': 'いまの様子' }, goalLabel(g), g.blocked_on === 'client' ? '（あなたの返事を待っている）' : ''),
+      h('td', { 'data-label': '納品物' }, outs.length ? outs.map(o => h('div', {}, pathItem(o.name, o.rel))) : h('span', { class: 'muted', text: 'まだありません' }))));
+  });
+  return h('table', { class: 'goals' }, h('caption', { class: 'sr', text: '達成条件の表' }),
+    h('thead', {}, h('tr', {}, ['順', '達成条件', '締切', 'いまの様子', '納品物'].map(t => h('th', { scope: 'col', text: t })))), body);
+}
+function renderUpload(q) {
+  const picked = S.pickedFiles[q.id] || [];
+  const box = h('div');
+  const fileIn = h('input', { type: 'file', id: `up-${q.id}`, multiple: true, onchange: e => { S.pickedFiles[q.id] = Array.from(e.target.files); render(); } });
+  let destText = '';
+  try { destText = `guild/${questDirParts(q).join('/')}/input/`; } catch (e) { destText = ''; }
+  box.append(h('h3', {}, '素材を足す'),
+    h('label', { for: `up-${q.id}` }, 'ファイルを選ぶ（保存先：素材）'), fileIn);
+  if (picked.length) {
+    box.append(h('p', {}, '保存先：素材（', h('code', { text: destText }), '）'),
+      h('ul', {}, picked.map(f => { const c = checkFileName(f); return h('li', {}, `${f.name}（${sizeText(f.size)}）`,
+        c.error ? h('span', { class: 'err', text: `　保存しない：${c.error}` }) : null); })));
+    const msg = h('p', { role: 'status' });
+    const btn = h('button', { type: 'button', class: 'primary', onclick: async () => {
+      btn.disabled = true;
+      try {
+        const dir = await dirAt([...questDirParts(q), 'input'], true);
+        const res = await saveFiles(dir, picked);
+        if (res.saved.length) await writeRequest('U', { kind: 'upload', quest: q.id, target: 'input', files: res.saved.map(s => s.to) });
+        S.pickedFiles[q.id] = [];
+        toast(saveReport(res) || '保存できるファイルがありませんでした。');
+        render();
+      } catch (e) { msg.textContent = `保存できませんでした：${e.message}`; btn.disabled = false; }
+    } }, '素材に保存する');
+    box.append(h('p', {}, btn), msg);
+  }
+  return box;
+}
+
+// ---------------------------------------------------------------- 画面：質問
+function dueText(q) {
+  const d = q.due ? `期限：${jpDate(q.due)}。` : '';
+  if (q.kind === 'approval') return `${d}承認は、自動では進みません。期限が来ると、承認待ちと知らせます。`;
+  if (q.default) return `${d}期限が来たときは、推奨案「${q.default}」で進みます。`;
+  return `${d}推奨案がないため、期限が来ても進みません。`;
+}
+function renderQuestions() {
+  const sec = h('section', { 'aria-labelledby': 'h-q' }, h('h2', { id: 'h-q' }, '質問'));
+  // 答えたばかりのもの
+  for (const [id, a] of Object.entries(S.answered)) {
+    sec.append(h('div', { class: 'card', role: 'status' },
+      h('span', { class: 'ok', text: `あなたの選択：${a.label}` }), ` （${a.text}）　`,
+      h('button', { type: 'button', class: 'mini', onclick: () => reopen(id) }, a.label === LATER ? '選び直す' : '取り消す')));
+  }
+  const list = unanswered();
+  if (!list.length) {
+    sec.append(h('p', { class: 'muted', text: '答える質問は、いまありません。' }));
+  } else {
+    let idx = list.findIndex(q => q.id === S.selQuestion);
+    if (idx < 0) idx = 0;
+    S.selQuestion = list[idx].id;
+    const nav = h('div', { class: 'row' }, h('span', { class: 'muted', text: `${list.length} 件中 ${idx + 1} 件目` }),
+      list.length > 1 ? h('button', { type: 'button', class: 'mini', onclick: () => { S.selQuestion = list[(idx + 1) % list.length].id; render(); } }, '次の質問') : null);
+    sec.append(nav, renderOneQuestion(list[idx]));
+  }
+  const later = laterList();
+  if (later.length) {
+    sec.append(h('h3', {}, 'あとで決める質問'),
+      h('ul', {}, later.map(q => h('li', {}, `${q.text}　`,
+        h('button', { type: 'button', class: 'mini', onclick: () => reopen(q.id) }, '選び直す')))));
+  }
+  return sec;
+}
+function renderOneQuestion(q) {
+  const scope = q.scope || 'none';
+  const draft = S.drafts[q.id] || (S.drafts[q.id] = { comment: '', score: '', reason: BAD_REASONS[0] });
+  const box = h('div', { class: 'card', role: 'group', 'aria-labelledby': `qh-${q.id}` });
+  box.append(h('h3', { id: `qh-${q.id}` }, `${SCOPE_NAMES[scope] || '質問'}：${questTitle(q.quest)}`),
+    q.goal && goalOf(q.goal) ? h('p', { class: 'muted', text: `達成条件：${goalOf(q.goal).title}` }) : null,
+    h('p', { text: q.text }));
+  if (scope === 'route' || q.diagram) {
+    const d = h('div');
+    box.append(d);
+    fillDiagram(d, q.diagram || `diagrams/route-${q.quest}.svg`, `diagrams/route-${q.quest}.txt`);
+  }
+  if (scope === 'output' || scope === 'execute') box.append(renderCovered(q, scope));
+  if (scope === 'execute') box.append(h('p', { class: 'warn', text: '元に戻せない操作です。内容を確かめてから、答えてください。' }));
+  box.append(h('p', { class: 'muted small', text: dueText(q) }));
+  const comment = h('textarea', { id: `c-${q.id}`, oninput: e => { draft.comment = e.target.value; } });
+  comment.value = draft.comment;
+  const err = h('p', { class: 'err', role: 'alert' });
+  const answer = async (choice, extra) => {
+    err.textContent = '';
+    try { await submitAnswer(q, choice, draft, extra); } catch (e) { err.textContent = `送れませんでした：${e.message}`; }
+  };
+  if (q.kind === 'approval') {
+    if (scope === 'output') box.append(renderEvaluation(q, draft));
+    box.append(h('label', { for: `c-${q.id}` }, scope === 'output' ? '一言（空でもかまいません）' : 'やり直す点・一言（空でもかまいません）'), comment);
+    box.append(h('div', { class: 'row' },
+      h('button', { type: 'button', class: 'primary', onclick: () => {
+        if (scope === 'execute' && !window.confirm('元に戻せない操作を承認します。よろしいですか？')) return;
+        answer(APPROVE);
+      } }, APPROVE),
+      h('button', { type: 'button', onclick: () => answer(REDO) }, REDO),
+      h('button', { type: 'button', onclick: () => answer(LATER) }, LATER)));
+  } else {
+    const opts = (q.options || []).slice(0, 4);
+    if (opts.length) {
+      box.append(h('div', { role: 'group', 'aria-label': '選択肢' }, opts.map(o => h('button', {
+        type: 'button', class: o.recommended ? 'opt rec' : 'opt', onclick: () => answer(o.label) },
+        h('strong', { text: o.label }), o.recommended ? h('span', { class: 'tag', text: ' 推奨' }) : null,
+        o.reason ? h('span', { class: 'reason', text: o.reason }) : null))));
+    }
+    box.append(h('label', { for: `c-${q.id}` }, opts.length ? '自由に書く（選択肢に足す一言にも使えます）' : '答えを書く'), comment);
+    box.append(h('div', { class: 'row' },
+      h('button', { type: 'button', class: opts.length ? null : 'primary', onclick: () => {
+        if (!draft.comment.trim()) { err.textContent = '答えを書いてください。'; comment.focus(); return; }
+        answer(FREE_CHOICE);
+      } }, '書いた内容で答える'),
+      h('button', { type: 'button', onclick: () => answer(LATER) }, LATER)));
+  }
+  box.append(err);
+  return box;
+}
+function renderCovered(q, scope) {
+  const ids = (q.covers && q.covers.length ? q.covers : [q.goal]).filter(id => id && goalOf(id));
+  if (!ids.length) return h('span');
+  const quest = questOf(q.quest);
+  return h('div', {}, h('p', { class: 'label', text: scope === 'output' ? '達成条件ごとの結果' : '実行する内容' }),
+    h('ul', {}, ids.map(id => {
+      const g = goalOf(id);
+      const outs = quest ? outputsOf(quest, g) : [];
+      return h('li', {}, h('strong', { text: g.title }), '　', goalLabel(g),
+        h('ul', { class: 'small' }, (g.done_when || []).map(t => h('li', { text: t }))),
+        outs.map(o => h('div', {}, pathItem(o.name, o.rel))));
+    })));
+}
+function renderEvaluation(q, draft) {
+  const radio = (value, label) => h('label', {}, h('input', { type: 'radio', name: `sc-${q.id}`, value, checked: draft.score === value,
+    onchange: () => { draft.score = value; render(); } }), label);
+  const fs = h('fieldset', {}, h('legend', { text: '納品物の評価（付けなくてもかまいません）' }),
+    radio('good', 'good'), radio('bad', 'bad'), radio('', '付けない'));
+  if (draft.score === 'bad') {
+    fs.append(h('label', { for: `r-${q.id}` }, 'bad の理由'),
+      h('select', { id: `r-${q.id}`, onchange: e => { draft.reason = e.target.value; } },
+        BAD_REASONS.map(r => h('option', { value: r, selected: r === draft.reason }, r))));
+  }
+  return fs;
+}
+async function submitAnswer(q, choice, draft) {
+  if (!/^A\d+$/.test(String(q.id))) throw new Error('質問の番号が正しくありません');
+  const comment = (draft.comment || '').trim();
+  const covers = q.covers && q.covers.length ? q.covers : [q.goal || q.quest];
+  const rec = { question: q.id, quest: q.quest, goal: q.goal || null, covers, scope: q.scope || 'none', choice,
+    comment, time: isoNow(), consumed: false, auto: false };
+  const dir = await dirAt(['.system', 'answers'], true);
+  await writeJson(dir, `${q.id}.json`, rec);
+  if (q.scope === 'output' && choice === APPROVE && (draft.score === 'good' || draft.score === 'bad')) {
+    const goals = covers.filter(id => String(id).startsWith('G'));
+    for (const g of (goals.length ? goals : [q.goal]).filter(Boolean)) {
+      await writeRequest('E', { kind: 'evaluation', quest: q.quest, goal: g, score: draft.score,
+        reason: draft.score === 'bad' ? draft.reason || '' : '', comment });
+    }
+  }
+  S.answered[q.id] = { label: choice === FREE_CHOICE ? `自由入力（${comment}）` : choice, text: String(q.text).slice(0, 30), at: Date.now() };
+  delete S.reopened[q.id];
+  delete S.drafts[q.id];
+  render();
+}
+async function reopen(id) {
+  try {
+    if (!/^A\d+$/.test(String(id))) throw new Error('質問の番号が正しくありません');
+    const dir = await dirAt(['.system', 'answers'], true);
+    await writeJson(dir, `${id}.json`, { question: id, reopen: true });
+    delete S.answered[id];
+    S.reopened[id] = true;
+    S.selQuestion = id;
+    toast('選び直せます。質問の画面に戻しました。');
+    render();
+  } catch (e) { toast(`戻せませんでした：${e.message}`); }
+}
+
+// ---------------------------------------------------------------- 画面：全体
+function renderFolder() {
+  const bar = clear($('folderbar'));
+  if (S.root) bar.append(h('span', { class: 'muted', text: `フォルダ：${S.root.name}` }));
+  if (S.root) bar.append(h('button', { type: 'button', class: 'mini', onclick: pickFolder }, 'フォルダを選び直す'));
+}
+function renderConnect() {
+  const box = clear($('connect'));
+  if (typeof window.showDirectoryPicker !== 'function') {
+    box.append(h('div', { class: 'card', role: 'alert' }, h('h2', {}, 'このブラウザでは使えません'),
+      h('p', { text: 'Microsoft Edge または Google Chrome で、この画面を開いてください。' }),
+      h('p', { class: 'muted', text: 'フォルダの読み書きに、ブラウザの機能を使うためです。' })));
+    return false;
+  }
+  if (S.access === 'ok') {
+    if (S.error) box.append(h('p', { class: 'warn', role: 'status', text: S.error }));
+    return true;
+  }
+  const card = h('div', { class: 'card' }, h('h2', {}, 'ギルドのフォルダを開く'),
+    h('p', { text: 'ギルドの guild フォルダを選んでください。画面は、そのフォルダを読み書きします。' }));
+  if (S.access === 'prompt') {
+    card.append(h('p', { text: '前に選んだフォルダがあります。もう一度、許可してください。' }),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'primary', onclick: regrant }, '前のフォルダを許可する'),
+        h('button', { type: 'button', onclick: pickFolder }, '別のフォルダを選ぶ')));
+  } else {
+    card.append(h('button', { type: 'button', class: 'primary', onclick: pickFolder }, 'フォルダを選ぶ'));
+  }
+  if (S.error) card.append(h('p', { class: 'err', role: 'alert', text: S.error }));
+  box.append(card);
+  return false;
+}
+function render() {
+  renderFolder();
+  const connected = renderConnect();
+  const panels = clear($('panels'));
+  if (!connected || !S.board) { clear($('nowbar')); clear($('tabs')); return; }
+  renderNow();
+  renderTabs();
+  const body = S.tab === '受付' ? renderIntake() : S.tab === 'クエスト' ? renderQuests() : renderQuestions();
+  panels.append(h('div', { id: 'panel', role: 'tabpanel', 'aria-labelledby': `tab-${S.tab}` }, body));
+}
+function isTyping() {
+  const a = document.activeElement;
+  return !!a && ['TEXTAREA', 'INPUT', 'SELECT'].includes(a.tagName) && !!$('panels').contains(a);
+}
+
+// ---------------------------------------------------------------- 読み込みと接続
+async function loadBoard() {
+  if (!S.root) return;
+  try {
+    const raw = await readText(['.system', 'board.json']);
+    S.error = '';
+    if (raw === S.raw) { return; }
+    const data = JSON.parse(raw);
+    S.raw = raw;
+    S.board = data;
+    for (const q of data.questions || []) {
+      if (q.status === '未回答') delete S.reopened[q.id];
+    }
+    for (const [id, a] of Object.entries(S.answered)) if (Date.now() - a.at > 600000) delete S.answered[id];
+    if (isTyping()) { S.dirty = true; renderNow(); renderTabs(); return; }
+    render();
+  } catch (e) {
+    S.error = S.board ? '盤を読み直せませんでした。10 秒後に、もう一度読みます。'
+      : 'このフォルダには、ギルドの盤（board.json）がありません。guild フォルダを選んでください。';
+    if (!S.board) S.access = 'prompt';
+    render();
+  }
+}
+function startPolling() {
+  clearInterval(S.timer);
+  S.timer = setInterval(loadBoard, POLL_MS);
+}
+async function openRoot(handle) {
+  S.root = handle;
+  S.board = null;
+  S.raw = '';
+  S.access = 'ok';
+  S.error = '';
+  await loadBoard();
+  if (S.board) startPolling();
+}
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('guild-board', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function kvGet(key) {
+  const db = await idb();
+  return new Promise((res, rej) => { const r = db.transaction('kv').objectStore('kv').get(key); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+}
+async function kvSet(key, val) {
+  const db = await idb();
+  return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(val, key); t.oncomplete = () => res(); t.onerror = () => rej(t.error); });
+}
+async function pickFolder() {
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'guild-folder' });
+    try { await kvSet('root', handle); } catch (e) { /* 保存できなくても使える */ }
+    await openRoot(handle);
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+    S.error = `フォルダを開けませんでした：${e.message}`;
+    render();
+  }
+}
+async function regrant() {
+  try {
+    const handle = S.root || await kvGet('root');
+    if (!handle) return pickFolder();
+    const p = await handle.requestPermission({ mode: 'readwrite' });
+    if (p !== 'granted') { S.error = '許可されませんでした。もう一度、許可するか、フォルダを選び直してください。'; render(); return; }
+    await openRoot(handle);
+  } catch (e) {
+    S.error = `フォルダを開けませんでした：${e.message}`;
+    render();
+  }
+}
+async function init() {
+  document.addEventListener('focusout', () => {
+    if (S.dirty) setTimeout(() => { if (S.dirty && !isTyping()) { S.dirty = false; render(); } }, 300);
+  });
+  if (typeof window.showDirectoryPicker !== 'function') { render(); return; }
+  try {
+    const handle = await kvGet('root');
+    if (handle) {
+      S.root = handle;
+      const p = await handle.queryPermission({ mode: 'readwrite' });
+      if (p === 'granted') { await openRoot(handle); return; }
+      S.access = 'prompt';
+    }
+  } catch (e) { S.root = null; }
+  render();
+}
+init();
+</script>
+</body>
+</html>
