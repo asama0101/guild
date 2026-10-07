@@ -10,7 +10,7 @@ vault の中に `guild/` を作り、guild を使える状態にする。**何�
 
 ## 手順
 1. **場所を決める**。引数があれば、それが vault。なければ、いまのフォルダを vault とみなす。`<vault>/guild/` が作る場所（`<GUILD>`）。絶対パスにする。
-2. **Python を探す**。`python3`・`python`・`py -3` の順に、`--version` が 3.9 以上で動くものを探す。見つからなければ、Python 3.9 以上を入れるよう依頼主に伝えて終わる。見つけたものの**絶対パス**を使う。
+2. **Python を探す**。`python3`・`python`・`py -3` の順に、`--version` が 3.9 以上で動くものを探す。見つからなければ、Python 3.9 以上を入れるよう依頼主に伝えて終わる。見つけたものの**絶対パス**を使う。確実な取り方は、見つけた Python 自身に `-c "import sys; print(sys.executable)"` を実行させること。Windows では `C:\...` の形のパスにする（Git Bash の `/c/...` 形式は、`guild-run.py` やスケジューラから使えない）。`WindowsApps` の下にある `python`（ストアへの案内だけの実行ファイル）は、`--version` が動かなければ使わない。
 3. **フォルダを作る**。次を、なければ作る：`<GUILD>/quests/`・`shared/`・`templates/`・`spellbook/`・`.system/`（その下の `auto/` も）。
 4. **プラグイン側のファイルを写す**（上書きしてよい。プラグインの更新に追随するため）。`${CLAUDE_PLUGIN_ROOT}` はプラグインのフォルダ。
    - `${CLAUDE_PLUGIN_ROOT}/skills/quest/board.py` → `<GUILD>/.system/board.py`
