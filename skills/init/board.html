@@ -5,114 +5,231 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:,">
-<title>ギルドの画面</title>
+<title>ギルドの掲示板</title>
 <style>
+/* 色：紙 / 面 / 墨 / 濃い灰の帯 / えんじ / 金 / 状態色 5 つ。文字：本文は游ゴシック系、見出しだけ明朝系（システム書体） */
 :root {
-  --bg: #f4f6f8; --card: #ffffff; --fg: #1b1f24; --muted: #4f5762; --border: #aab2bc;
-  --accent: #0b57d0; --accent-fg: #ffffff; --danger: #a8201a; --ok: #146c2e;
-  --warn-bg: #fff3d6; --warn-fg: #4a3200; --focus: #b35900; --soft: #e8eef8;
+  --bg: #f7f5f0; --panel: #ffffff; --ink: #2b2b2b; --muted: #5f5f5f; --line: #dcd7cc; --soft: #f1eee7; --rule: #e6e2d8;
+  --band: #3d3d3d; --band-ink: #ffffff; --accent: #3d3d3d; --accent-ink: #ffffff; --ask: #8a3b3b; --gold: #b8862b; --stop: #b00020;
+  --s-wait: #6f6a60; --s-go: #2f5d8a; --s-ask: #8a3b3b; --s-done: #2f6b3e; --s-fix: #a8610f; --s-fail: #b00020;
+  --sans: "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --serif: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", serif;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171b; --card: #1e2329; --fg: #eceff3; --muted: #b0b8c2; --border: #5a636e;
-    --accent: #8ab4f8; --accent-fg: #0b1220; --danger: #ff8b84; --ok: #7fd99a;
-    --warn-bg: #3b3012; --warn-fg: #ffe9a8; --focus: #ffb454; --soft: #263042;
+  :root:not([data-theme="light"]) {
+    --bg: #1b1b1a; --panel: #252524; --ink: #ecebe8; --muted: #a9a7a2; --line: #3a3936; --soft: #2c2c2a; --rule: #3a3936;
+    --band: #2a2a2a; --band-ink: #ecebe8; --accent: #d9d6cf; --accent-ink: #1b1b1a; --ask: #d98c8c; --gold: #e0b45a; --stop: #ff8a80;
+    --s-wait: #8c8576; --s-go: #3f78bd; --s-ask: #b26565; --s-done: #3e8f5c; --s-fix: #b9731d; --s-fail: #c9453a; color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #1b1b1a; --panel: #252524; --ink: #ecebe8; --muted: #a9a7a2; --line: #3a3936; --soft: #2c2c2a; --rule: #3a3936;
+  --band: #2a2a2a; --band-ink: #ecebe8; --accent: #d9d6cf; --accent-ink: #1b1b1a; --ask: #d98c8c; --gold: #e0b45a; --stop: #ff8a80;
+  --s-wait: #8c8576; --s-go: #3f78bd; --s-ask: #b26565; --s-done: #3e8f5c; --s-fix: #b9731d; --s-fail: #c9453a; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--fg); line-height: 1.7;
-  font-family: "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; font-size: 16px; }
-.wrap { max-width: 960px; margin: 0 auto; padding: 16px; }
-h1 { font-size: 1.35rem; margin: 0; }
-h2 { font-size: 1.15rem; margin: 0 0 8px; }
-h3 { font-size: 1.02rem; margin: 16px 0 6px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.6; font-size: 14px; }
+#app *, .toast { min-width: 0; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+h2 { margin: 0 0 10px; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--serif); letter-spacing: .06em; }
+h3 { margin: 14px 0 6px; font-size: .95rem; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
 p { margin: 6px 0; }
-code { background: var(--soft); padding: 1px 5px; border-radius: 4px; word-break: break-all; font-size: .92em; }
-.muted { color: var(--muted); }
-.small { font-size: .88rem; }
-.head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; justify-content: space-between; margin-bottom: 12px; }
-.folder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .9rem; }
-button, select, input, textarea { font: inherit; color: inherit; }
-button { min-height: 44px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--card); cursor: pointer; }
-button:hover:not(:disabled) { border-color: var(--accent); }
+code { background: var(--soft); padding: 1px 5px; border-radius: 3px; word-break: break-all; font-size: .92em; }
+button { font: inherit; cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); border-radius: 4px; padding: 7px 14px; min-height: 40px; }
 button:disabled { opacity: .55; cursor: not-allowed; }
-button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 700; }
-button.danger { color: var(--danger); border-color: var(--danger); }
-button.mini { min-height: 36px; padding: 2px 10px; font-size: .88rem; }
-button[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); font-weight: 700; }
-:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-input[type=text], input[type=date], select, textarea { width: 100%; min-height: 44px; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
-textarea { min-height: 88px; resize: vertical; }
-label, .label { display: block; font-weight: 700; margin: 12px 0 4px; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 12px 0; }
-.now { border: 2px solid var(--accent); background: var(--card); border-radius: 12px; padding: 12px 16px; margin: 0 0 12px; }
-.now .line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; justify-content: space-between; }
-.now .line p { margin: 0; font-weight: 700; flex: 1 1 240px; }
-.now ul { margin: 8px 0 0; padding-left: 20px; }
-.warn { background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
-.err { color: var(--danger); font-weight: 700; }
-.ok { color: var(--ok); font-weight: 700; }
-.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin: 12px 0; flex-wrap: wrap; }
-.tabs button { border-radius: 8px 8px 0 0; border-bottom: none; min-width: 96px; font-weight: 700; }
-.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-.badge { display: inline-block; min-width: 1.6em; padding: 0 6px; margin-left: 6px; border-radius: 99px;
-  background: var(--danger); color: #fff; font-size: .82rem; text-align: center; }
-.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.grid2 { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
-.qlist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
-.qitem { width: 100%; text-align: left; display: block; }
-.qitem[aria-current="true"] { border: 2px solid var(--accent); background: var(--soft); }
-.state { display: inline-block; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: .88rem; background: var(--soft); }
-.tag { display: inline-block; padding: 0 6px; border: 1px solid var(--ok); color: var(--ok); border-radius: 6px; font-size: .82rem; font-weight: 700; }
-table { border-collapse: collapse; width: 100%; }
-th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
-th { background: var(--soft); }
-.opt { display: block; width: 100%; text-align: left; margin: 8px 0; padding: 10px 14px; }
-.opt .reason { display: block; font-size: .9rem; color: var(--muted); font-weight: 400; }
-.opt.rec { border: 2px solid var(--ok); }
-.diagram { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); padding: 8px; margin: 8px 0; }
-.diagram svg { display: block; max-width: none; height: auto; }
-.toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--fg); color: var(--bg);
-  padding: 8px 16px; border-radius: 8px; z-index: 10; max-width: 90vw; }
-.toast:empty { display: none; }
+button.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+button.ghost:hover:not(:disabled) { border-color: var(--accent); }
+button.danger { color: var(--stop); border-color: var(--stop); background: transparent; }
+button.sm { padding: 3px 10px; font-size: .8rem; min-height: 34px; }
+button[aria-pressed="true"].ghost { border: 2px solid var(--accent); padding-block: 2px; font-weight: bold; }
+input, select, textarea { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; width: 100%; min-height: 40px; }
+textarea { min-height: 64px; resize: vertical; }
+input[type=radio], input[type=checkbox] { width: 18px; height: 18px; min-height: 0; padding: 0; }
+label { display: block; font-size: .8rem; color: var(--muted); margin: 0 0 3px; }
+.muted { color: var(--muted); font-size: .85rem; }
+.note { font-size: .8rem; color: var(--muted); }
+.err { color: var(--stop); font-weight: bold; font-size: .88rem; }
+.ok { color: var(--s-done); font-weight: bold; }
+.warn { border: 1px solid var(--s-fix); border-left-width: 4px; border-radius: 4px; padding: 6px 10px; background: var(--soft); }
 .sr { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
-fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 12px 0; padding: 8px 12px; }
-legend { font-weight: 700; padding: 0 6px; }
-fieldset label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; margin: 4px 12px 4px 0; min-height: 36px; }
-input[type=radio], input[type=checkbox] { width: 20px; height: 20px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: .88rem; vertical-align: top; }
+th { color: var(--muted); font-weight: normal; font-size: .8rem; }
+.scroll { overflow-x: auto; }
+.row { display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; }
+
+/* 帯・タブ */
+.band { position: sticky; top: 0; z-index: 5; background: var(--band); color: var(--band-ink); display: flex; align-items: center; gap: 4px 16px; padding: 0 var(--gut); min-height: 56px; flex-wrap: wrap; }
+.band .brand { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; padding-block: 8px; }
+.band .brand small { font-size: .72rem; letter-spacing: .2em; opacity: .75; }
+.band .brand b { font-size: 1.4rem; letter-spacing: .04em; font-family: var(--serif); }
+.tabs { display: flex; align-self: stretch; flex-wrap: wrap; }
+.tabs button { background: transparent; color: inherit; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 0 14px; opacity: .78; display: flex; align-items: center; gap: 6px; min-height: 44px; }
+.tabs button:hover:not(:disabled) { opacity: 1; }
+.tabs button[aria-selected="true"] { opacity: 1; border-bottom-color: currentColor; font-weight: bold; }
+.tabs button:disabled { opacity: .4; }
+.upd { margin-left: auto; font-size: .8rem; opacity: .9; }
+.nb { background: #c62828; color: #fff; border-radius: 10px; min-width: 20px; padding: 0 6px; font-size: .75rem; font-weight: bold; text-align: center; box-shadow: 0 0 0 1px #fff; font-family: var(--sans); letter-spacing: 0; line-height: 1.5; }
+.nb.new { background: #fff; color: #8a3b3b; box-shadow: 0 0 0 1px #8a3b3b; }
+.nb.zero { background: var(--soft); color: var(--muted); box-shadow: 0 0 0 1px var(--line); }
+.nowbar { padding: 10px var(--gut); background: var(--soft); border-bottom: 1px solid var(--line); }
+.nowbar .head { display: flex; gap: 6px 12px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+.nowbar .head b { font-size: .95rem; display: flex; gap: 8px; align-items: center; }
+.nowbar .last { font-size: .8rem; color: var(--muted); }
+.nowbar .it { display: flex; gap: 6px 10px; align-items: center; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.nowbar .it > span:first-child { flex: 1 1 260px; }
+.body { padding: 18px var(--gut) 40px; display: flex; flex-direction: column; gap: 16px; }
+:root { --gut: max(24px, calc((100vw - 1280px) / 2)); }
+
+/* 面・札・カード */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 14px 18px; }
+.panel.top { border-top: 3px solid var(--accent); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px; align-items: start; }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 10px; }
+.field { display: flex; flex-direction: column; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: .75rem; border-radius: 3px; padding: 1px 8px; color: #fff; white-space: nowrap; }
+.badge::before { content: ""; width: .6em; height: .6em; background: #fff; opacity: .95; }
+.st-wait { background: var(--s-wait); }
+.st-go { background: var(--s-go); } .st-go::before { border-radius: 50%; }
+.st-ask { background: var(--s-ask); } .st-ask::before { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.st-done { background: var(--s-done); } .st-done::before { clip-path: polygon(0 50%, 35% 90%, 100% 10%, 85% 0, 35% 60%, 15% 40%); }
+.st-fix { background: var(--s-fix); } .st-fix::before { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.st-fail { background: var(--s-fail); } .st-fail::before { clip-path: polygon(20% 0, 50% 30%, 80% 0, 100% 20%, 70% 50%, 100% 80%, 80% 100%, 50% 70%, 20% 100%, 0 80%, 30% 50%, 0 20%); }
+.card { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--s-wait); border-radius: 4px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.card.go { border-left-color: var(--s-go); } .card.ask { border-left-color: var(--s-ask); } .card.done { border-left-color: var(--s-done); } .card.fix { border-left-color: var(--s-fix); } .card.fail { border-left-color: var(--s-fail); }
+.card .ctop { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-size: .78rem; color: var(--muted); }
+.card .title { font-weight: bold; line-height: 1.4; }
+.card .mark { color: var(--ask); font-size: .82rem; font-weight: bold; }
+.kanban { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 12px; align-items: start; }
+.col { background: var(--soft); border-radius: 6px; padding: 8px; }
+.col h3 { margin: 0; padding: 2px 6px 8px; color: var(--muted); font-size: .82rem; display: flex; justify-content: space-between; border: 0; }
+.col .cards { display: flex; flex-direction: column; gap: 8px; }
+.pick { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.pick button { background: var(--panel); color: var(--ink); border: 1px solid var(--line); display: flex; gap: 8px; align-items: center; text-align: left; }
+.pick button[aria-pressed="true"] { border: 2px solid var(--accent); padding: 6px 13px; font-weight: bold; }
+.diagram { overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); padding: 8px; margin: 6px 0; }
+.diagram svg { display: block; max-width: none; height: auto; }
+
+/* 知らせ */
+.news { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.news li { display: grid; grid-template-columns: 7.8em minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+.news time { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+.news .stop { grid-column: 2 / -1; border: 1px solid var(--stop); border-left-width: 4px; border-radius: 4px; padding: 4px 10px; color: var(--stop); font-size: .84rem; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.news .tag { font-size: .72rem; border: 1px solid var(--ask); border-radius: 3px; padding: 0 6px; color: var(--ask); white-space: nowrap; }
+
+/* 質問 */
+.fbar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 10px; }
+.fbar .field { flex: 1 1 240px; max-width: 420px; }
+.asks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(310px, 100%), 1fr)); gap: 12px; align-items: start; }
+.q { border: 1px solid var(--line); border-left: 4px solid var(--ask); border-radius: 4px; padding: 12px 14px; background: var(--soft); display: flex; flex-direction: column; gap: 6px; }
+.q.approval { border-left-color: var(--gold); }
+.q .who { font-size: .78rem; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.q .kind { border: 1px solid var(--line); border-radius: 3px; padding: 0 6px; font-size: .72rem; background: var(--panel); }
+.q .qt { font-weight: bold; font-size: 1.02rem; }
+.q .opts { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.q .opts button { text-align: left; background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 8px 10px; display: flex; justify-content: space-between; gap: 10px; }
+.q .opts button.rec { border: 2px solid var(--accent); padding: 7px 9px; }
+.q .opts small { color: var(--ask); white-space: nowrap; }
+.q .opts .why { display: block; font-size: .78rem; color: var(--muted); }
+.q .due { font-size: .78rem; color: var(--muted); }
+.q .picked { background: var(--panel); border: 1px dashed var(--s-done); border-radius: 4px; padding: 6px 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.q ul { margin: 2px 0; padding-left: 18px; }
+.write { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.empty { padding: 18px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 4px; }
+fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 4px 0; padding: 6px 10px; }
+legend { font-size: .8rem; color: var(--muted); padding: 0 4px; }
+fieldset label { display: inline-flex; align-items: center; gap: 6px; margin: 2px 12px 2px 0; color: var(--ink); font-size: .88rem; }
+
+/* 予定表・票 */
+.gantt { display: grid; grid-template-columns: minmax(120px, 210px) 1fr; gap: 6px 12px; align-items: center; }
+.bar { position: relative; height: 24px; background: repeating-linear-gradient(90deg, var(--soft) 0 1px, transparent 1px 12.5%); }
+.bar i { position: absolute; top: 3px; bottom: 3px; left: 0; border: 1.5px solid var(--ink); border-radius: 3px; background: var(--soft); }
+.bar i.late { border-width: 3px; border-style: dashed; border-color: var(--stop); }
+.bar em { position: absolute; top: 2px; font-style: normal; font-size: .78rem; white-space: nowrap; }
+.late-t { color: var(--stop); font-weight: bold; }
+.chip { display: inline-block; font-size: .72rem; border: 1px solid var(--line); border-radius: 3px; padding: 0 6px; color: var(--muted); }
+.chip.ok { border-color: var(--s-done); color: var(--s-done); } .chip.cand { border-color: var(--s-fix); color: var(--s-fix); }
+.list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.list li { display: flex; gap: 6px 10px; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+.list li > span:first-child { flex: 1 1 200px; }
+.tl { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: .88rem; }
+.tl li { display: grid; grid-template-columns: 8.5em minmax(0, 1fr); gap: 10px; }
+.tl time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.seg { display: flex; gap: 3px; }
+.seg span { height: 8px; flex: 1; background: var(--soft); border: 1px solid var(--line); }
+.seg span.done { background: var(--s-done); border-color: var(--s-done); }
+.seg span.go { background: var(--s-go); border-color: var(--s-go); }
+.seg span.fix { background: var(--s-fix); border-color: var(--s-fix); }
+.seg span.fail { background: var(--s-fail); border-color: var(--s-fail); }
+.seg span.ask { background: repeating-linear-gradient(45deg, var(--s-ask) 0 3px, transparent 3px 6px); border-color: var(--s-ask); }
+details.tk { background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 4px; }
+details.tk > summary { cursor: pointer; padding: 10px 18px; display: flex; gap: 6px 12px; align-items: center; flex-wrap: wrap; list-style: none; }
+details.tk > summary::-webkit-details-marker { display: none; }
+details.tk > summary::before { content: "▸"; color: var(--muted); }
+details.tk[open] > summary::before { content: "▾"; }
+details.tk > summary .t { font-family: var(--serif); font-size: 1.1rem; letter-spacing: .06em; font-weight: bold; }
+details.tk > summary .seg { width: 90px; }
+details.tk .inner { padding: 0 18px 14px; }
+.tkh { font-family: var(--serif); font-size: 1.05rem; margin: 4px 0 -4px; }
+.care { display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px solid var(--rule); }
+.care > span:first-child { flex: 1 1 200px; font-weight: bold; }
+
+/* 入力 */
+.pri { display: flex; gap: 8px; flex-wrap: wrap; }
+.pri label { margin: 0; border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer; color: var(--ink); font-size: .85rem; background: var(--panel); display: flex; gap: 6px; align-items: center; }
+.pri label:has(input:checked) { border: 2px solid var(--accent); padding: 5px 11px; font-weight: bold; }
+.settings { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.settings .field { width: 140px; }
+
+/* 使い方 */
+.guide { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; align-items: start; }
+.guide ul { margin: 4px 0; padding-left: 20px; }
+.flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.flow span { border: 1px solid var(--line); border-radius: 3px; padding: 2px 10px; background: var(--soft); }
+.flow span.me { border: 2px solid var(--ask); font-weight: bold; color: var(--ask); }
+.terms { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
+.terms div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+[hidden] { display: none !important; }
+.tabbody { display: flex; flex-direction: column; gap: 16px; }
+.toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 6px; z-index: 10; max-width: 90vw; }
+.toast:empty { display: none; }
+@media (max-width: 760px) {
+  :root { --gut: 14px; }
+  .gantt { grid-template-columns: 1fr; }
+  .news li { grid-template-columns: 1fr; }
+  .news .stop { grid-column: 1; }
+  .tabs button { padding: 0 9px; min-height: 40px; }
+  .band .brand b { font-size: 1.2rem; }
+  .panel { padding: 12px; }
+  details.tk > summary, details.tk .inner { padding-inline: 12px; }
+  .tl li { grid-template-columns: 1fr; gap: 0; }
+}
 @media (max-width: 640px) {
-  .grid2 { grid-template-columns: 1fr; }
   table.goals thead { display: none; }
   table.goals, table.goals tbody, table.goals tr, table.goals td { display: block; width: 100%; }
-  table.goals tr { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; }
-  table.goals td { border: none; border-bottom: 1px solid var(--border); }
-  table.goals td::before { content: attr(data-label) "："; font-weight: 700; display: block; color: var(--muted); font-size: .85rem; }
-  .tabs button { flex: 1 1 0; min-width: 0; padding: 6px 4px; }
+  table.goals tr { border: 1px solid var(--line); border-radius: 4px; margin: 8px 0; }
+  table.goals td { border: none; border-bottom: 1px solid var(--rule); }
+  table.goals td::before { content: attr(data-label) "："; font-weight: bold; display: block; color: var(--muted); font-size: .8rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .q .opts button { transition: background .12s; }
+  .q .opts button:hover { background: var(--soft); }
 }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="head">
-    <h1>ギルドの画面</h1>
-    <div class="folder" id="folderbar"></div>
-  </div>
-  <div id="connect"></div>
-  <div id="nowbar" role="region" aria-label="いま何をするか"></div>
-  <div class="tabs" id="tabs" role="tablist" aria-label="画面の切り替え"></div>
-  <main id="panels"></main>
-</div>
+<div id="app"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<noscript><p class="wrap">この画面には JavaScript が必要です。</p></noscript>
+<noscript><p>この画面には JavaScript が必要です。</p></noscript>
 
 <script>
 'use strict';
 
 // ---------------------------------------------------------------- 定数（tests/constants.py と一致させる）
-const TABS = ['受付', 'クエスト', '質問', '予定表', '資料室・魔導書'];
+const TABS = ['使い方', 'クエスト', '質問', '資料室・設計図・魔導書'];
 const QUEST_STATES = ['受付', '分解中', '承認待ち', '進行中', '最終鑑定', '達成', '失敗', '中止', '保留'];
 const GOAL_STATES = ['案', '待機', '冒険中', '鑑定中', '要手直し', '確認待ち', '実行承認待ち', '達成', '失敗', '中止'];
 const QUEST_TERMINAL = ['達成', '失敗', '中止'];
@@ -129,24 +246,34 @@ const GOAL_LABELS = {
 };
 const HOLDABLE = ['受付', '分解中', '承認待ち', '進行中', '最終鑑定'];
 const FORMS = ['おまかせ', '回答だけ', 'ノート', 'テキスト', 'Word', 'Excel', 'PowerPoint', 'PDF', 'その他'];
+const FORM_LABELS = { 'その他': 'その他（くわしくへ）' };
 const BAD_REASONS = ['内容が違う', '足りないものがある', '間違いがある', '形式が合わない', 'その他'];
 const LATER = 'あとで決める';
 const APPROVE = '承認する';
 const REDO = 'やり直す';
 const FREE_CHOICE = '自由入力';
 const SCOPE_NAMES = { route: '道のりの承認', output: '納品物の承認', execute: '実行の承認', none: '質問' };
+const KIND_GROUPS = { approval: '承認', choice: '選択', term: '魔導書', other: 'そのほか' };
 const TERM_FIX = '修正する';
+const TEMPLATE_EXT = ['.docx', '.xlsx', '.pptx', '.pdf'];
 const POLL_MS = 10000;
 const MAX_FILE = 50 * 1024 * 1024;
-const FOLDER_NAMES = { input: '素材', output: '納品物', 'adventure log': '冒険日誌' };
+const NEWS_FIRST = 4;
+const LS_TAB = 'guild-board-tab';
+const LS_NEWS = 'guild-board-news-seen';
 
 // ---------------------------------------------------------------- 状態
 const S = {
-  root: null, board: null, raw: '', tab: TABS[0], selQuest: null, selQuestion: null,
+  root: null, board: null, raw: '', tab: TABS[0], selQ: 'all',
   access: 'none',       // none | prompt | ok
-  error: '', drafts: {}, answered: {}, reopened: {}, pending: {}, pickedFiles: {}, intake: null, sharedPicked: [], resToken: 0,
-  dirty: false, timer: null, diagToken: 0
+  error: '', drafts: {}, answered: {}, reopened: {}, pending: {}, pickedFiles: {}, intake: null, intakeResult: '',
+  sharedPicked: [], templatePicked: [], resToken: 0, qf: { quest: 'all', kind: 'all', only: null },
+  moreNews: false, tkOpen: {}, newsSeen: null, maxMsg: '', loadedAt: null,
+  dirty: false, timer: null
 };
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 保存できなくても使える */ } }
+
 
 // ---------------------------------------------------------------- DOM 部品（値は textContent で入れる）
 function h(tag, attrs, ...kids) {
@@ -324,15 +451,6 @@ async function copyText(text) {
   ta.remove();
   return ok;
 }
-function pathItem(name, rel) {
-  const full = absPath(rel);
-  return h('span', { class: 'row' },
-    h('span', { text: name }),
-    full ? h('button', {
-      type: 'button', class: 'mini', 'aria-label': `${name}のパスをコピー`,
-      onclick: async () => toast((await copyText(full)) ? 'パスをコピーしました。' : 'コピーできませんでした。')
-    }, 'パスをコピー') : h('span', { class: 'muted small', text: '（パスは未設定）' }));
-}
 
 // ---------------------------------------------------------------- 図（SVG）
 function sanitizeSvg(text) {
@@ -359,11 +477,12 @@ function sanitizeSvg(text) {
 function diagramPath(rel) {
   return /^diagrams\/[A-Za-z0-9._-]+\.svg$/.test(String(rel || '')) ? rel : null;
 }
+
 // 図と 1 行要約を box に入れる。読めないときは案内を出す。
 async function fillDiagram(box, svgRel, txtRel, opts) {
   const o = opts || {};
-  const token = ++S.diagToken;
-  clear(box).add(h('p', { class: 'muted small', text: '図を読み込んでいます。' }));
+  const token = (box._tok = (box._tok || 0) + 1);
+  clear(box).add(h('p', { class: 'muted', text: '図を読み込んでいます。' }));
   try {
     const rel = diagramPath(svgRel);
     if (!rel) throw new Error('図の場所が正しくありません');
@@ -371,13 +490,14 @@ async function fillDiagram(box, svgRel, txtRel, opts) {
     if (!node) throw new Error('図を読めません');
     let sentence = '';
     if (txtRel) { try { sentence = (await readText(['.system', ...txtRel.split('/')])).trim(); } catch (e) { sentence = ''; } }
-    if (token !== S.diagToken) return;
+    if (token !== box._tok) return;
     clear(box).add(
       h('div', { class: 'diagram', tabindex: '0', role: 'group', 'aria-label': `${o.label || '道のりの図'}（横にスクロールできます）` }, node),
       sentence ? h('p', { text: sentence }) : null);
   } catch (e) {
-    if (token !== S.diagToken) return;
-    clear(box).add(h('p', { class: 'muted', text: o.empty || '道のりの図は、まだありません。' }));
+    if (token !== box._tok) return;
+    clear(box);
+    if (o.empty) box.add(h('p', { class: 'muted', text: o.empty }));
   }
 }
 
@@ -388,102 +508,155 @@ function questList() {
 function goalOf(id) { return S.board && S.board.goals ? S.board.goals[id] : null; }
 function questOf(id) { return S.board && S.board.quests ? S.board.quests[id] : null; }
 function questTitle(id) { const q = questOf(id); return q ? `${q.id} ${q.title}` : String(id || ''); }
-function unanswered() {
-  const qs = (S.board && S.board.questions) || [];
-  const list = qs.filter(q => (q.status === '未回答' && !S.answered[q.id]) || (S.reopened[q.id] && !S.answered[q.id]));
-  const rank = q => (q.kind === 'approval' ? 0 : q.blocking === false ? 2 : 1);
-  return list.sort((a, b) => rank(a) - rank(b) || String(a.due || '').localeCompare(String(b.due || '')) || idNum(a.id) - idNum(b.id));
-}
-function laterList() {
-  return ((S.board && S.board.questions) || []).filter(q => q.status === '保留' && !S.answered[q.id]);
-}
-function isPending(key, sig) { return Object.prototype.hasOwnProperty.call(S.pending, key) && S.pending[key] === sig; }
-function markPending(key, sig) { S.pending[key] = sig; }
 function questLabel(q) { return QUEST_LABELS[q.status] || q.status; }
 function goalLabel(g) { return GOAL_LABELS[g.status] || g.status; }
-
-// ---------------------------------------------------------------- 画面：先頭の「いま何をするか」
-function computeNow() {
-  const qs = unanswered();
-  const first = qs[0];
-  if (first) {
-    const name = SCOPE_NAMES[first.scope] || '質問';
-    const text = first.kind === 'approval'
-      ? `${name}が待っています：${questTitle(first.quest)}`
-      : `あなたの返事を待っています：${questTitle(first.quest)}（質問 ${qs.length} 件）`;
-    return { text, button: first.kind === 'approval' ? '承認の画面を開く' : '質問に答える',
-      go: () => { S.selQuestion = first.id; setTab('質問'); } };
-  }
-  const check = Object.values((S.board && S.board.goals) || {}).find(g => g.status === '確認待ち' || g.status === '実行承認待ち');
-  if (check) {
-    return { text: `納品物の確認が待っています：${check.title}`, button: '納品物を確認する',
-      go: () => { S.selQuest = check.quest; setTab('クエスト'); } };
-  }
-  const held = questList().find(q => q.status === '保留');
-  if (held) {
-    return { text: `止めているクエストがあります：${held.title}`, button: '再開する画面を開く',
-      go: () => { S.selQuest = held.id; setTab('クエスト'); } };
-  }
-  return { text: 'いま、あなたがすることはありません。', button: '新しい依頼を書く', go: () => setTab('受付') };
+function goalsOfQuest(q) {
+  const ids = (q.route || []).concat((q.goals || []).filter(id => !(q.route || []).includes(id)));
+  return ids.map(goalOf).filter(Boolean);
 }
-function renderNow() {
-  const box = clear($('nowbar'));
-  if (!S.board) return;
-  const n = computeNow();
-  box.add(h('div', { class: 'now' },
-    h('div', { class: 'line' }, h('p', { text: n.text }), h('button', { type: 'button', class: 'primary', onclick: n.go }, n.button))));
-  const notice = (S.board.notices || []).slice(-1)[0];
-  const stops = [];
-  for (const q of questList()) {
-    if (q.blocked_on === 'client' && !QUEST_TERMINAL.includes(q.status)) stops.push(`クエスト「${q.title}」は、あなたの返事を待っている。`);
-  }
-  const wrap = box.firstChild;
-  if (notice) {
-    const stopIds = (notice.stops || []).map(id => String(id)).join('、');
-    wrap.add(h('p', { class: 'small', text: `知らせ（${jpStamp(notice.time)}）：${notice.text}${stopIds ? `　止まっている質問：${stopIds}` : ''}` }));
-  }
-  if (stops.length) wrap.add(h('ul', { class: 'small' }, stops.slice(0, 3).map(t => h('li', { text: t }))));
+function allGoals() { return questList().flatMap(goalsOfQuest); }
+function stClass(s) {
+  return ({ '案': 'wait', '待機': 'wait', '中止': 'wait', '受付': 'wait', '分解中': 'wait', '冒険中': 'go', '鑑定中': 'go', '進行中': 'go',
+    '最終鑑定': 'go', '要手直し': 'fix', '保留': 'fix', '確認待ち': 'ask', '実行承認待ち': 'ask', '承認待ち': 'ask', '達成': 'done', '失敗': 'fail' })[s] || 'wait';
+}
+function badge(status, text) { return h('span', { class: `badge st-${stClass(status)}`, text: text || status }); }
+function isPending(key, sig) { return Object.prototype.hasOwnProperty.call(S.pending, key) && S.pending[key] === sig; }
+function markPending(key, sig) { S.pending[key] = sig; }
+function hasSlack(g) { return typeof g.slack_min === 'number' && isFinite(g.slack_min); }
+function slackText(n) { return n < 0 ? `▲ 間に合わないおそれ（ゆとり：${n} 分）` : `ゆとり：${n} 分`; }
+function outputsOf(q, g) {
+  const op = g.output_path || [];
+  return (Array.isArray(op) ? op : [op]).filter(Boolean).map(p => ({ name: String(p).split('/').pop(), rel: `${q.dir}/${p}` }));
 }
 
-// ---------------------------------------------------------------- 画面：タブ
-function renderTabs() {
-  const box = clear($('tabs'));
-  const count = unanswered().length;
-  TABS.forEach(name => {
-    const sel = S.tab === name;
+// ---- 質問
+function kindGroup(q) { return q.kind === 'approval' || q.kind === 'choice' || q.kind === 'term' ? q.kind : 'other'; }
+function ansLabel(q) { return q.answer === FREE_CHOICE ? `自由入力（${q.comment || ''}）` : String(q.answer || ''); }
+// 質問の見え方：{open:true} 未回答／{open:false,label} 答え済み（取り消すまで残る）／null 表示しない
+function qState(q) {
+  const a = S.answered[q.id];
+  if (a) return { open: false, label: a.label };
+  if (S.reopened[q.id]) return { open: true };
+  if (q.status === '未回答') return { open: true };
+  if (q.status === '回答済') return q.handled ? null : { open: false, label: ansLabel(q) };
+  if (q.status === '保留') return { open: false, label: LATER };
+  return null;
+}
+function qRank(q) { return q.kind === 'approval' ? 0 : q.blocking === false ? 2 : 1; }
+function visibleQs() {
+  return ((S.board && S.board.questions) || []).map(q => ({ q, st: qState(q) })).filter(x => x.st)
+    .sort((a, b) => qRank(a.q) - qRank(b.q) || String(a.q.due || '').localeCompare(String(b.q.due || '')) || idNum(a.q.id) - idNum(b.q.id));
+}
+function unanswered() { return visibleQs().filter(x => x.st.open).map(x => x.q); }
+
+// ---- 知らせ
+function noticeList() {
+  return ((S.board && S.board.notices) || []).map((n, i) => ({ n, i }))
+    .sort((a, b) => String(b.n.time || '').localeCompare(String(a.n.time || '')) || b.i - a.i).map(x => x.n);
+}
+function isNewNotice(n) { return S.newsSeen === null || String(n.time || '') > S.newsSeen; }
+function markNewsSeen() {
+  const n = noticeList()[0];
+  if (n && n.time) { S.newsSeen = String(n.time); lsSet(LS_NEWS, S.newsSeen); }
+}
+
+// ---------------------------------------------------------------- 移動
+function setTab(name) {
+  if (S.tab === TABS[1] && name !== TABS[1]) markNewsSeen();
+  S.tab = name;
+  lsSet(LS_TAB, name);
+  render();
+  window.scrollTo(0, 0);
+}
+function goAsk(id) {
+  S.qf = { quest: 'all', kind: 'all', only: id || null };
+  setTab(TABS[2]);
+}
+
+// ---------------------------------------------------------------- 画面：帯とタブ
+function renderBand() {
+  const band = clear($('band'));
+  const ok = !!S.board;
+  const cur = ok ? S.tab : TABS[0];
+  const nAsk = ok ? unanswered().length : 0;
+  const nNew = ok && cur !== TABS[1] ? noticeList().filter(isNewNotice).length : 0;
+  const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': '画面の切り替え' });
+  TABS.forEach((name, i) => {
+    const sel = cur === name;
+    const usable = ok || i === 0;
     const btn = h('button', {
-      type: 'button', role: 'tab', id: `tab-${name}`, 'data-tab': name, 'aria-selected': sel ? 'true' : 'false',
-      'aria-controls': 'panel', tabindex: sel ? '0' : '-1', onclick: () => setTab(name),
+      type: 'button', role: 'tab', id: `tab-${name}`, 'aria-selected': sel ? 'true' : 'false',
+      'aria-controls': 'panel', tabindex: sel ? '0' : '-1', disabled: !usable, onclick: () => setTab(name),
       onkeydown: ev => {
-        const i = TABS.indexOf(name);
+        if (!ok) return;
         const j = ev.key === 'ArrowRight' ? (i + 1) % TABS.length : ev.key === 'ArrowLeft' ? (i + TABS.length - 1) % TABS.length : -1;
         if (j >= 0) { ev.preventDefault(); setTab(TABS[j]); const b = $(`tab-${TABS[j]}`); if (b) b.focus(); }
       }
     }, name);
-    if (name === '質問' && count > 0) btn.add(h('span', { class: 'badge', 'aria-label': `未回答 ${count} 件`, text: String(count) }));
-    box.add(btn);
+    if (name === TABS[2] && nAsk > 0) btn.add(h('span', { class: 'nb', 'aria-label': `未回答 ${nAsk} 件`, text: String(nAsk) }));
+    if (name === TABS[1] && nNew > 0) btn.add(h('span', { class: 'nb new', 'aria-label': `新しい知らせ ${nNew} 件`, text: `新 ${nNew}` }));
+    tabs.add(btn);
   });
-}
-function setTab(name) {
-  S.tab = name;
-  render();
-  window.scrollTo(0, 0);
+  const upd = ok ? (jpStamp(S.board.updated) || (S.loadedAt ? jpStamp(S.loadedAt) : '')) : '';
+  band.add(h('div', { class: 'brand' }, h('small', { text: 'GUILD' }), h('b', { text: '掲示板' })), tabs,
+    upd ? h('span', { class: 'upd', text: `更新：${upd}` }) : null);
 }
 
-// ---------------------------------------------------------------- 画面：受付
+// ---------------------------------------------------------------- 画面：あなたの番
+function turnItems() {
+  const open = unanswered();
+  const actions = [];
+  let count = open.length;
+  if (open.length) actions.push({ badge: ['ask', '質問'], text: `質問が ${open.length} 件あります。`, btn: '質問に答える', go: () => goAsk(null) });
+  for (const g of allGoals()) {
+    if (g.status !== '確認待ち' && g.status !== '実行承認待ち') continue;
+    const q = open.find(x => (x.scope === 'output' || x.scope === 'execute') && (x.goal === g.id || (x.covers || []).includes(g.id)));
+    if (!q) count += 1;
+    actions.push({ badge: ['ask', g.status === '実行承認待ち' ? '実行の承認' : '確認待ち'],
+      text: `「${g.title}」の納品物${g.status === '実行承認待ち' ? '（実行）' : ''}を確認してください。`, btn: '確認する', go: () => goAsk(q ? q.id : null) });
+  }
+  for (const qu of questList()) {
+    if (qu.status !== '承認待ち') continue;
+    const q = open.find(x => x.quest === qu.id && x.scope === 'route');
+    if (!q) count += 1;
+    actions.push({ badge: ['ask', '道のりの承認'], text: `「${qu.title}」の道のり（計画）を確認して、承認してください。`, btn: '確認する', go: () => goAsk(q ? q.id : null) });
+  }
+  const refs = allGoals().filter(g => g.status === '要手直し' || g.status === '冒険中').map(g => ({
+    badge: [stClass(g.status) === 'fix' ? '要手直し' : '冒険中', g.status === '要手直し' ? '直している' : '作業中'],
+    text: `「${g.title}」は、冒険者が${g.status === '要手直し' ? '直して' : '作業して'}います。あなたの操作は要りません。` }));
+  return { actions, refs, count };
+}
+function renderNow() {
+  const box = clear($('nowbar'));
+  if (!S.board) { box.hidden = true; return; }
+  box.hidden = false;
+  const t = turnItems();
+  const news = noticeList()[0];
+  box.add(h('div', { class: 'head' },
+    h('b', {}, 'あなたの番', h('span', { class: t.count ? 'nb' : 'nb zero', text: String(t.count) })),
+    h('span', { class: 'last', text: news ? `最新の知らせ：${jpStamp(news.time)}　${news.text}` : 'ギルドからの知らせは、まだありません。' })));
+  if (!t.actions.length) box.add(h('div', { class: 'it' }, h('span', { text: 'いま：あなたがすることは、ありません。' })));
+  for (const a of t.actions) {
+    box.add(h('div', { class: 'it' }, h('span', {}, badge(a.badge[0], a.badge[1]), ` ${a.text}`), h('button', { type: 'button', onclick: a.go }, a.btn)));
+  }
+  for (const r of t.refs.slice(0, 3)) {
+    box.add(h('div', { class: 'it' }, h('span', {}, badge(r.badge[0], r.badge[1]), ` ${r.text}`)));
+  }
+  if (t.refs.length > 3) box.add(h('div', { class: 'it' }, h('span', { class: 'note', text: `ほか ${t.refs.length - 3} 件` })));
+}
+
+// ---------------------------------------------------------------- 画面：クエスト（依頼を出す）
 function renderIntake() {
-  const st = S.intake || (S.intake = { title: '', detail: '', due: '', form: 'おまかせ', files: [], busy: false });
+  const st = S.intake || (S.intake = { title: '', detail: '', due: '', form: 'おまかせ', priority: '通常', files: [] });
   const err = h('p', { class: 'err', role: 'alert' });
   const titleIn = h('input', { type: 'text', id: 'in-title', value: st.title, maxlength: '100', required: true,
-    oninput: e => { st.title = e.target.value; } });
-  const detailIn = h('textarea', { id: 'in-detail', oninput: e => { st.detail = e.target.value; } });
+    placeholder: '例：取引先 A 社の見積書を作る', oninput: e => { st.title = e.target.value; } });
+  const detailIn = h('textarea', { id: 'in-detail', placeholder: '例：部長への稟議に使う', oninput: e => { st.detail = e.target.value; } });
   detailIn.value = st.detail;
   const dueIn = h('input', { type: 'date', id: 'in-due', value: st.due, oninput: e => { st.due = e.target.value; } });
   const formIn = h('select', { id: 'in-form', onchange: e => { st.form = e.target.value; } },
-    FORMS.map(f => h('option', { value: f, selected: f === st.form }, f)));
+    FORMS.map(f => h('option', { value: f, selected: f === st.form }, FORM_LABELS[f] || f)));
   const fileList = h('div');
-  const dest = h('p', { class: 'small' }, '保存先：素材（', h('code', { text: 'guild/.system/requests/files/R<送った日時>/' }),
-    '）。クエストができると、素材の置き場に移ります。');
   const drawFiles = () => {
     clear(fileList);
     if (!st.files.length) return;
@@ -494,11 +667,14 @@ function renderIntake() {
   };
   const fileIn = h('input', { type: 'file', id: 'in-files', multiple: true, onchange: e => { st.files = Array.from(e.target.files); drawFiles(); } });
   drawFiles();
-  const send = h('button', { type: 'submit', class: 'primary', disabled: st.busy }, '依頼を送る');
+  const send = h('button', { type: 'submit', disabled: false, style: 'font-weight:bold;padding:10px 22px' }, '依頼を送る');
+  const radio = (v) => h('label', {}, h('input', { type: 'radio', name: 'in-pri', value: v, checked: st.priority === v,
+    onchange: () => { st.priority = v; } }), ` ${v}`);
   const form = h('form', { onsubmit: async ev => {
     ev.preventDefault();
     err.textContent = '';
-    if (!st.title.trim()) { err.textContent = '題名を書いてください。'; titleIn.focus(); return; }
+    if (!st.title.trim()) { err.textContent = '依頼の内容を書いてください。'; titleIn.focus(); return; }
+    if (st.form === 'その他' && !st.detail.trim()) { err.textContent = 'くわしくに書いてください。'; detailIn.focus(); return; }
     send.disabled = true;
     try {
       const r = await reserveRequest('R');
@@ -510,7 +686,7 @@ function renderIntake() {
         report = saveReport(res);
       }
       await writeJson(r.dir, r.name, { kind: 'quest', title: st.title.trim(), detail: st.detail.trim(),
-        due: st.due || null, form: st.form, files: saved });
+        due: st.due || null, form: st.form, priority: st.priority === '優先' ? '優先' : '通常', files: saved });
       S.intakeResult = `依頼を送りました。${report}`;
       S.intake = null;
       toast('依頼を送りました。');
@@ -520,78 +696,183 @@ function renderIntake() {
       send.disabled = false;
     }
   } },
-    h('label', { for: 'in-title' }, '題名（必ず書く）'), titleIn,
-    h('label', { for: 'in-detail' }, '内容'), detailIn,
-    h('div', { class: 'grid2' },
-      h('div', {}, h('label', { for: 'in-due' }, '期限'), dueIn),
-      h('div', {}, h('label', { for: 'in-form' }, '納品物の形'), formIn)),
-    h('label', { for: 'in-files' }, '素材にするファイル（保存先：素材）'), fileIn, dest, fileList,
+    h('div', { class: 'field' }, h('label', { for: 'in-title' }, '依頼の内容（ひとこと）'), titleIn),
+    h('div', { class: 'row2', style: 'margin-top:8px' },
+      h('div', { class: 'field' }, h('span', { class: 'note', text: '急ぎ度' }), h('div', { class: 'pri', role: 'radiogroup', 'aria-label': '急ぎ度' }, radio('優先'), radio('通常'))),
+      h('div', { class: 'field' }, h('label', { for: 'in-due' }, '期限（あれば）'), dueIn),
+      h('div', { class: 'field' }, h('label', { for: 'in-form' }, '納品物の形'), formIn)),
+    h('div', { class: 'field', style: 'margin-top:8px' }, h('label', { for: 'in-detail' }, 'くわしく（任意：背景、関係するノート、使いみち）'), detailIn),
+    h('div', { class: 'field', style: 'margin-top:8px' }, h('label', { for: 'in-files' }, '素材を添える（いくつでも。保存先：素材）'), fileIn,
+      h('span', { class: 'note' }, '保存先：素材（', h('code', { text: 'guild/.system/requests/files/R<送った日時>/' }), '）。クエストができると、素材の置き場に移ります。'), fileList),
     err, h('p', {}, send));
   const done = S.intakeResult ? h('p', { class: 'ok', role: 'status', text: S.intakeResult }) : null;
   S.intakeResult = '';
-  return h('section', { 'aria-labelledby': 'h-intake' },
-    h('h2', { id: 'h-intake' }, '依頼を出す'),
-    h('p', { class: 'muted', text: '依頼を送ると、ギルドが聞き取りを始めます。' }),
-    done, h('div', { class: 'card' }, form));
+  return h('div', { class: 'panel top' }, h('h2', {}, '依頼を出す ', h('span', { class: 'muted', style: 'font-family:var(--sans);letter-spacing:0', text: '書いて送るだけ' })), done, form);
 }
 
-// ---------------------------------------------------------------- 画面：クエスト
-function renderQuests() {
+// ---------------------------------------------------------------- 画面：クエスト（ギルドからの知らせ）
+function renderNews() {
+  const list = noticeList();
+  const items = S.moreNews ? list : list.slice(0, NEWS_FIRST);
+  const panel = h('div', { class: 'panel top' }, h('h2', {}, 'ギルドからの知らせ ', h('span', { class: 'muted', text: `${list.length} 件` })));
+  if (!list.length) { panel.add(h('p', { class: 'muted', text: '知らせは、いまありません。' })); return panel; }
+  const ul = h('ul', { class: 'news' });
+  const open = unanswered();
+  for (const n of items) {
+    const li = h('li', {}, h('time', { text: jpStamp(n.time) }), h('span', { text: n.text }),
+      isNewNotice(n) ? h('span', { class: 'tag', text: '新しい' }) : h('span'));
+    for (const id of (n.stops || [])) {
+      const q = open.find(x => x.id === String(id));
+      if (!q) continue;
+      li.add(h('div', { class: 'stop' }, h('span', { text: `止まっていること：${String(q.text).slice(0, 36)}（質問 ${q.id}）` }),
+        h('button', { type: 'button', class: 'sm', onclick: () => goAsk(q.id) }, '質問に移る')));
+    }
+    ul.add(li);
+  }
+  panel.add(ul);
+  if (list.length > NEWS_FIRST) {
+    panel.add(h('p', { style: 'text-align:center;margin:8px 0 0' }, h('button', { type: 'button', class: 'ghost sm', onclick: () => { S.moreNews = !S.moreNews; render(); } },
+      S.moreNews ? '閉じる' : `もっと見る（残り ${list.length - NEWS_FIRST} 件）`)));
+  }
+  return panel;
+}
+
+// ---------------------------------------------------------------- 画面：クエスト（絞り込みとかんばん）
+const COLS = [['順番を待っている', ['案', '待機'], 'wait'], ['作業中', ['冒険中', '鑑定中', '要手直し'], 'go'],
+  ['あなたの番', ['確認待ち', '実行承認待ち'], 'ask'], ['達成', ['達成'], 'done']];
+function selectedQuests() {
   const list = questList();
-  const sec = h('section', { 'aria-labelledby': 'h-quests' }, h('h2', { id: 'h-quests' }, 'クエスト'));
-  sec.add(renderSetting());
-  if (!list.length) { sec.add(h('p', { class: 'muted', text: 'クエストは、まだありません。受付で依頼を出してください。' })); return sec; }
-  if (!S.selQuest || !questOf(S.selQuest)) S.selQuest = (list.find(q => !QUEST_TERMINAL.includes(q.status)) || list[0]).id;
-  const live = list.filter(q => !QUEST_TERMINAL.includes(q.status));
-  const ended = list.filter(q => QUEST_TERMINAL.includes(q.status));
-  const item = q => h('li', {}, h('button', { type: 'button', class: 'qitem', 'aria-current': q.id === S.selQuest ? 'true' : 'false',
-    onclick: () => { S.selQuest = q.id; render(); } },
-    h('strong', { text: `${q.id} ${q.title}` }), ' ', h('span', { class: 'state', text: questLabel(q) }),
-    q.priority === '優先' ? h('span', { class: 'tag', text: ' 優先' }) : null));
-  sec.add(h('ul', { class: 'qlist', 'aria-label': 'クエストの一覧' }, live.map(item)));
-  if (ended.length) sec.add(h('details', {}, h('summary', { text: `終わったクエスト（${ended.length} 件）` }),
-    h('ul', { class: 'qlist' }, ended.map(item))));
-  sec.add(renderQuestDetail(questOf(S.selQuest)));
-  return sec;
+  if (S.selQ !== 'all' && !questOf(S.selQ)) S.selQ = 'all';
+  return S.selQ === 'all' ? list : list.filter(q => q.id === S.selQ);
 }
-function renderSetting() {
-  const cur = Number(((S.board || {}).limits || {}).max_active) || 4;
-  const key = 'M';
-  const sel = h('select', { id: 'in-max', 'aria-describedby': 'max-help' },
-    [1, 2, 3, 4, 5, 6, 7, 8].map(n => h('option', { value: n, selected: n === (Number(S.drafts.max) || cur) }, String(n))));
-  sel.addEventListener('change', () => { S.drafts.max = Number(sel.value); });
-  const btn = h('button', { type: 'button', disabled: isPending(key, String(cur)), onclick: async () => {
-    try {
-      await writeRequest('M', { kind: 'setting', max_active: Number(sel.value) });
-      markPending(key, String(cur));
-      toast('同時に進める数を送りました。');
-      render();
-    } catch (e) { toast(`送れませんでした：${e.message}`); }
-  } }, isPending(key, String(cur)) ? '送りました' : '数を変える');
-  return h('div', { class: 'card' },
-    h('label', { for: 'in-max' }, `同時に進める数（いま ${cur}）`),
-    h('div', { class: 'row' }, sel, btn),
-    h('p', { id: 'max-help', class: 'muted small', text: '1 から 8 まで選べます。数を増やすと、同時に進む達成条件が増えます。' }));
+function goalCard(q, g) {
+  const open = unanswered();
+  const ask = g.status === '確認待ち' || g.status === '実行承認待ち';
+  const link = ask ? open.find(x => (x.scope === 'output' || x.scope === 'execute') && (x.goal === g.id || (x.covers || []).includes(g.id))) : null;
+  return h('div', { class: `card ${stClass(g.status)}` },
+    h('div', { class: 'ctop' }, h('span', { text: questTitle(q.id) }), badge(g.status)),
+    h('div', { class: 'title', text: g.title }),
+    ask ? h('div', { class: 'mark', text: '▲ あなたの確認が要ります' }) : null,
+    h('div', { class: 'note', text: `${goalLabel(g)}${g.deadline ? `　締切 ${jpDate(g.deadline)}` : ''}` }),
+    ask ? h('div', {}, h('button', { type: 'button', class: 'ghost sm', onclick: () => goAsk(link ? link.id : null) }, '確認する')) : null);
 }
-function actionButton(label, key, sig, run, cls) {
+function renderBoard() {
+  const list = questList();
+  const panel = h('div', { class: 'panel top' }, h('h2', {}, 'クエスト'));
+  if (!list.length) { panel.add(h('p', { class: 'muted', text: 'クエストは、まだありません。上の「依頼を出す」から、依頼を送ってください。' })); return panel; }
+  const total = list.reduce((n, q) => n + goalsOfQuest(q).length, 0);
+  const pick = (id, label, n) => h('button', { type: 'button', 'aria-pressed': S.selQ === id ? 'true' : 'false',
+    onclick: () => { S.selQ = id; render(); } }, label, ' ', h('span', { class: 'muted', title: '達成条件の数', text: `（${n}）` }));
+  panel.add(h('div', { class: 'pick', role: 'group', 'aria-label': 'クエストで絞り込む' },
+    pick('all', 'すべて', total), list.map(q => pick(q.id, `${q.id} ${q.title}`, goalsOfQuest(q).length))));
+  const qs = selectedQuests();
+  const cards = qs.flatMap(q => goalsOfQuest(q).map(g => ({ q, g })));
+  panel.add(h('div', { class: 'kanban' }, COLS.map(c => {
+    const x = cards.filter(k => c[1].includes(k.g.status));
+    return h('div', { class: 'col' }, h('h3', {}, h('span', { text: c[0] }), h('span', { text: String(x.length) })),
+      h('div', { class: 'cards' }, x.length ? x.map(k => goalCard(k.q, k.g)) : h('p', { class: 'note', style: 'text-align:center', text: 'ありません' })));
+  })));
+  return panel;
+}
+
+// ---------------------------------------------------------------- 画面：クエスト票
+function actionButton(label, key, sig, run, cls, off) {
   const pend = isPending(key, sig);
-  return h('button', { type: 'button', class: cls || null, disabled: pend, onclick: async () => {
+  return h('button', { type: 'button', class: cls || 'ghost sm', disabled: pend || !!off, onclick: async () => {
     try { await run(); markPending(key, sig); render(); } catch (e) { toast(`送れませんでした：${e.message}`); }
   } }, pend ? `${label}（送りました）` : label);
 }
-function renderQuestDetail(q) {
-  const box = h('div', { class: 'card', role: 'region', 'aria-label': `クエスト ${q.title} の詳しい様子` });
-  box.add(h('h2', {}, `${q.id} ${q.title}`),
-    h('p', {}, h('span', { class: 'state', text: questLabel(q) }),
-      q.priority === '優先' ? h('span', { class: 'tag', text: ' 優先' }) : null,
-      q.due ? ` 期限：${jpDate(q.due)}` : ''),
-    q.blocked_on === 'client' ? h('p', { class: 'warn', text: 'あなたの返事を待っています。質問の画面を開いてください。' }) : null,
-    q.detail ? h('p', { text: q.detail }) : null);
-  // 操作
-  const acts = h('div', { class: 'row' });
+function scheduleBlock(gs) {
+  const rows = gs.filter(g => g.deadline && g.status !== '中止')
+    .sort((a, b) => String(a.deadline).localeCompare(String(b.deadline)) || idNum(a.id) - idNum(b.id));
+  const box = h('div', {}, h('h3', {}, '予定表'));
+  if (!rows.length) { box.add(h('p', { class: 'note', text: 'このクエストに、締切のある達成条件は、ありません。' })); return box; }
+  const day = 86400000;
+  const d0 = new Date();
+  const today = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate()).getTime();
+  const ms = g => Date.parse(`${String(g.deadline).slice(0, 10)}T00:00:00`) || today;
+  const base = Math.min(today, ...rows.map(ms));
+  const span = Math.max(Math.max(today, ...rows.map(ms)) - base, day);
+  let late = 0;
+  const grid = h('div', { class: 'gantt' });
+  for (const g of rows) {
+    const isLate = hasSlack(g) && g.slack_min < 0 && g.status !== '達成';
+    if (isLate) late += 1;
+    const pct = Math.max(8, Math.min(100, Math.round((ms(g) - base) / span * 100)));
+    const label = g.status === '達成' ? `◆ ${jpDate(g.deadline)}　達成` : isLate ? `▲ ${jpDate(g.deadline)}　${slackText(g.slack_min)}`
+      : `◆ ${jpDate(g.deadline)}　${hasSlack(g) ? slackText(g.slack_min) : 'ゆとり：まだ分かりません'}`;
+    grid.add(h('div', { text: g.title }),
+      h('div', { role: 'img', 'aria-label': `${g.title}　締切 ${jpDate(g.deadline)}　${isLate ? '間に合わないおそれ' : goalLabel(g)}` },
+        h('div', { class: 'bar' }, h('i', { class: isLate ? 'late' : null, style: `width:${pct}%` })),
+        h('div', { class: isLate ? 'note late-t' : 'note', text: label })));
+  }
+  box.add(grid, h('p', { class: 'note', text: `締切のある達成条件は ${rows.length} 件。間に合わないおそれのあるものは ${late} 件。` }));
+  return box;
+}
+function recordBlock(gs) {
+  const box = h('div', {}, h('h3', {}, '記録'));
+  if (!gs.length) { box.add(h('p', { class: 'note', text: 'まだ記録は、ありません。' })); return box; }
+  gs.forEach((g, i) => {
+    const lines = (g.log || []).filter(e => e && e.text);
+    box.add(h('p', { style: 'margin:8px 0 2px;font-weight:bold', text: `${i + 1}. ${g.title}` }),
+      lines.length ? h('ul', { class: 'tl' }, lines.map(e => h('li', {}, h('time', { text: jpStamp(e.time) }), h('span', { text: e.text }))))
+        : h('p', { class: 'note', text: '（まだ記録は、ありません）' }));
+  });
+  return box;
+}
+function goalTable(q, gs) {
+  if (!gs.length) return h('p', { class: 'muted', text: '達成条件は、まだありません。計画ができると、ここに出ます。' });
+  const body = h('tbody');
+  gs.forEach((g, i) => {
+    const outs = outputsOf(q, g);
+    body.add(h('tr', {},
+      h('td', { 'data-label': '順', text: String(i + 1) }),
+      h('td', { 'data-label': '達成条件' }, h('strong', { text: g.title }),
+        h('ul', { class: 'note', style: 'margin:2px 0;padding-left:18px' }, (g.done_when || []).map(t => h('li', { text: t })))),
+      h('td', { 'data-label': '締切', text: g.deadline ? jpDate(g.deadline) : 'なし' }),
+      h('td', { 'data-label': 'いまの様子' }, badge(g.status), ` ${goalLabel(g)}`),
+      h('td', { 'data-label': '納品物' }, outs.length ? outs.map(o => h('div', {}, pathItem(o.name, o.rel))) : h('span', { class: 'muted', text: 'まだありません' }))));
+  });
+  return h('div', { class: 'scroll' }, h('table', { class: 'goals' }, h('caption', { class: 'sr', text: '達成条件の表' }),
+    h('thead', {}, h('tr', {}, ['順', '達成条件', '締切', 'いまの様子', '納品物'].map(t => h('th', { scope: 'col', text: t })))), body));
+}
+function todoBlock(q, gs) {
+  const open = unanswered().filter(x => x.quest === q.id);
+  const items = [];
+  for (const x of open) {
+    items.push(h('li', {}, `${x.text}　`, h('button', { type: 'button', class: 'ghost sm', onclick: () => goAsk(x.id) }, '答える')));
+  }
+  for (const g of gs) {
+    if ((g.status === '確認待ち' || g.status === '実行承認待ち') && !open.some(x => x.goal === g.id || (x.covers || []).includes(g.id))) {
+      items.push(h('li', { text: `「${g.title}」の納品物を確認する。` }));
+    }
+  }
+  return h('div', {}, h('h3', {}, 'あなたがすること'),
+    items.length ? h('ul', {}, items) : h('p', { class: 'note', text: 'いま、あなたがすることは、ありません。' }));
+}
+function opsBlock(q, gs) {
+  const box = h('div', {}, h('h3', {}, '操作'));
   const ended = QUEST_TERMINAL.includes(q.status);
   if (!ended) {
+    const todo = gs.filter(g => !GOAL_TERMINAL.includes(g.status) && g.status !== '失敗');
+    if (todo.length) {
+      box.add(h('p', { class: 'note', text: '「念入りに作る」をオンにすると、時間と費用が増えます。品質は上がります。' }));
+      for (const g of todo) {
+        const pk = `G:${g.id}`;
+        const careful = Object.prototype.hasOwnProperty.call(S.pending, pk) && S.pending[pk].sig === g.effort ? S.pending[pk].value : g.effort === '高';
+        box.add(h('div', { class: 'care' }, h('span', { text: g.title }),
+          h('button', { type: 'button', class: 'ghost sm', 'aria-pressed': careful ? 'true' : 'false', onclick: async () => {
+            try {
+              await writeRequest('G', { kind: 'goal_setting', goal: g.id, careful: !careful });
+              S.pending[pk] = { sig: g.effort, value: !careful };
+              render();
+            } catch (e) { toast(`送れませんでした：${e.message}`); }
+          } }, careful ? '念入りに作る：オン' : '念入りに作る：オフ')));
+      }
+    }
     const toPri = q.priority === '優先' ? '通常' : '優先';
+    const allDone = gs.length > 0 && gs.every(g => g.status === '達成');
+    const acts = h('div', { class: 'acts' });
     acts.add(actionButton(toPri === '優先' ? '優先にする' : '通常に戻す', `P:${q.id}`, q.priority || '通常',
       () => writeRequest('P', { kind: 'priority', quest: q.id, priority: toPri })));
     if (q.status === '保留') {
@@ -599,69 +880,20 @@ function renderQuestDetail(q) {
     } else if (HOLDABLE.includes(q.status)) {
       acts.add(actionButton('止める', `H:${q.id}`, q.status, () => writeRequest('H', { kind: 'hold', quest: q.id, action: 'hold' })));
     }
-    if (q.status === '進行中') {
-      acts.add(actionButton('最終鑑定を頼む', `W:${q.id}`, q.status, () => writeRequest('W', { kind: 'final_review', quest: q.id })));
-    }
+    acts.add(actionButton('最終鑑定を頼む', `W:${q.id}`, q.status, () => writeRequest('W', { kind: 'final_review', quest: q.id }), null, !(q.status === '進行中' && allDone)));
     acts.add(actionButton('取り下げる', `C:${q.id}`, q.status, async () => {
       if (!window.confirm(`クエスト「${q.title}」を取り下げます。取り下げたあとは、続けられません。取り下げますか？`)) throw new Error('取り下げをやめました');
       await writeRequest('C', { kind: 'cancel', quest: q.id });
-    }, 'danger'));
-    box.add(acts, h('p', { class: 'muted small', text: '最終鑑定では、鑑定士が達成条件どうしの矛盾を確かめます。時間と費用が増えます。' }));
+    }, 'danger sm'));
+    box.add(acts, h('p', { class: 'note', text: '最終鑑定では、鑑定士が達成条件どうしの矛盾を確かめます。時間と費用が増えます。全部の達成条件が達成になると、頼めます。' }));
+  } else {
+    box.add(h('p', { class: 'note', text: 'このクエストは終わっています。操作はありません。' }));
   }
-  // 道のり図
-  box.add(h('h3', {}, '道のり'));
-  const diag = h('div');
-  box.add(diag);
-  fillDiagram(diag, `diagrams/route-${q.id}.svg`, `diagrams/route-${q.id}.txt`);
-  // 達成条件の表
-  box.add(h('h3', {}, '達成条件'), renderGoals(q));
-  // 場所
-  box.add(h('h3', {}, '場所'));
-  const places = [['素材', 'input'], ['納品物', 'output'], ['冒険日誌', 'adventure log']];
-  box.add(h('ul', {}, places.map(([name, sub]) => h('li', {}, pathItem(name, `${q.dir}/${sub}`))),
-    h('li', {}, pathItem('クエスト票', `${q.dir}/quest.md`))));
+  box.add(h('h3', {}, '場所'),
+    h('ul', {}, [['納品物', 'output'], ['素材', 'input'], ['冒険日誌', 'adventure log']].map(([name, sub]) => h('li', {}, pathItem(name, `${q.dir}/${sub}`))),
+      h('li', {}, pathItem('クエスト票', `${q.dir}/quest.md`))));
   box.add(renderUpload(q));
   return box;
-}
-function hasSlack(g) { return typeof g.slack_min === 'number' && isFinite(g.slack_min); }
-function slackText(n) {
-  return n < 0 ? `▲ 間に合わないおそれ（ゆとり：${n} 分）` : `ゆとり：${n} 分`;
-}
-function outputsOf(q, g) {
-  const op = g.output_path || [];
-  return (Array.isArray(op) ? op : [op]).filter(Boolean).map(p => ({ name: String(p).split('/').pop(), rel: `${q.dir}/${p}` }));
-}
-function renderGoals(q) {
-  const ids = (q.route && q.route.length ? q.route : []).concat((q.goals || []).filter(id => !(q.route || []).includes(id)));
-  const goals = ids.map(goalOf).filter(Boolean);
-  if (!goals.length) return h('p', { class: 'muted', text: '達成条件は、まだありません。計画ができると、ここに出ます。' });
-  const body = h('tbody');
-  goals.forEach((g, i) => {
-    const outs = outputsOf(q, g);
-    const open = !GOAL_TERMINAL.includes(g.status) && g.status !== '失敗';
-    const careful = Object.prototype.hasOwnProperty.call(S.pending, `G:${g.id}`) && S.pending[`G:${g.id}`].sig === g.effort
-      ? S.pending[`G:${g.id}`].value : g.effort === '高';
-    const carefulBtn = open ? h('div', {}, h('button', { type: 'button', class: 'mini', 'aria-pressed': careful ? 'true' : 'false',
-      'aria-describedby': `care-${g.id}`, onclick: async () => {
-        try {
-          await writeRequest('G', { kind: 'goal_setting', goal: g.id, careful: !careful });
-          S.pending[`G:${g.id}`] = { sig: g.effort, value: !careful };
-          render();
-        } catch (e) { toast(`送れませんでした：${e.message}`); }
-      } }, careful ? '念入りに作る：オン' : '念入りに作る：オフ'),
-      h('span', { id: `care-${g.id}`, class: 'muted small', text: ' 念入りに作ると、時間と費用が増えます。品質は上がります。' })) : null;
-    body.add(h('tr', {},
-      h('td', { 'data-label': '順', text: String(i + 1) }),
-      h('td', { 'data-label': '達成条件' }, h('strong', { text: g.title }),
-        h('ul', { class: 'small' }, (g.done_when || []).map(t => h('li', { text: t }))),
-        hasSlack(g) ? h('p', { class: g.slack_min < 0 ? 'err small' : 'small', text: slackText(g.slack_min) }) : null,
-        carefulBtn),
-      h('td', { 'data-label': '締切', text: g.deadline ? jpDate(g.deadline) : 'なし' }),
-      h('td', { 'data-label': 'いまの様子' }, goalLabel(g), g.blocked_on === 'client' ? '（あなたの返事を待っている）' : ''),
-      h('td', { 'data-label': '納品物' }, outs.length ? outs.map(o => h('div', {}, pathItem(o.name, o.rel))) : h('span', { class: 'muted', text: 'まだありません' }))));
-  });
-  return h('table', { class: 'goals' }, h('caption', { class: 'sr', text: '達成条件の表' }),
-    h('thead', {}, h('tr', {}, ['順', '達成条件', '締切', 'いまの様子', '納品物'].map(t => h('th', { scope: 'col', text: t })))), body);
 }
 function renderUpload(q) {
   const picked = S.pickedFiles[q.id] || [];
@@ -669,14 +901,13 @@ function renderUpload(q) {
   const fileIn = h('input', { type: 'file', id: `up-${q.id}`, multiple: true, onchange: e => { S.pickedFiles[q.id] = Array.from(e.target.files); render(); } });
   let destText = '';
   try { destText = `guild/${questDirParts(q).join('/')}/input/`; } catch (e) { destText = ''; }
-  box.add(h('h3', {}, '素材を足す'),
-    h('label', { for: `up-${q.id}` }, 'ファイルを選ぶ（保存先：素材）'), fileIn);
+  box.add(h('h3', {}, '素材を足す'), h('label', { for: `up-${q.id}` }, 'ファイルを選ぶ（保存先：素材）'), fileIn);
   if (picked.length) {
     box.add(h('p', {}, '保存先：素材（', h('code', { text: destText }), '）'),
       h('ul', {}, picked.map(f => { const c = checkFileName(f); return h('li', {}, `${f.name}（${sizeText(f.size)}）`,
         c.error ? h('span', { class: 'err', text: `　保存しない：${c.error}` }) : null); })));
     const msg = h('p', { role: 'status' });
-    const btn = h('button', { type: 'button', class: 'primary', onclick: async () => {
+    const btn = h('button', { type: 'button', onclick: async () => {
       btn.disabled = true;
       try {
         const dir = await dirAt([...questDirParts(q), 'input'], true);
@@ -691,126 +922,134 @@ function renderUpload(q) {
   }
   return box;
 }
+function tkDetails(q) {
+  const gs = goalsOfQuest(q);
+  const dflt = S.selQ !== 'all' || !QUEST_TERMINAL.includes(q.status);
+  const isOpen = Object.prototype.hasOwnProperty.call(S.tkOpen, q.id) ? S.tkOpen[q.id] : dflt;
+  const det = h('details', { class: 'tk', open: isOpen, ontoggle: e => { S.tkOpen[q.id] = e.target.open; } });
+  det.add(h('summary', {}, h('span', { class: 't', text: `${q.id} ${q.title}` }),
+    h('span', { class: 'seg', role: 'img', 'aria-label': `${gs.length} 個の達成条件` }, gs.map(g => h('span', { class: stClass(g.status) === 'wait' ? null : stClass(g.status) }))),
+    badge(q.status, questLabel(q)), q.priority === '優先' ? h('span', { class: 'chip cand', text: '優先' }) : null,
+    h('span', { class: 'note', text: q.due ? `締切 ${jpDate(q.due)}` : '' })));
+  const inner = h('div', { class: 'inner' });
+  const diag = h('div');
+  inner.add(h('h3', {}, '目的'), h('p', { text: q.detail || q.title }),
+    q.blocked_on === 'client' ? h('p', { class: 'warn', text: 'あなたの返事を待っています。「あなたがすること」を見てください。' }) : null,
+    h('h3', {}, '達成条件'), goalTable(q, gs), diag, scheduleBlock(gs), recordBlock(gs), todoBlock(q, gs), opsBlock(q, gs));
+  det.add(inner);
+  fillDiagram(diag, `diagrams/route-${q.id}.svg`, `diagrams/route-${q.id}.txt`);
+  return det;
+}
+function renderQuestsTab() {
+  const out = [h('div', { class: 'grid2' }, renderIntake(), renderNews()), renderBoard()];
+  const qs = selectedQuests();
+  if (qs.length) {
+    out.push(h('h2', { class: 'tkh' }, `クエスト票 ${qs.length} 件`, S.selQ === 'all' ? '（すべて）' : ''));
+    qs.forEach(q => out.push(tkDetails(q)));
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------- 画面：質問
 function dueText(q) {
   const d = q.due ? `期限：${jpDate(q.due)}。` : '';
-  if (q.kind === 'approval') return `${d}承認は、自動では進みません。期限が来ると、承認待ちと知らせます。`;
-  if (q.default) return `${d}期限が来たときは、推奨案「${q.default}」で進みます。`;
-  return `${d}推奨案がないため、期限が来ても進みません。`;
-}
-function renderQuestions() {
-  const sec = h('section', { 'aria-labelledby': 'h-q' }, h('h2', { id: 'h-q' }, '質問'));
-  // 答えたばかりのもの
-  for (const [id, a] of Object.entries(S.answered)) {
-    sec.add(h('div', { class: 'card', role: 'status' },
-      h('span', { class: 'ok', text: `あなたの選択：${a.label}` }), ` （${a.text}）　`,
-      h('button', { type: 'button', class: 'mini', onclick: () => reopen(id) }, a.label === LATER ? '選び直す' : '取り消す')));
-  }
-  const list = unanswered();
-  if (!list.length) {
-    sec.add(h('p', { class: 'muted', text: '答える質問は、いまありません。' }));
-  } else {
-    let idx = list.findIndex(q => q.id === S.selQuestion);
-    if (idx < 0) idx = 0;
-    S.selQuestion = list[idx].id;
-    const nav = h('div', { class: 'row' }, h('span', { class: 'muted', text: `${list.length} 件中 ${idx + 1} 件目` }),
-      list.length > 1 ? h('button', { type: 'button', class: 'mini', onclick: () => { S.selQuestion = list[(idx + 1) % list.length].id; render(); } }, '次の質問') : null);
-    sec.add(nav, renderOneQuestion(list[idx]));
-  }
-  const later = laterList();
-  if (later.length) {
-    sec.add(h('h3', {}, 'あとで決める質問'),
-      h('ul', {}, later.map(q => h('li', {}, `${q.text}　`,
-        h('button', { type: 'button', class: 'mini', onclick: () => reopen(q.id) }, '選び直す')))));
-  }
-  return sec;
-}
-function renderOneQuestion(q) {
-  const scope = q.scope || 'none';
-  const draft = S.drafts[q.id] || (S.drafts[q.id] = { comment: '', score: '', reason: BAD_REASONS[0] });
-  const box = h('div', { class: 'card', role: 'group', 'aria-labelledby': `qh-${q.id}` });
-  box.add(h('h3', { id: `qh-${q.id}` }, `${SCOPE_NAMES[scope] || '質問'}：${questTitle(q.quest)}`),
-    q.goal && goalOf(q.goal) ? h('p', { class: 'muted', text: `達成条件：${goalOf(q.goal).title}` }) : null,
-    h('p', { text: q.text }));
-  if (scope === 'route' || q.diagram) {
-    const d = h('div');
-    box.add(d);
-    fillDiagram(d, q.diagram || `diagrams/route-${q.quest}.svg`, `diagrams/route-${q.quest}.txt`);
-  }
-  if (scope === 'output' || scope === 'execute') box.add(renderCovered(q, scope));
-  if (scope === 'execute') box.add(h('p', { class: 'warn', text: '元に戻せない操作です。内容を確かめてから、答えてください。' }));
-  box.add(h('p', { class: 'muted small', text: dueText(q) }));
-  const comment = h('textarea', { id: `c-${q.id}`, oninput: e => { draft.comment = e.target.value; } });
-  comment.value = draft.comment;
-  const err = h('p', { class: 'err', role: 'alert' });
-  const answer = async (choice, extra) => {
-    err.textContent = '';
-    try { await submitAnswer(q, choice, draft, extra); } catch (e) { err.textContent = `送れませんでした：${e.message}`; }
-  };
-  if (q.kind === 'approval') {
-    if (scope === 'output') box.add(renderEvaluation(q, draft));
-    box.add(h('label', { for: `c-${q.id}` }, scope === 'output' ? '一言（空でもかまいません）' : 'やり直す点・一言（空でもかまいません）'), comment);
-    box.add(h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'primary', onclick: () => {
-        if (scope === 'execute' && !window.confirm('元に戻せない操作を承認します。よろしいですか？')) return;
-        answer(APPROVE);
-      } }, APPROVE),
-      h('button', { type: 'button', onclick: () => answer(REDO) }, REDO),
-      h('button', { type: 'button', onclick: () => answer(LATER) }, LATER)));
-  } else {
-    const opts = (q.options || []).slice(0, 4);
-    if (opts.length) {
-      box.add(h('div', { role: 'group', 'aria-label': '選択肢' }, opts.map(o => h('button', {
-        type: 'button', class: o.recommended ? 'opt rec' : 'opt', onclick: () => {
-          if (q.kind === 'term' && o.label === TERM_FIX && !draft.comment.trim()) {
-            err.textContent = '修正案を書いてください。'; comment.focus(); return;
-          }
-          answer(o.label);
-        } },
-        h('strong', { text: o.label }), o.recommended ? h('span', { class: 'tag', text: ' 推奨' }) : null,
-        o.reason ? h('span', { class: 'reason', text: o.reason }) : null))));
-    }
-    const isTerm = q.kind === 'term';
-    box.add(h('label', { for: `c-${q.id}` }, isTerm ? `修正案（「${TERM_FIX}」を選ぶときに書きます）` : opts.length ? '自由に書く（選択肢に足す一言にも使えます）' : '答えを書く'), comment);
-    box.add(h('div', { class: 'row' },
-      isTerm ? null : h('button', { type: 'button', class: opts.length ? null : 'primary', onclick: () => {
-        if (!draft.comment.trim()) { err.textContent = '答えを書いてください。'; comment.focus(); return; }
-        answer(FREE_CHOICE);
-      } }, '書いた内容で答える'),
-      h('button', { type: 'button', onclick: () => answer(LATER) }, LATER)));
-  }
-  box.add(err);
-  return box;
+  if (q.kind === 'approval') return `${d}承認は、あなたが押すまで進みません。期限が来ると、承認待ちと知らせます。`;
+  if (q.default) return `${d}期限が来たときは、おすすめの答え「${q.default}」で進みます。`;
+  return `${d}おすすめの答えがないため、期限が来ても進みません。`;
 }
 function renderCovered(q, scope) {
   const ids = (q.covers && q.covers.length ? q.covers : [q.goal]).filter(id => id && goalOf(id));
-  if (!ids.length) return h('span');
+  if (!ids.length) return null;
   const quest = questOf(q.quest);
-  return h('div', {}, h('p', { class: 'label', text: scope === 'output' ? '達成条件ごとの結果' : '実行する内容' }),
+  return h('div', {}, h('span', { class: 'note', text: scope === 'output' ? '達成条件ごとの結果' : '実行する内容' }),
     h('ul', {}, ids.map(id => {
       const g = goalOf(id);
       const outs = quest ? outputsOf(quest, g) : [];
       return h('li', {}, h('strong', { text: g.title }), '　', goalLabel(g),
-        h('ul', { class: 'small' }, (g.done_when || []).map(t => h('li', { text: t }))),
+        h('ul', { class: 'note' }, (g.done_when || []).map(t => h('li', { text: t }))),
         outs.map(o => h('div', {}, pathItem(o.name, o.rel))));
     })));
 }
 function renderEvaluation(q, draft) {
+  const reason = h('div', { hidden: draft.score !== 'bad' }, h('label', { for: `r-${q.id}` }, 'bad の理由'),
+    h('select', { id: `r-${q.id}`, onchange: e => { draft.reason = e.target.value; } },
+      BAD_REASONS.map(r => h('option', { value: r, selected: r === draft.reason }, r))));
   const radio = (value, label) => h('label', {}, h('input', { type: 'radio', name: `sc-${q.id}`, value, checked: draft.score === value,
-    onchange: () => { draft.score = value; render(); } }), label);
-  const fs = h('fieldset', {}, h('legend', { text: '納品物の評価（付けなくてもかまいません）' }),
-    radio('good', 'good'), radio('bad', 'bad'), radio('', '付けない'));
-  if (draft.score === 'bad') {
-    fs.add(h('label', { for: `r-${q.id}` }, 'bad の理由'),
-      h('select', { id: `r-${q.id}`, onchange: e => { draft.reason = e.target.value; } },
-        BAD_REASONS.map(r => h('option', { value: r, selected: r === draft.reason }, r))));
-  }
-  return fs;
+    onchange: () => { draft.score = value; reason.hidden = value !== 'bad'; } }), label);
+  return h('fieldset', {}, h('legend', { text: '納品物の評価（付けなくてもかまいません）' }),
+    radio('good', 'good'), radio('bad', 'bad'), radio('', '付けない'), reason);
 }
-async function submitAnswer(q, choice, draft) {
+function qCard(q, st) {
+  const scope = q.scope || 'none';
+  const draft = S.drafts[q.id] || (S.drafts[q.id] = { comment: '', score: '', reason: BAD_REASONS[0] });
+  const g = q.goal ? goalOf(q.goal) : null;
+  const kindText = q.kind === 'approval' ? (SCOPE_NAMES[scope] || '承認') : KIND_GROUPS[kindGroup(q)];
+  const card = h('div', { class: q.kind === 'approval' ? 'q approval' : 'q', role: 'group', 'aria-labelledby': `qt-${q.id}` });
+  card.add(h('div', { class: 'who' }, h('span', { class: 'kind', text: kindText }), h('span', { text: `質問 ${q.id}` }), h('span', { text: questTitle(q.quest) })),
+    g ? h('div', { class: 'note', text: `達成条件：${g.title}` }) : null,
+    h('div', { class: 'qt', id: `qt-${q.id}`, text: q.text }));
+  if (!st.open) {
+    card.add(h('div', { class: 'picked' }, h('span', {}, 'あなたの選択：', h('b', { text: st.label })),
+      h('button', { type: 'button', class: 'ghost sm', onclick: () => reopen(q.id) }, '取り消す')),
+      h('div', { class: 'due', text: dueText(q) }));
+    return card;
+  }
+  if (scope === 'route' || q.diagram) {
+    const d = h('div');
+    card.add(d);
+    fillDiagram(d, q.diagram || `diagrams/route-${q.quest}.svg`, `diagrams/route-${q.quest}.txt`);
+  }
+  if (scope === 'output' || scope === 'execute') card.add(renderCovered(q, scope));
+  if (scope === 'execute') card.add(h('p', { class: 'warn', text: '元に戻せない操作です。内容を確かめてから、答えてください。' }));
+  const err = h('p', { class: 'err', role: 'alert' });
+  const comment = h('textarea', { id: `c-${q.id}`, oninput: e => { draft.comment = e.target.value; } });
+  comment.value = draft.comment;
+  const answer = async (choice, text, extra) => {
+    err.textContent = '';
+    try { await submitAnswer(q, choice, draft, text, extra); } catch (e) { err.textContent = `送れませんでした：${e.message}`; }
+  };
+  if (q.kind === 'approval') {
+    if (scope === 'output') card.add(renderEvaluation(q, draft));
+    card.add(h('div', { class: 'field' }, h('label', { for: `c-${q.id}` }, scope === 'output' ? '一言（空でもかまいません）' : 'やり直す点・一言（空でもかまいません）'), comment),
+      h('div', { class: 'row' },
+        h('button', { type: 'button', onclick: () => {
+          if (scope === 'execute' && !window.confirm('元に戻せない操作を承認します。よろしいですか？')) return;
+          answer(APPROVE, draft.comment);
+        } }, APPROVE),
+        h('button', { type: 'button', class: 'ghost', onclick: () => answer(REDO, draft.comment) }, REDO),
+        h('button', { type: 'button', class: 'ghost', onclick: () => answer(LATER, draft.comment) }, LATER)));
+  } else {
+    const opts = (q.options || []).slice(0, 4);
+    if (opts.length) {
+      card.add(h('div', { class: 'opts', role: 'group', 'aria-label': '選択肢' }, opts.map(o => h('button', {
+        type: 'button', class: o.recommended ? 'rec' : null, onclick: () => {
+          if (q.kind === 'term' && o.label === TERM_FIX) {
+            if (!draft.comment.trim()) { err.textContent = '修正案を書いてください。'; comment.focus(); return; }
+            answer(o.label, draft.comment); return;
+          }
+          answer(o.label, '');
+        } },
+        h('span', {}, o.label, o.reason ? h('span', { class: 'why', text: o.reason }) : null),
+        o.recommended ? h('small', { text: 'おすすめ' }) : null))));
+    }
+    if (q.kind === 'term') {
+      card.add(h('div', { class: 'write' }, h('label', { for: `c-${q.id}` }, `修正案（「${TERM_FIX}」を選ぶときに書きます）`), comment));
+    } else if (q.kind === 'choice' || !opts.length) {
+      card.add(h('div', { class: 'write' },
+        h('label', { for: `c-${q.id}` }, opts.length ? '上の案にない場合は、ここに書いて答える' : '答えを書く'), comment,
+        h('div', {}, h('button', { type: 'button', onclick: () => {
+          if (!draft.comment.trim()) { err.textContent = '答えを書いてください。'; comment.focus(); return; }
+          answer(FREE_CHOICE, draft.comment);
+        } }, 'この内容で答える'))));
+    }
+    if (!opts.some(o => o.label === LATER)) card.add(h('div', {}, h('button', { type: 'button', class: 'ghost sm', onclick: () => answer(LATER, '') }, LATER)));
+  }
+  card.add(err, h('div', { class: 'due', text: dueText(q) }));
+  return card;
+}
+async function submitAnswer(q, choice, draft, text) {
   if (!/^A\d+$/.test(String(q.id))) throw new Error('質問の番号が正しくありません');
-  const comment = (draft.comment || '').trim();
+  const comment = (text || '').trim();
   const covers = q.covers && q.covers.length ? q.covers : [q.goal || q.quest];
   const rec = { question: q.id, quest: q.quest, goal: q.goal || null, covers, scope: q.scope || 'none', choice,
     comment, time: isoNow(), consumed: false, auto: false };
@@ -823,7 +1062,7 @@ async function submitAnswer(q, choice, draft) {
         reason: draft.score === 'bad' ? draft.reason || '' : '', comment });
     }
   }
-  S.answered[q.id] = { label: choice === FREE_CHOICE ? `自由入力（${comment}）` : choice, text: String(q.text).slice(0, 30), at: Date.now() };
+  S.answered[q.id] = { choice, label: choice === FREE_CHOICE ? `自由入力（${comment}）` : choice, at: Date.now() };
   delete S.reopened[q.id];
   delete S.drafts[q.id];
   render();
@@ -835,45 +1074,38 @@ async function reopen(id) {
     await writeJson(dir, `${id}.json`, { question: id, reopen: true });
     delete S.answered[id];
     S.reopened[id] = true;
-    S.selQuestion = id;
-    toast('選び直せます。質問の画面に戻しました。');
+    toast('取り消しました。もう一度、答えられます。');
     render();
-  } catch (e) { toast(`戻せませんでした：${e.message}`); }
+  } catch (e) { toast(`取り消せませんでした：${e.message}`); }
+}
+function renderAsk() {
+  const all = visibleQs();
+  const open = all.filter(x => x.st.open);
+  const f = S.qf;
+  if (f.quest !== 'all' && !questOf(f.quest)) f.quest = 'all';
+  const sel = (id, label, onchange, options) => h('div', { class: 'field' }, h('label', { for: id }, label),
+    h('select', { id, onchange }, options.map(([v, t, cur]) => h('option', { value: v, selected: cur }, t))));
+  const qOpts = [['all', `すべてのクエスト（${open.length} 件）`, f.quest === 'all']].concat(questList().map(q =>
+    [q.id, `${q.id} ${q.title}（${open.filter(x => x.q.quest === q.id).length} 件）`, f.quest === q.id]));
+  const kOpts = [['all', 'すべての種類', f.kind === 'all']].concat(Object.keys(KIND_GROUPS).map(k =>
+    [k, `${KIND_GROUPS[k]}（${open.filter(x => kindGroup(x.q) === k).length} 件）`, f.kind === k]));
+  const list = all.filter(x => (f.only ? x.q.id === f.only : true) && (f.quest === 'all' || x.q.quest === f.quest) && (f.kind === 'all' || kindGroup(x.q) === f.kind));
+  const left = list.filter(x => x.st.open).length;
+  const filtered = f.quest !== 'all' || f.kind !== 'all' || !!f.only;
+  const panel = h('div', { class: 'panel top' }, h('h2', {}, '質問 ', h('span', { class: open.length ? 'nb' : 'nb zero', text: String(open.length) })),
+    h('div', { class: 'fbar' },
+      sel('qf', 'クエストで絞り込む', e => { f.quest = e.target.value; f.only = null; render(); const el = $('qf'); if (el) el.focus(); }, qOpts),
+      sel('qk', '種類で絞り込む', e => { f.kind = e.target.value; f.only = null; render(); const el = $('qk'); if (el) el.focus(); }, kOpts),
+      filtered ? h('button', { type: 'button', class: 'ghost sm', onclick: () => { S.qf = { quest: 'all', kind: 'all', only: null }; render(); } }, '絞り込みをやめる') : null),
+    h('p', { class: 'note', text: `表示中 ${list.length} 件（未回答 ${left} 件）。答えた質問は、取り消すまでここに残ります。${f.only ? `　いまは、質問 ${f.only} だけを表示しています。` : ''}` }));
+  panel.add(list.length ? h('div', { class: 'asks' }, list.map(x => qCard(x.q, x.st)))
+    : h('div', { class: 'empty', text: filtered ? 'この条件に合う質問は、ありません。' : '答える質問は、いまありません。' }));
+  return panel;
 }
 
-// ---------------------------------------------------------------- 画面：予定表
-function deadlineGoals() {
-  return Object.values((S.board && S.board.goals) || {})
-    .filter(g => g.deadline && !GOAL_TERMINAL.includes(g.status) && g.status !== '失敗')
-    .sort((a, b) => String(a.deadline).localeCompare(String(b.deadline)) || idNum(a.id) - idNum(b.id));
-}
-function renderSchedule() {
-  const sec = h('section', { 'aria-labelledby': 'h-sched' }, h('h2', { id: 'h-sched' }, '予定表'));
-  const d = h('div');
-  sec.add(d);
-  fillDiagram(d, 'diagrams/schedule.svg', 'diagrams/schedule.txt', { label: '予定表の図', empty: '予定表はまだありません。' });
-  sec.add(h('h3', {}, '締切のある達成条件'));
-  const list = deadlineGoals();
-  if (!list.length) { sec.add(h('p', { class: 'muted', text: '締切のある達成条件は、まだありません。' })); return sec; }
-  const body = h('tbody');
-  list.forEach(g => {
-    const late = hasSlack(g) && g.slack_min < 0;
-    body.add(h('tr', {},
-      h('td', { 'data-label': 'クエスト', text: questTitle(g.quest) }),
-      h('td', { 'data-label': '達成条件', text: g.title }),
-      h('td', { 'data-label': '締切', text: jpDate(g.deadline) }),
-      h('td', { 'data-label': 'いまの様子', text: goalLabel(g) }),
-      h('td', { 'data-label': 'ゆとり' }, hasSlack(g) ? h('span', { class: late ? 'err' : null, text: slackText(g.slack_min) })
-        : h('span', { class: 'muted', text: 'まだ分かりません' }))));
-  });
-  sec.add(h('table', { class: 'goals' }, h('caption', { class: 'sr', text: '締切のある達成条件の表（締切順）' }),
-    h('thead', {}, h('tr', {}, ['クエスト', '達成条件', '締切', 'いまの様子', 'ゆとり'].map(t => h('th', { scope: 'col', text: t })))), body));
-  return sec;
-}
-
-// ---------------------------------------------------------------- 画面：資料室・魔導書
+// ---------------------------------------------------------------- 画面：資料室・設計図・魔導書
 function parseFrontmatter(text) {
-  const m = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  const m = /^﻿?---\r?\n([\s\S]*?)\r?\n---/.exec(text);
   const out = {};
   if (!m) return out;
   let key = null;
@@ -901,44 +1133,77 @@ async function listFiles(parts, ext) {
   }
   return names.sort((a, b) => a.localeCompare(b, 'ja'));
 }
-function renderLibrary() {
-  const sec = h('section', { 'aria-labelledby': 'h-lib' }, h('h2', { id: 'h-lib' }, '資料室・魔導書'));
-  const shared = h('div');
-  const book = h('div');
-  sec.add(h('div', { class: 'card' }, h('h3', { id: 'h-shared' }, '資料室'), shared),
-    h('div', { class: 'card' }, h('h3', { id: 'h-book' }, '魔導書'), book));
+function copyBtn(name, rel) {
+  const full = absPath(rel);
+  return full ? h('button', { type: 'button', class: 'ghost sm', 'aria-label': `${name}のパスをコピー`,
+    onclick: async () => toast((await copyText(full)) ? 'パスをコピーしました。' : 'コピーできませんでした。') }, 'パスをコピー')
+    : h('span', { class: 'note', text: '（パスは未設定）' });
+}
+function pathItem(name, rel) { return h('span', { class: 'row' }, h('span', { text: name }), copyBtn(name, rel)); }
+// 保存つきのファイル追加欄。opts: {id, label, dest, destText, accept, filter, target, button, pickedKey}
+function uploadBox(box, o) {
+  const picked = S[o.pickedKey] || [];
+  const okName = f => !o.filter || o.filter(f);
+  box.add(h('div', { class: 'field', style: 'margin-top:10px' }, h('label', { for: o.id }, o.label),
+    h('input', { type: 'file', id: o.id, multiple: !o.single, accept: o.accept || null, onchange: e => { S[o.pickedKey] = Array.from(e.target.files); render(); } }),
+    h('span', { class: 'note', text: o.destText })));
+  if (!picked.length) return;
+  box.add(h('ul', {}, picked.map(f => {
+    const c = checkFileName(f);
+    const bad = c.error || (okName(f) ? '' : o.badText);
+    return h('li', {}, `${f.name}（${sizeText(f.size)}）`, bad ? h('span', { class: 'err', text: `　保存しない：${bad}` }) : null);
+  })));
+  const msg = h('p', { role: 'status', class: 'err' });
+  const btn = h('button', { type: 'button', onclick: async () => {
+    btn.disabled = true;
+    try {
+      const good = picked.filter(okName);
+      const dir = await dirAt(o.dir, true);
+      const res = await saveFiles(dir, good);
+      picked.filter(f => !okName(f)).forEach(f => res.rejected.push({ name: f.name, error: o.badText }));
+      if (res.saved.length) await writeRequest('U', { kind: 'upload', quest: null, target: o.target, files: res.saved.map(s => s.to) });
+      S[o.pickedKey] = [];
+      toast(saveReport(res) || '保存できるファイルがありませんでした。');
+      render();
+    } catch (e) { msg.textContent = `保存できませんでした：${e.message}`; btn.disabled = false; }
+  } }, o.button);
+  box.add(h('p', {}, btn), msg);
+}
+function renderShelf() {
+  const shared = h('div'), tpl = h('div'), book = h('div');
   const token = ++S.resToken;
   fillShared(shared, token);
+  fillTemplates(tpl, token);
   fillBook(book, token);
-  return sec;
+  return h('div', { class: 'grid2' },
+    h('div', { class: 'panel top' }, h('h2', {}, '資料室'), shared),
+    h('div', { class: 'panel top' }, h('h2', {}, '設計図（テンプレート）'), tpl),
+    h('div', { class: 'panel top' }, h('h2', {}, '魔導書'), book));
 }
 async function fillShared(box, token) {
   const names = await listFiles(['shared']);
   if (token !== S.resToken) return;
-  clear(box).add(h('p', { class: 'muted small', text: '会社で共有するファイルを置く場所です。' }));
-  box.add(names.length ? h('ul', { 'aria-label': '資料室のファイル' }, names.map(n => h('li', {}, pathItem(n, `shared/${n}`))))
+  clear(box).add(h('p', { class: 'note', text: '複数のクエストで使う素材を置く場所です。' }));
+  box.add(names.length ? h('ul', { class: 'list', 'aria-label': '資料室のファイル' }, names.map(n => h('li', {}, h('span', { text: n }), copyBtn(n, `shared/${n}`))))
     : h('p', { class: 'muted', text: '資料室に、ファイルはまだありません。' }));
-  const picked = S.sharedPicked;
-  box.add(h('label', { for: 'up-shared' }, 'ファイルを選ぶ（保存先：資料室）'),
-    h('input', { type: 'file', id: 'up-shared', multiple: true, onchange: e => { S.sharedPicked = Array.from(e.target.files); render(); } }));
-  if (picked.length) {
-    box.add(h('p', {}, '保存先：資料室（', h('code', { text: 'guild/shared/' }), '）'),
-      h('ul', {}, picked.map(f => { const c = checkFileName(f); return h('li', {}, `${f.name}（${sizeText(f.size)}）`,
-        c.error ? h('span', { class: 'err', text: `　保存しない：${c.error}` }) : null); })));
-    const msg = h('p', { role: 'status' });
-    const btn = h('button', { type: 'button', class: 'primary', onclick: async () => {
-      btn.disabled = true;
-      try {
-        const dir = await dirAt(['shared'], true);
-        const res = await saveFiles(dir, picked);
-        if (res.saved.length) await writeRequest('U', { kind: 'upload', quest: null, target: 'shared', files: res.saved.map(s => s.to) });
-        S.sharedPicked = [];
-        toast(saveReport(res) || '保存できるファイルがありませんでした。');
-        render();
-      } catch (e) { msg.textContent = `保存できませんでした：${e.message}`; btn.disabled = false; }
-    } }, '資料室に保存する');
-    box.add(h('p', {}, btn), msg);
-  }
+  uploadBox(box, { id: 'up-shared', label: 'ファイルを足す（保存先：資料室）', destText: '保存先：資料室（guild/shared/）', pickedKey: 'sharedPicked',
+    dir: ['shared'], target: 'shared', button: '資料室に保存する' });
+}
+async function fillTemplates(box, token) {
+  const names = await listFiles(['templates']);
+  if (token !== S.resToken) return;
+  const use = (S.board && S.board.template_use) || {};
+  clear(box).add(h('p', { class: 'note', text: '会社のひな形です。鍛冶師が Word・Excel・PowerPoint・PDF を作るときに使います。' }));
+  box.add(names.length ? h('ul', { class: 'list', 'aria-label': '設計図のファイル' }, names.map(n => {
+    const u = use[n] || {};
+    const c = Number(u.count) || 0;
+    return h('li', {}, h('span', {}, n, h('br'), h('span', { class: 'note', text: c > 0 && u.last ? `使用 ${c} 回　最後に使った日 ${jpDate(u.last)}` : `使用 ${c} 回` })),
+      copyBtn(n, `templates/${n}`));
+  })) : h('p', { class: 'muted', text: '設計図に、ファイルはまだありません。' }));
+  uploadBox(box, { id: 'up-templates', label: 'テンプレートを足す（保存先：設計図）', accept: TEMPLATE_EXT.join(','),
+    destText: '保存先：設計図（guild/templates/）。Word・Excel・PowerPoint・PDF が使えます。', pickedKey: 'templatePicked',
+    filter: f => TEMPLATE_EXT.some(x => String(f.name).toLowerCase().endsWith(x)), badText: '使えるのは .docx .xlsx .pptx .pdf だけです',
+    dir: ['templates'], target: 'templates', button: '設計図に保存する' });
 }
 async function fillBook(box, token) {
   const names = (await listFiles(['spellbook'], '.md')).filter(n => n !== '魔導書.md');
@@ -949,29 +1214,26 @@ async function fillBook(box, token) {
     items.push({ name: n.replace(/\.md$/i, ''), file: n, fm });
   }
   if (token !== S.resToken) return;
-  const waiting = ((S.board && S.board.questions) || []).filter(q => q.kind === 'term' && (q.status === '未回答' || S.reopened[q.id]) && !S.answered[q.id]).length;
-  clear(box).add(h('p', { class: waiting ? 'warn' : 'muted small', text: `確定待ち ${waiting} 件は質問タブにあります。` }),
-    h('p', { class: 'muted small', text: '項目の確定・修正・あとで決めるは、質問タブで答えます。ノートの本文は、ここには出しません。' }));
+  const waiting = unanswered().filter(q => q.kind === 'term').length;
+  clear(box).add(h('p', { class: 'note', text: '業務用語・設備・取り決めを覚えておく本です。' }),
+    h('p', { class: waiting ? 'warn' : 'note', text: `確定待ち ${waiting} 件は質問タブにあります。` }));
   if (!items.length) { box.add(h('p', { class: 'muted', text: '魔導書に、項目はまだありません。' })); return; }
-  box.add(h('ul', { class: 'qlist', 'aria-label': '魔導書の項目' }, items.map(it => {
-    const t = it.fm.type ? String(it.fm.type) : '種別なし';
+  box.add(h('ul', { class: 'list', 'aria-label': '魔導書の項目' }, items.map(it => {
+    const t = it.fm.type ? String(it.fm.type) : '種類なし';
     const st = it.fm.status ? String(it.fm.status) : '状態なし';
     const src = asList(it.fm.sources);
-    const al = asList(it.fm.aliases);
     const key = `sb:${it.name}`;
     const draft = S.drafts[key] || (S.drafts[key] = { text: '' });
-    const inp = h('input', { type: 'text', id: `sb-${it.name}`, maxlength: '300', oninput: e => { draft.text = e.target.value; } });
+    const inp = h('input', { type: 'text', id: `sb-${it.name}`, maxlength: '300', placeholder: '修正案', oninput: e => { draft.text = e.target.value; } });
     inp.value = draft.text;
     const msg = h('span', { class: 'err', role: 'alert' });
-    return h('li', { class: 'card' },
-      h('div', { class: 'row' }, pathItem(it.name, `spellbook/${it.file}`),
-        h('span', { class: 'state', text: t }),
-        h('span', { class: st === '確定' ? 'tag' : 'state', text: st }),
-        it.fm.confidence ? h('span', { class: 'muted small', text: `確信：${it.fm.confidence}` }) : null),
-      al.length ? h('p', { class: 'small muted', text: `別名：${al.join('、')}` }) : null,
-      h('p', { class: 'small', text: `出典：${src.length ? src.join('、') : 'なし'}` }),
-      h('label', { for: `sb-${it.name}` }, `${it.name} の修正案（任意）`),
-      h('div', { class: 'row' }, inp, h('button', { type: 'button', class: 'mini', onclick: async () => {
+    return h('li', { style: 'display:block' },
+      h('div', { class: 'row', style: 'justify-content:space-between' }, h('b', { text: it.name }),
+        h('span', { class: 'row' }, h('span', { class: 'chip', text: t }), h('span', { class: st === '確定' ? 'chip ok' : st === '候補' ? 'chip cand' : 'chip', text: st }))),
+      h('div', { class: 'note', text: `出典：${src.length ? src.join('、') : 'なし'}${it.fm.confidence ? `　確信：${it.fm.confidence}` : ''}` }),
+      h('div', { class: 'row', style: 'margin-top:4px' }, copyBtn(it.name, `spellbook/${it.file}`)),
+      h('label', { for: `sb-${it.name}`, style: 'margin-top:6px' }, `${it.name} の修正案`),
+      h('div', { class: 'row' }, h('div', { style: 'flex:1 1 160px' }, inp), h('button', { type: 'button', class: 'ghost sm', onclick: async () => {
         msg.textContent = '';
         if (!draft.text.trim()) { msg.textContent = '修正案を書いてください。'; inp.focus(); return; }
         try {
@@ -979,55 +1241,100 @@ async function fillBook(box, token) {
           draft.text = ''; inp.value = '';
           toast('修正案を送りました。');
         } catch (e) { msg.textContent = `送れませんでした：${e.message}`; }
-      } }, '修正する'), msg));
+      } }, '修正する')), msg);
   })));
 }
 
-// ---------------------------------------------------------------- 画面：全体
-function renderFolder() {
-  const bar = clear($('folderbar'));
-  if (S.root) bar.add(h('span', { class: 'muted', text: `フォルダ：${S.root.name}` }));
-  if (S.root) bar.add(h('button', { type: 'button', class: 'mini', onclick: pickFolder }, 'フォルダを選び直す'));
+// ---------------------------------------------------------------- 画面：使い方
+function renderSettings() {
+  const ok = !!S.board;
+  const cur = Number(((S.board || {}).limits || {}).max_active) || 4;
+  const sel = h('select', { id: 'in-max', disabled: !ok, 'aria-describedby': 'max-help' },
+    [1, 2, 3, 4, 5, 6, 7, 8].map(n => h('option', { value: n, selected: n === cur }, String(n))));
+  const msg = h('p', { class: 'ok', role: 'status', text: S.maxMsg });
+  const btn = h('button', { type: 'button', disabled: !ok, onclick: async () => {
+    try {
+      const n = Number(sel.value);
+      await writeRequest('M', { kind: 'setting', max_active: n });
+      S.maxMsg = `同時に進める数を ${n} 個にしました。次の /guild:quest から使います。`;
+      msg.textContent = S.maxMsg;
+      toast(S.maxMsg);
+    } catch (e) { msg.textContent = ''; toast(`送れませんでした：${e.message}`); }
+  } }, '変更する');
+  return h('div', { class: 'panel top' }, h('h2', {}, '設定'),
+    h('div', { class: 'settings' }, h('div', { class: 'field' }, h('label', { for: 'in-max' }, '同時に進める数（1〜8）'), sel), btn),
+    h('p', { id: 'max-help', class: 'note' }, ok ? `いまは ${cur} 個です。変更すると、次に ` : 'フォルダを選ぶと、変更できます。変更すると、次に ', h('code', { text: '/guild:quest' }), ' を実行したときから使います。'),
+    msg,
+    ok ? h('div', { class: 'row' }, h('span', { class: 'note', text: `フォルダ：${S.root ? S.root.name : ''}` }), h('button', { type: 'button', class: 'ghost sm', onclick: pickFolder }, 'フォルダを選び直す')) : null);
 }
+function renderGuide() {
+  const terms = (states, labels) => h('div', { class: 'terms' }, states.map(s => h('div', {}, badge(s), h('span', { text: labels[s] }))));
+  return h('div', { class: 'guide' }, renderSettings(),
+    h('div', { class: 'panel top' }, h('h2', {}, 'guild とは'),
+      h('p', { text: '依頼を出すと、ギルドの仲間（役ごとのサブエージェント）が分担して片付け、納品物を納めます。' }),
+      h('p', { text: 'あなたがすることは、依頼を出すこと、承認すること、聞かれたことに答えることだけです。' }),
+      h('h3', {}, '流れ'),
+      h('div', { class: 'flow' }, h('span', { text: '依頼' }), '→', h('span', { text: '達成条件に分ける' }), '→', h('span', { class: 'me', text: '道のりの承認' }), '→',
+        h('span', { text: '冒険' }), '→', h('span', { text: '鑑定' }), '→', h('span', { class: 'me', text: '納品物の承認' }), '→', h('span', { text: '達成' })),
+      h('p', { class: 'note', text: '枠が太いものが、あなたの番です。元に戻せない操作があるときだけ「実行の承認」が増えます。' })),
+    h('div', { class: 'panel top' }, h('h2', {}, '画面の見方'),
+      h('div', { class: 'scroll' }, h('table', {}, h('tr', {}, h('th', { text: 'タブ' }), h('th', { text: '役目' })),
+        h('tr', {}, h('td', { text: '使い方' }), h('td', { text: '設定（同時に進める数）と、画面の説明' })),
+        h('tr', {}, h('td', { text: 'クエスト' }), h('td', { text: '依頼を出す、ギルドからの知らせ、かんばん、クエスト票（予定表を含む）' })),
+        h('tr', {}, h('td', { text: '質問' }), h('td', { text: '答える質問を全部表示。クエストと種類で絞れます' })),
+        h('tr', {}, h('td', { text: '資料室・設計図・魔導書' }), h('td', { text: '共有の素材、会社のひな形（設計図）、覚えた用語と取り決め' })))),
+      h('p', { class: 'note', text: '帯の下の「あなたの番」は、どのタブでも見えます。あなたが動く必要のあることを、ここに出します。' })),
+    h('div', { class: 'panel' }, h('h2', {}, '状態の言い方'),
+      h('div', { class: 'row2' }, h('div', {}, h('b', { text: '達成条件' }), terms(GOAL_STATES, GOAL_LABELS)),
+        h('div', {}, h('b', { text: 'クエスト' }), terms(QUEST_STATES, QUEST_LABELS))),
+      h('p', { class: 'note', text: '札は色だけでなく、形と文字でも区別します。' })),
+    h('div', { class: 'panel' }, h('h2', {}, '質問と期限'),
+      h('ul', {}, h('li', { text: '質問には、おすすめの答えが付きます。' }), h('li', { text: '期限（3 日）が来ると、おすすめの答えで進みます。' }),
+        h('li', {}, h('b', { text: '承認は、あなたが押すまで進みません。' })),
+        h('li', { text: '選択肢にない答えは、書いて答えられます。' }),
+        h('li', { text: '答えたあとでも、「取り消す」で戻せます。' }))),
+    h('div', { class: 'panel' }, h('h2', {}, '入れたデータの扱い'),
+      h('p', { text: '入れたデータは、取り扱ってよいものとして扱います。トークン・鍵・パスワードを入れるかどうかは、あなたが決めます。' }),
+      h('h3', {}, '困ったとき'),
+      h('ul', {}, h('li', { text: '画面が更新されないとき：フォルダの許可を確かめてください。' }),
+        h('li', {}, '進めたいとき：', h('code', { text: '/guild:quest' }), ' を実行してください。'))));
+}
+
+// ---------------------------------------------------------------- 画面：全体
 function renderConnect() {
-  const box = clear($('connect'));
   if (typeof window.showDirectoryPicker !== 'function') {
-    box.add(h('div', { class: 'card', role: 'alert' }, h('h2', {}, 'このブラウザでは使えません'),
+    return h('div', { class: 'panel top', role: 'alert' }, h('h2', {}, 'このブラウザでは使えません'),
       h('p', { text: 'Microsoft Edge または Google Chrome で、この画面を開いてください。' }),
-      h('p', { class: 'muted', text: 'フォルダの読み書きに、ブラウザの機能を使うためです。' })));
-    return false;
+      h('p', { class: 'muted', text: 'フォルダの読み書きに、ブラウザの機能を使うためです。' }));
   }
-  if (S.access === 'ok') {
-    if (S.error) box.add(h('p', { class: 'warn', role: 'status', text: S.error }));
-    return true;
-  }
-  const card = h('div', { class: 'card' }, h('h2', {}, 'ギルドのフォルダを開く'),
+  if (S.access === 'ok' && S.board) return null;
+  const card = h('div', { class: 'panel top' }, h('h2', {}, 'ギルドのフォルダを開く'),
     h('p', { text: 'ギルドの guild フォルダを選んでください。画面は、そのフォルダを読み書きします。' }));
   if (S.access === 'prompt') {
     card.add(h('p', { text: '前に選んだフォルダがあります。もう一度、許可してください。' }),
-      h('div', { class: 'row' }, h('button', { type: 'button', class: 'primary', onclick: regrant }, '前のフォルダを許可する'),
-        h('button', { type: 'button', onclick: pickFolder }, '別のフォルダを選ぶ')));
+      h('div', { class: 'row' }, h('button', { type: 'button', onclick: regrant }, '前のフォルダを許可する'),
+        h('button', { type: 'button', class: 'ghost', onclick: pickFolder }, '別のフォルダを選ぶ')));
   } else {
-    card.add(h('button', { type: 'button', class: 'primary', onclick: pickFolder }, 'フォルダを選ぶ'));
+    card.add(h('button', { type: 'button', onclick: pickFolder }, 'フォルダを選ぶ'));
   }
   if (S.error) card.add(h('p', { class: 'err', role: 'alert', text: S.error }));
-  box.add(card);
-  return false;
+  return card;
 }
 function render() {
-  renderFolder();
-  const connected = renderConnect();
-  const panels = clear($('panels'));
-  if (!connected || !S.board) { clear($('nowbar')); clear($('tabs')); return; }
+  renderBand();
   renderNow();
-  renderTabs();
-  const body = S.tab === '受付' ? renderIntake() : S.tab === 'クエスト' ? renderQuests() : S.tab === '質問' ? renderQuestions()
-    : S.tab === '予定表' ? renderSchedule() : renderLibrary();
-  panels.add(h('div', { id: 'panel', role: 'tabpanel', 'aria-labelledby': `tab-${S.tab}` }, body));
+  const body = clear($('body'));
+  const ok = !!S.board;
+  const cur = ok ? S.tab : TABS[0];
+  const conn = renderConnect();
+  if (conn) body.add(conn);
+  else if (S.error) body.add(h('p', { class: 'warn', role: 'status', text: S.error }));
+  const content = cur === TABS[0] ? renderGuide() : cur === TABS[1] ? renderQuestsTab() : cur === TABS[2] ? renderAsk() : renderShelf();
+  body.add(h('div', { id: 'panel', class: 'tabbody', role: 'tabpanel', 'aria-labelledby': `tab-${cur}` }, content));
 }
 function isTyping() {
   const a = document.activeElement;
-  return !!a && ['TEXTAREA', 'INPUT', 'SELECT'].includes(a.tagName) && !!$('panels').contains(a);
+  return !!a && ['TEXTAREA', 'INPUT', 'SELECT'].includes(a.tagName) && !!$('body').contains(a);
 }
 
 // ---------------------------------------------------------------- 読み込みと接続
@@ -1040,11 +1347,13 @@ async function loadBoard() {
     const data = JSON.parse(raw);
     S.raw = raw;
     S.board = data;
+    S.loadedAt = isoNow();
     for (const q of data.questions || []) {
       if (q.status === '未回答') delete S.reopened[q.id];
+      const a = S.answered[q.id];
+      if (a && q.status !== '未回答' && ((q.status === '回答済' && q.answer === a.choice) || (q.status === '保留' && a.choice === LATER))) delete S.answered[q.id];
     }
-    for (const [id, a] of Object.entries(S.answered)) if (Date.now() - a.at > 600000) delete S.answered[id];
-    if (isTyping()) { S.dirty = true; renderNow(); renderTabs(); return; }
+    if (isTyping()) { S.dirty = true; renderBand(); renderNow(); return; }
     render();
   } catch (e) {
     S.error = S.board ? '盤を読み直せませんでした。10 秒後に、もう一度読みます。'
@@ -1053,6 +1362,7 @@ async function loadBoard() {
     render();
   }
 }
+
 function startPolling() {
   clearInterval(S.timer);
   S.timer = setInterval(loadBoard, POLL_MS);
@@ -1106,10 +1416,19 @@ async function regrant() {
   }
 }
 async function init() {
+  const app = clear($('app'));
+  app.add(h('header', { class: 'band', id: 'band' }),
+    h('section', { class: 'nowbar', id: 'nowbar', 'aria-label': 'あなたの番', hidden: true }),
+    h('main', { class: 'body', id: 'body' }));
+  S.newsSeen = lsGet(LS_NEWS);
+  const saved = lsGet(LS_TAB);
+  if (TABS.includes(saved)) S.tab = saved;
+  window.addEventListener('pagehide', () => { if (S.board && S.tab === TABS[1]) markNewsSeen(); });
   document.addEventListener('focusout', () => {
     if (S.dirty) setTimeout(() => { if (S.dirty && !isTyping()) { S.dirty = false; render(); } }, 300);
   });
-  if (typeof window.showDirectoryPicker !== 'function') { render(); return; }
+  render();
+  if (typeof window.showDirectoryPicker !== 'function') return;
   try {
     const handle = await kvGet('root');
     if (handle) {

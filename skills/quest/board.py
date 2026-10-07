@@ -1457,6 +1457,8 @@ def make_brief(b, gid, role):
          f"- 素材の場所：{q['dir']}/input/", f"- 納品物の場所：{q['dir']}/output/",
          f"- 報告書の場所：.system/reports/{gid}-{role}.md"]
     if gid.startswith("Q"):
+        if q.get("form_hint"):
+            L.append(f"- 依頼主が選んだ納品物の形：{q['form_hint']}")
         done = [x for x in b.d["questions"] if x["quest"] == gid and x["status"] == "回答済"]
         if done:
             L += ["- 聞き取りの答え：", *[f"  - {x['text']} → {x['answer']}" + (f"（{x['comment']}）" if x["comment"] else "") for x in done]]
@@ -1675,14 +1677,16 @@ def safe_name(s):
     return s[:40] or "無題"
 
 
-def add_quest(b, title, detail="", due=None, priority="通常"):
+def add_quest(b, title, detail="", due=None, priority="通常", form=""):
     if priority not in PRIORITIES:
         raise GuildError("優先度は 優先／通常 です")
+    if form and form not in FORMS and not form.startswith("その他"):
+        raise GuildError(f"納品物の形が不正です: {form}")
     qid = b.next_id("Q")
     rel = f"quests/{qid} {safe_name(title)}"
     b.d["quests"][qid] = {"id": qid, "title": title, "detail": detail, "status": "受付", "status_before_hold": None,
                           "blocked_on": "", "priority": priority, "due": due, "goals": [], "route": [], "dir": rel,
-                          "requested_at": iso(now()), "approved_at": None, "rework_total": 0, "replans": 0,
+                          "requested_at": iso(now()), "approved_at": None, "form_hint": form, "rework_total": 0, "replans": 0,
                           "budget_stops": 0, "log": []}
     for sub in ("input", "output", "adventure log"):
         (b.p.root / rel / sub).mkdir(parents=True, exist_ok=True)
@@ -2662,7 +2666,7 @@ def build_parser():
     add("version")
     add("init-board", ("--vault-path", {"default": ""}), ("--python", {"default": ""}))
     add("get", ("--summary", {"action": "store_true"}), ("--quest",), ("--goal",), ("--question",))
-    add("add-quest", ("--title", {"required": True}), ("--detail", {"default": ""}), ("--due",), ("--priority", {"default": "通常"}))
+    add("add-quest", ("--title", {"required": True}), ("--detail", {"default": ""}), ("--due",), ("--priority", {"default": "通常"}), ("--form", {"default": ""}))
     add("add-goal", ("--quest", {"required": True}), ("--title", {"required": True}),
         ("--done-when", {"action": "append", "required": True}), ("--effort", {"default": "中"}), ("--deadline",),
         ("--estimate-min", {"type": int, "default": 0}), ("--depends-on", {"default": ""}), ("--form", {"default": "おまかせ"}),
@@ -2792,7 +2796,7 @@ def dispatch(b, a, paths):
             return b.question(a.question)
         raise GuildError("--summary／--quest／--goal／--question のどれかを指定してください")
     if c == "add-quest":
-        qid = add_quest(b, a.title, a.detail, a.due, a.priority)
+        qid = add_quest(b, a.title, a.detail, a.due, a.priority, a.form)
         render_quest(b, qid)
         return qid
     if c == "add-goal":

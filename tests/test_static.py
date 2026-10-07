@@ -141,10 +141,10 @@ class TestBoardHtml(unittest.TestCase):
         self.assertIsNone(re.search(r"<script[^>]+src=|<link[^>]+href=\"https?:", self.text))
         self.assertIsNone(re.search(r"(src|href)=\"https?://", self.text))
 
-    def test_タブは5つで定数と一致する(self):
+    def test_タブは4つで定数と一致する(self):
         m = re.search(r"const TABS = \[(.*?)\];", self.text, re.S)
         self.assertIsNotNone(m)
-        self.assertEqual(re.findall(r"'([^']+)'", m.group(1)), C.TABS_0_2)
+        self.assertEqual(re.findall(r"'([^']+)'", m.group(1)), C.TABS)
         self.assertIn("role: 'tab'", self.text)
         self.assertIn("role: 'tabpanel'", self.text)
 

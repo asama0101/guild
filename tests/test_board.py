@@ -911,6 +911,14 @@ class TestMisc(Base):
         appr = Path(self.ok("make-brief", g, "appraiser")).read_text(encoding="utf-8")
         self.assertNotIn("adventurer.md", appr)
 
+    def test_依頼の納品物の形と急ぎ度を受け取る(self):
+        q = self.ok("add-quest", "--title", "x", "--form", "Excel", "--priority", "優先")
+        d = self.data()["quests"][q]
+        self.assertEqual((d["form_hint"], d["priority"]), ("Excel", "優先"))
+        self.assertIn("納品物の形：Excel", Path(self.ok("make-brief", q, "fortune_teller")).read_text(encoding="utf-8"))
+        self.ok("add-quest", "--title", "y", "--form", "その他（くわしくへ）")
+        self.ng("add-quest", "--title", "z", "--form", "毛筆")
+
     def test_make_briefはクエスト単位でも作れる(self):
         q = self.quest()
         aid = self.ok("add-question", "--quest", q, "--text", "形式は", "--options", json.dumps([{"label": "Excel"}, {"label": "Word"}]))

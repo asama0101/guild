@@ -3,7 +3,7 @@
 必要なときだけ読む。SKILL.md の手順 3〜5 の詳細。
 
 ## 受付
-1. 新しい依頼（`requests/R*.json`）は、`board.py add-quest --title … --detail … [--due …]` でクエストにする。クエスト以外の登録経路はない。単純な依頼も、達成条件が 1 つのクエストになる。
+1. 新しい依頼（`requests/R*.json`。`title`・`detail`・`due`・`form`〈納品物の形〉・`priority`〈優先／通常〉・`files`）は、`board.py add-quest --title … --detail … [--due …] [--form …] [--priority …]` でクエストにする。形が「その他（くわしくへ）」のときは、`detail` を読む。添付は `requests/files/R<日時>/` にある。`input/` へ写す。クエスト以外の登録経路はない。単純な依頼も、達成条件が 1 つのクエストになる。
 2. `board.py make-brief Q1 receptionist` で、受付嬢の依頼書を作る（クエストの題名と内容、素材の場所、人物伝の要約、掟が付く）。
 3. 受付嬢は `.system/reports/<Q番号>-receptionist.md` に `## 聞き取りの問い` と `## 依頼主への質問` を書く。聞くのは、目的・納品物の形・期限・素材の足りなさだけ。問いは 1 回 3〜7 個、答えが前に進むものだけ。選択式にし、推奨案と理由を付ける。
 4. ギルドマスターは、`## 依頼主への質問` の各問いを `board.py add-question --quest Q1 --kind choice --text … --options '[{"label":…,"reason":…,"recommended":true},…]' --default …` で質問に出す。選択肢は 2〜4 個。
