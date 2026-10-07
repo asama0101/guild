@@ -903,6 +903,14 @@ class TestMisc(Base):
         self.assertIn("input/", text)  # 素材は場所だけ
         self.assertEqual(f.name, f"{g}-adventurer.md")
 
+    def test_錬金術師の依頼書には冒険者の報告書の場所が付き_鑑定士には付かない(self):
+        q, (g,) = self.to_running()
+        self.write_report(g)
+        alch = Path(self.ok("make-brief", g, "alchemist")).read_text(encoding="utf-8")
+        self.assertIn(f".system/reports/{g}-adventurer.md", alch)
+        appr = Path(self.ok("make-brief", g, "appraiser")).read_text(encoding="utf-8")
+        self.assertNotIn("adventurer.md", appr)
+
     def test_make_briefはクエスト単位でも作れる(self):
         q = self.quest()
         aid = self.ok("add-question", "--quest", q, "--text", "形式は", "--options", json.dumps([{"label": "Excel"}, {"label": "Word"}]))

@@ -1460,6 +1460,8 @@ def make_brief(b, gid, role):
         done = [x for x in b.d["questions"] if x["quest"] == gid and x["status"] == "回答済"]
         if done:
             L += ["- 聞き取りの答え：", *[f"  - {x['text']} → {x['answer']}" + (f"（{x['comment']}）" if x["comment"] else "") for x in done]]
+    if role == "alchemist" and gid.startswith("G") and report_files(b, gid, "adventurer"):
+        L.append(f"- 冒険者の報告書：.system/reports/{report_files(b, gid, 'adventurer')[-1].name}")
     if g.get("findings"):
         L += ["- これまでの指摘：", *[f"  - {f['fix_kind']}／{f['point_code']}／{f['target']}：{f['point']}" for f in g["findings"][-3:]]]
     rules = []
