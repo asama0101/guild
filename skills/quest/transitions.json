@@ -1,0 +1,907 @@
+{
+ "version": 1,
+ "quest": [
+  {
+   "from": "受付",
+   "to": "分解中",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "no_open_questions"
+   ],
+   "note": "聞き取りが終わり、未回答の問いがない",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "分解中",
+   "to": "承認待ち",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "has_goals",
+    "acyclic",
+    "all_have_done_when"
+   ],
+   "note": "達成条件と道のりがそろった",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "承認待ち",
+   "to": "進行中",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "approval_recorded(route)"
+   ],
+   "note": "道のりの承認（承認①）が通った。案の達成条件は待機になる",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "承認する"
+   ]
+  },
+  {
+   "from": "承認待ち",
+   "to": "分解中",
+   "actor": [
+    "client"
+   ],
+   "guards": [],
+   "note": "依頼主が「やり直す」を選んだ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "やり直す"
+   ]
+  },
+  {
+   "from": "進行中",
+   "to": "分解中",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "fix_kind_goal",
+    "replans_lt_limit"
+   ],
+   "note": "達成条件の見直しが必要。達成済みは達成のまま、ほかは案に戻す。承認①をやり直す",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "進行中",
+   "to": "達成",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "all_goals_done",
+    "cross_check_clean"
+   ],
+   "note": "すべて達成し、矛盾の疑いがない（最終鑑定を省く）",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "進行中",
+   "to": "最終鑑定",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "all_goals_done",
+    "cross_check_suspect"
+   ],
+   "note": "すべて達成し、矛盾の疑いがある",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "進行中",
+   "to": "最終鑑定",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "all_goals_done"
+   ],
+   "note": "依頼主が最終鑑定を頼んだ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "最終鑑定を頼む"
+   ]
+  },
+  {
+   "from": "最終鑑定",
+   "to": "達成",
+   "actor": [
+    "appraiser"
+   ],
+   "guards": [],
+   "note": "達成条件どうしに矛盾がない",
+   "writes": [
+    "board",
+    "reports"
+   ]
+  },
+  {
+   "from": "最終鑑定",
+   "to": "進行中",
+   "actor": [
+    "appraiser"
+   ],
+   "guards": [],
+   "note": "矛盾があり、直す達成条件を指定する（その達成条件は 達成→要手直し）",
+   "writes": [
+    "board",
+    "reports"
+   ]
+  },
+  {
+   "from": "受付",
+   "to": "保留",
+   "actor": [
+    "client",
+    "tick"
+   ],
+   "guards": [],
+   "note": "依頼主が止めた（または放置の期限）。保留前の状態を status_before_hold に残す",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "保留"
+   ]
+  },
+  {
+   "from": "保留",
+   "to": "受付",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "was_before_hold"
+   ],
+   "note": "再開する。保留前の状態に戻る",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "再開"
+   ]
+  },
+  {
+   "from": "分解中",
+   "to": "保留",
+   "actor": [
+    "client",
+    "tick"
+   ],
+   "guards": [],
+   "note": "依頼主が止めた（または放置の期限）。保留前の状態を status_before_hold に残す",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "保留"
+   ]
+  },
+  {
+   "from": "保留",
+   "to": "分解中",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "was_before_hold"
+   ],
+   "note": "再開する。保留前の状態に戻る",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "再開"
+   ]
+  },
+  {
+   "from": "承認待ち",
+   "to": "保留",
+   "actor": [
+    "client",
+    "tick"
+   ],
+   "guards": [],
+   "note": "依頼主が止めた（または放置の期限）。保留前の状態を status_before_hold に残す",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "保留"
+   ]
+  },
+  {
+   "from": "保留",
+   "to": "承認待ち",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "was_before_hold"
+   ],
+   "note": "再開する。保留前の状態に戻る",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "再開"
+   ]
+  },
+  {
+   "from": "進行中",
+   "to": "保留",
+   "actor": [
+    "client",
+    "tick"
+   ],
+   "guards": [],
+   "note": "依頼主が止めた（または放置の期限）。保留前の状態を status_before_hold に残す",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "保留"
+   ]
+  },
+  {
+   "from": "保留",
+   "to": "進行中",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "was_before_hold"
+   ],
+   "note": "再開する。保留前の状態に戻る",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "再開"
+   ]
+  },
+  {
+   "from": "最終鑑定",
+   "to": "保留",
+   "actor": [
+    "client",
+    "tick"
+   ],
+   "guards": [],
+   "note": "依頼主が止めた（または放置の期限）。保留前の状態を status_before_hold に残す",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "保留"
+   ]
+  },
+  {
+   "from": "保留",
+   "to": "最終鑑定",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "was_before_hold"
+   ],
+   "note": "再開する。保留前の状態に戻る",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "再開"
+   ]
+  },
+  {
+   "from": "受付",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "依頼主が取り下げた",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止"
+   ]
+  },
+  {
+   "from": "分解中",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "依頼主が取り下げた",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止"
+   ]
+  },
+  {
+   "from": "承認待ち",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "依頼主が取り下げた",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止"
+   ]
+  },
+  {
+   "from": "進行中",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "依頼主が取り下げた",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止"
+   ]
+  },
+  {
+   "from": "最終鑑定",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "依頼主が取り下げた",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止"
+   ]
+  },
+  {
+   "from": "保留",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "依頼主が取り下げた",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止"
+   ]
+  },
+  {
+   "from": "進行中",
+   "to": "失敗",
+   "actor": [
+    "client"
+   ],
+   "guards": [],
+   "note": "失敗した達成条件で「諦める」を選んだ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "諦める"
+   ]
+  }
+ ],
+ "goal": [
+  {
+   "from": "案",
+   "to": "待機",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "route_approved"
+   ],
+   "note": "承認①が通った",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "待機",
+   "to": "冒険中",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "deps_done",
+    "slot_free",
+    "no_overlap"
+   ],
+   "note": "出発順は余裕が小さい順→優先度→番号",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "待機",
+   "to": "冒険中",
+   "actor": [
+    "workshop"
+   ],
+   "guards": [
+    "deps_done"
+   ],
+   "note": "依頼主が工房で作ると選んだ",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "冒険中",
+   "to": "鑑定中",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "output_present",
+    "report_present",
+    "precheck_ok"
+   ],
+   "note": "納品物と報告書があり、pre-check が通った",
+   "writes": [
+    "board",
+    "reports"
+   ]
+  },
+  {
+   "from": "冒険中",
+   "to": "要手直し",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [],
+   "note": "報告書がない・エラー・pre-check NG・タイムアウト（障害を含む）",
+   "writes": [
+    "board"
+   ],
+   "reasons": [
+    "report_error",
+    "precheck_ng",
+    "no_report",
+    "timeout"
+   ]
+  },
+  {
+   "from": "冒険中",
+   "to": "確認待ち",
+   "actor": [
+    "workshop"
+   ],
+   "guards": [
+    "precheck_ok"
+   ],
+   "note": "依頼主が鑑定を省くと選んだ",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "待機",
+   "to": "案",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "quest_replanning"
+   ],
+   "note": "クエストが分解中に差し戻された",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "冒険中",
+   "to": "案",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "quest_replanning"
+   ],
+   "note": "クエストが分解中に差し戻された",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "要手直し",
+   "to": "案",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [
+    "quest_replanning"
+   ],
+   "note": "クエストが分解中に差し戻された",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "鑑定中",
+   "to": "確認待ち",
+   "actor": [
+    "appraiser"
+   ],
+   "guards": [
+    "done_when_met"
+   ],
+   "note": "done_when を満たす",
+   "writes": [
+    "board",
+    "reports"
+   ]
+  },
+  {
+   "from": "鑑定中",
+   "to": "要手直し",
+   "actor": [
+    "appraiser"
+   ],
+   "guards": [
+    "finding_recorded"
+   ],
+   "note": "fix_kind と point_code を書く",
+   "writes": [
+    "board",
+    "reports"
+   ]
+  },
+  {
+   "from": "要手直し",
+   "to": "冒険中",
+   "actor": [
+    "guildmaster",
+    "workshop"
+   ],
+   "guards": [
+    "retries_lt_limit"
+   ],
+   "note": "補正して冒険中に戻る。上限なら依頼主に聞く",
+   "writes": [
+    "board"
+   ]
+  },
+  {
+   "from": "要手直し",
+   "to": "失敗",
+   "actor": [
+    "client"
+   ],
+   "guards": [],
+   "note": "依頼主が「諦める」を選んだ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "諦める"
+   ]
+  },
+  {
+   "from": "失敗",
+   "to": "要手直し",
+   "actor": [
+    "client"
+   ],
+   "guards": [],
+   "note": "依頼主が「やり直す」を選んだ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "やり直す",
+    "この達成条件をやり直す"
+   ]
+  },
+  {
+   "from": "確認待ち",
+   "to": "達成",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "approval_recorded(output)",
+    "not_needs_execute"
+   ],
+   "note": "納品物の承認（承認②）。元に戻せない操作がない",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "承認する"
+   ]
+  },
+  {
+   "from": "確認待ち",
+   "to": "要手直し",
+   "actor": [
+    "client"
+   ],
+   "guards": [],
+   "note": "やり直す。直す点を fix_kind: brief で書く。手直しの回数に数える",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "やり直す"
+   ]
+  },
+  {
+   "from": "確認待ち",
+   "to": "実行承認待ち",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "approval_recorded(output)",
+    "needs_execute"
+   ],
+   "note": "納品物の承認のあと、元に戻せない操作がある",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "承認する"
+   ]
+  },
+  {
+   "from": "実行承認待ち",
+   "to": "達成",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "approval_recorded(execute)"
+   ],
+   "note": "実行の承認（承認③）。メインセッションが実行する",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "承認する"
+   ]
+  },
+  {
+   "from": "実行承認待ち",
+   "to": "失敗",
+   "actor": [
+    "client"
+   ],
+   "guards": [],
+   "note": "実行を承認しなかった",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "承認しない"
+   ]
+  },
+  {
+   "from": "実行承認待ち",
+   "to": "要手直し",
+   "actor": [
+    "guildmaster"
+   ],
+   "guards": [],
+   "note": "実行がエラーになった",
+   "writes": [
+    "board"
+   ],
+   "reasons": [
+    "report_error"
+   ]
+  },
+  {
+   "from": "達成",
+   "to": "要手直し",
+   "actor": [
+    "appraiser"
+   ],
+   "guards": [
+    "quest_final_review"
+   ],
+   "note": "最終鑑定で矛盾が見つかり、直す達成条件として指定された",
+   "writes": [
+    "board",
+    "reports"
+   ]
+  },
+  {
+   "from": "案",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "取り下げ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止",
+    "後続も中止する"
+   ]
+  },
+  {
+   "from": "待機",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "取り下げ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止",
+    "後続も中止する"
+   ]
+  },
+  {
+   "from": "冒険中",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "取り下げ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止",
+    "後続も中止する"
+   ]
+  },
+  {
+   "from": "鑑定中",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "取り下げ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止",
+    "後続も中止する"
+   ]
+  },
+  {
+   "from": "要手直し",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "取り下げ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止",
+    "後続も中止する"
+   ]
+  },
+  {
+   "from": "確認待ち",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "取り下げ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止",
+    "後続も中止する"
+   ]
+  },
+  {
+   "from": "実行承認待ち",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "取り下げ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止",
+    "後続も中止する"
+   ]
+  },
+  {
+   "from": "失敗",
+   "to": "中止",
+   "actor": [
+    "client"
+   ],
+   "guards": [
+    "dependents_confirmed"
+   ],
+   "note": "取り下げ",
+   "writes": [
+    "board"
+   ],
+   "choices": [
+    "中止",
+    "後続も中止する"
+   ]
+  }
+ ]
+}
