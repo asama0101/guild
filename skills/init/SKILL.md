@@ -27,11 +27,12 @@ disable-model-invocation: true
    ```
 
    - `max_active`（同時に冒険中にできる件数。1〜8、既定 4）は画面の「使い方」タブで変えられる。
+   - `crawl_depth`（参考 URL をたどる深さ。1〜5、既定 2）と `crawl_limit`（URL から取る最大ページ数。1〜100、既定 20）も同じ画面で変えられる。雛形には書かない（キーが無ければ 2 と 20 とみなす）。
    - `results_backfilled: true` は新しい vault だけに書く（過去の達成分の後追いは要らない）。すでに board.json がある場合は足さない（`/guild:quest` が後追いして書く）。
    - `venv_python`（文字列）は手順 7 で venv を作れたときだけ書き足す。最初の例には含めない。
 
 4. すでに board.json がある場合は、`projects_dir`・`quests_dir`・`glossary_dir`・`assets_dir`・`knowledge_dir`・`templates_dir`（手順 6 で決める。すでに値があれば変えない）と、無い項目（`studies`・`quests`・`questions`・`notices`・`profile`。それぞれ `[]`）だけを書き足す。ほかの中身は変えない。
-   （すでに board.json がある場合、`max_active` が無ければ足さない。ギルドマスターが無いときは 4 とみなす。）
+   （すでに board.json がある場合、`max_active` が無ければ足さない。ギルドマスターが無いときは 4 とみなす。`crawl_depth`・`crawl_limit` も同様に足さず、無いときは 2 と 20 とみなす。）
 5. vault に `Inbox/` があれば、`inbox` に `"Inbox"` を入れる（掲示板と並んで、Inbox のメモも依頼として受け付ける）。無ければ空のままにする。
 6. フォルダの置き場所を決める。質問するのは、手順 0 が通ったあとの次の質問で、該当する行があるときだけ。
    - 複数の行で既存フォルダの候補が見つかったら、それらは 1 回の `AskUserQuestion` にまとめる。

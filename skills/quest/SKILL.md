@@ -33,7 +33,7 @@ argument-hint: "[auto]"
 ## フォルダ
 研究：`<projects_dir>/<研究名>/`（研究ノート `<研究名>.md`・`input/`・`output/`）。単発：`<quests_dir>/<番号> <内容>/`（`<番号> <内容>.md`・`input/`・`output/`）。
 - 研究のクエストは研究のフォルダを使う。単発のフォルダは、資料が添えられていれば受付のとき（受付嬢を呼ぶ前）、無ければ書記の仕分けを写すとき（手順 4、確認の「この理解で進める」）に、成果物の形を問わず作る（内容は 20 字ほど、使えない文字は `-`）。作ったら `set <id> dir` し、クエストのノート（frontmatter `type: quest`・`guild_id`・`guild_status`（`status` と同じ。変わるたびに書き直す）、節 `依頼`・`達成の条件`・`資料`・`結果`）を作る。
-- 資料（添付ファイルを `input/` に移す・Office の写しを作る）は → `intake.md`。
+- 資料（添付ファイルを `input/` に移す・Office の写しを作る・参考 URL の巡回）は → `intake.md`。
 - **結果の Markdown（達成のたびに必ず）**：`output/<番号> 結果.md`（frontmatter・`[[リンク]]` 可。隠しフォルダ `.system` には置かない）。全文はここだけ（担当の報告書から写す。ファイルが成果物のクエストや既存ノートへの書き足しは要約を 1 つ）。クエストのノートの「結果」は要約 1〜2 行と `[[<番号> 結果]]`、研究ノートの「記録」は 1 行（クエスト・要約・リンク）にとどめる。
 
 ## クエストの移り方（遷移表）
@@ -67,7 +67,7 @@ argument-hint: "[auto]"
 - 1 回の実行は、出発できるものが無くなるまで手順 5〜8 をくり返す。
 
 ## board.json の形
-トップ：`max_active`・`*_dir`（`assets_dir` 含む）・`venv_python`・`inbox`・`last_ids`・`results_backfilled`・`pending_term_quests`・`studies`・`quests`・`questions`・`notices`（`{time, by: "herald", text, stops[]}`）・`profile`（`{section, text, source}`）。
+トップ：`max_active`・`crawl_depth`（1〜5、無ければ 2）・`crawl_limit`（1〜100、無ければ 20）・`*_dir`（`assets_dir` 含む）・`venv_python`・`inbox`・`last_ids`・`results_backfilled`・`pending_term_quests`・`studies`・`quests`・`questions`・`notices`（`{time, by: "herald", text, stops[]}`）・`profile`（`{section, text, source}`）。
 - 研究：`id title goal due priority status(計画中|承認待ち|進行中|達成|中止) dir note files quests next feedback replan plan log`。
 - クエスト：`id study title detail priority due status adventurers depends_on notes output(おまかせ|回答だけ|ノート|テキスト|Word|Excel|PowerPoint|PDF|その他) dir files source done_when retries appraise terms{ask,lookup} result links report feedback log[{time,who,edge,text}]`。
 - 質問：`id quest_id study_id kind(question|approval|todo|confirm|rule) from asked grill feedback_id interview_id title text options recommended reason status(未回答|回答済) answer comment`。
@@ -86,12 +86,19 @@ argument-hint: "[auto]"
    - ふつうの質問：返事を依頼書に書き足して `受付済`。手直しを止めた質問は遷移表のとおり。前提が中止になった質問：「前提なしで続ける」は `depends_on` から外して `受付済`、「やめる」は `中止`。クエストも研究も付いていない質問（賢者の問い）は `回答済` にして賢者の次の回に渡すだけで、どのクエストも止めない。
    - `todo`：「終わった」は `達成`（`result` に返事のコメントを写し、決めたことは後のクエストの依頼書にも書く）、「やめる」は `中止`。`中止` を前提にしているクエストは `返事待ち` にし、伝令の取り次ぎで `["前提なしで続ける", "やめる"]` を聞く。
    - 錬金術師・書記の「受付嬢への問い」への返事、研究の承認・研究の質問、次の段階 → `study.md`（計画の直しなら `replan.md`）。評価・インタビュー（`feedback_id`・`interview_id`）→ `feedback.md`。決まりの見直し（`kind: rule`）→ `lessons.md`。
-2. **依頼を受け取る。** まず `board.py apply-simple`（同時数 `setting` と研究の優先度 `study_priority`。自動の回はスクリプトが先に取り込んでいる）。次に `requests/保留/`・`feedback/保留/` のファイルを元のフォルダに戻して読む。`R<日時>.json` の `kind`：`quest`（`title detail priority due output files posted`）、`study`、`term`（`title` が用語、`detail` が意味。クエストとして手順 4 へ）、`interview`（→ `feedback.md`）、`asset_decision`（取り込みは `assets-apply`。解釈しない）。`inbox` のメモのうち、どのクエストの `source` にも無いものも依頼として集める（メモは動かさない）。同じ `posted` が載っていれば二重に扱わない。受け付けられないもの（`計画中`・`承認待ち` の研究への `replan`、終わっていないインタビュー中の新しいインタビュー、聞き取り中の重ねた評価）は `保留/` に移す。
+2. **依頼を受け取る。** まず `board.py apply-simple` を実行する。対象は、同時数・`crawl_depth`・`crawl_limit` の `setting` と、研究の優先度 `study_priority`。自動の回はスクリプトが先に取り込んでいる。次に `requests/保留/`・`feedback/保留/` のファイルを元のフォルダに戻して読む。`R<日時>.json` の `kind`：
+   - `quest`：`title detail priority due output files posted`。任意で `urls`（参考 URL の配列）。
+   - `study`：手順 3 へ。
+   - `term`：`title` が用語、`detail` が意味。クエストとして手順 4 へ。
+   - `interview`：→ `feedback.md`。
+   - `asset_decision`：取り込みは `assets-apply`。解釈しない。
+
+   `inbox` のメモのうち、どのクエストの `source` にも無いものも依頼として集める（メモは動かさない）。同じ `posted` が載っていれば二重に扱わない。受け付けられないもの（`計画中`・`承認待ち` の研究への `replan`、終わっていないインタビュー中の新しいインタビュー、聞き取り中の重ねた評価）は `保留/` に移す。
    - `kind: cancel`（取り消し）：最初に扱う → `intake.md`。
    - `kind: replan` → `replan.md`。`kind: study` → 手順 3。それ以外はクエスト（手順 4）。
    - `feedback/*.json`（結果の評価）→ `feedback.md`。
 3. **研究の計画。** 受付嬢が目標を聞き取る → 錬金術師が分ける → 書記が仕分ける → 依頼主が承認する。→ `study.md`（計画の直しは `replan.md`）。
-4. **受付（単発）。** 受付嬢が聞き取る → 書記が仕分ける。依頼ごとに `add-quest` で載せる（`source`・資料があれば `files` も）。資料が添えられたクエストは、受付嬢を呼ぶ前にフォルダとクエストのノートを作り、資料を `input/` に移して写しを作る。
+4. **受付（単発）。** 受付嬢が聞き取る → 書記が仕分ける。依頼ごとに `add-quest` で載せる（`source`・資料があれば `files`・`urls` があれば `urls` も）。資料が添えられたクエストは、受付嬢を呼ぶ前にフォルダとクエストのノートを作り、資料を `input/` に移して写しを作る。`urls` があれば、冒険者の依頼書に URL と `crawl_depth`・`crawl_limit` を書く（`intake.md`）。
    - 受付嬢の依頼書 `R<日時>-receptionist.md` に、依頼（内容・くわしく・急ぎ度・期限・成果物の形・資料の名前）と「どの依頼書にも書く」ものを書いて呼ぶ。報告の `## 聞き取りの問い`（依頼の問いと人物の問い）は、問いごとに `kind: question`・`grill: true`・`from: receptionist` の質問として文面を変えずに `add-question` で載せ、クエストを `返事待ち` にする。「先に調べる語」は `terms.lookup`、題が「語：」の問いの語は `terms.ask` に写す。
    - 問いが無ければ（「聞き取り: 済み」）、書記の依頼書 `R<日時>-scribe.md`（クエスト番号・依頼と受付嬢の報告書のパス・共通のもの）を書いて呼ぶ。`term` の依頼は、書記が意味の有無で 1 クエスト（吟遊詩人）か 2 クエスト（冒険者が調べる → 吟遊詩人。前提付き）かを決める。報告をもとに、担当・急ぎ度（★ → 3／2／1）・触るノート・`output`・`done_when` を写して `受付済` にする（フォルダが無ければ作る）。報告に「受付嬢への問い」があれば聞き取りの続きに回して `返事待ち`。担当が依頼主なら `依頼主がやること` にして割り振らず、`kind: todo` の質問を 1 つ載せる（文面は伝令の取り次ぎ）。
 5. **出発。** 出発させるかは、遷移表の「受付済→冒険中」「要手直し→冒険中」の条件だけで決める。前提クエストが無いか `達成` のものは出発できる（`依頼主がやること` のままの前提はまだ終わっていない）。触るノートが重ならないものは同時に出す。冒険中が `max_active` 件になるまで出し、並びは「board.json の形」の規則に従う。依頼書には、内容・くわしく・触るノート・`done_when`・成果物の形・資料のパス（写しがあれば写し）・`output/` のパス・先に調べる語・依頼主から聞いた語の意味・「どの依頼書にも書く」ものを書く。鍛冶師には `<templates_dir>/`、研究のクエストには研究の目標と研究ノートのパス、手直しには鑑定の報告書のパスと満たさなかった条件（評価のやり直しは占い師のまとめ）も書く。出発したら `冒険中`。

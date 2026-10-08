@@ -148,7 +148,7 @@ def _find_target(board, tid):
 
 def summary(board):
     """ギルドマスターが読む要約。result・log・detail・回答済の質問は含めない。"""
-    top_keys = ("vault", "inbox", "max_active", "projects_dir", "quests_dir", "glossary_dir", "assets_dir",
+    top_keys = ("vault", "inbox", "max_active", "crawl_depth", "crawl_limit", "projects_dir", "quests_dir", "glossary_dir", "assets_dir",
                 "knowledge_dir", "templates_dir", "venv_python",
                 "results_backfilled", "pending_term_quests", "updated")
     out = {k: board[k] for k in top_keys if k in board}
@@ -345,9 +345,16 @@ def apply_simple(board, req_dir, now=None):
         items = _newest_first(items)
         f, d = items[0]
         v = d.get("value")
-        if key == "max_active" and isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 8:
+        ok = isinstance(v, int) and not isinstance(v, bool)
+        if key == "max_active" and ok and 1 <= v <= 8:
             board["max_active"] = v
             msgs.append(f"同時数を {v} 件にした")
+        elif key == "crawl_depth" and ok and 1 <= v <= 5:
+            board["crawl_depth"] = v
+            msgs.append(f"巡回の深さを {v} にした")
+        elif key == "crawl_limit" and ok and 1 <= v <= 100:
+            board["crawl_limit"] = v
+            msgs.append(f"巡回の最大ページ数を {v} にした")
         else:
             msgs.append(f"設定 {key}={v!r} は受け付けられないので取り込まなかった")
         for f2, _ in items:

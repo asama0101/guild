@@ -228,6 +228,20 @@ def asset_violations(html):
 
 
 class TestBoardHtml(unittest.TestCase):
+    def test_review_fixes_open_urls_folder_crawl(self):
+        # 開く: スクリプトが走りうる拡張子は開かず、window.open は noopener,noreferrer
+        self.assertIn("html|htm|xhtml|svg|js|mjs|xml", HTML)
+        self.assertIn("このファイルは安全のため開けません。パスをコピーしてください", HTML)
+        self.assertIn('window.open(u,"_blank","noopener,noreferrer")', HTML)
+        # URL は http(s) のみ。落とした件数を知らせる
+        self.assertIn(r"/^https?:\/\//i.test(u)", HTML)
+        self.assertIn("http(s) 以外の URL", HTML)
+        # フォルダのドロップ（size 0 かつ type 空）は足さない
+        self.assertIn('f.size===0 && f.type===""', HTML)
+        self.assertIn("フォルダは追加できません。中のファイルを選んでください", HTML)
+        # 深さ送信済みの案内
+        self.assertIn("深さは送信済みです", HTML)
+
     def test_tabs_nav_and_views_match(self):
         tabs = re.search(r"const TABS = \[(.*?)\];", HTML).group(1)
         tabs = re.findall(r'"(\w+)"', tabs)
@@ -268,6 +282,38 @@ class TestBoardHtml(unittest.TestCase):
         for old, new in mutations:
             self.assertIn(old, HTML, old)
             self.assertNotEqual(asset_violations(HTML.replace(old, new, 1)), [], f"検出できない変異: {old} -> {new}")
+
+    def test_file_pick_list_and_urls(self):
+        # 資料の累積リスト・URL 欄（依頼と研究で共通部品）
+        for k in ("nFiles", "sFiles"):
+            self.assertIn(f"picked.{k}", HTML)
+            self.assertIn(f'id="{k}List"', HTML)
+            self.assertIn(f'data-drop="{k}"', HTML)
+        self.assertIn("data-fremove", HTML)
+        self.assertRegex(HTML, r"async function saveFiles\(name,\s*files\)")
+        self.assertIn('id="nUrls"', HTML)
+        self.assertIn('id="sUrls"', HTML)
+        self.assertRegex(HTML, r'urls:\s*urlList\(\$\("nUrls"\)')
+        self.assertRegex(HTML, r'urls:\s*urlList\(\$\("sUrls"\)')
+        self.assertIn("重複", HTML)
+
+    def test_crawl_settings(self):
+        for k in ("crawl_depth", "crawl_limit"):
+            self.assertRegex(HTML, rf'key:"{k}"')
+        self.assertIn("crawlDepth", HTML)
+        self.assertIn("crawlLimit", HTML)
+        self.assertIn('data-keep="set:depth"', HTML)
+        self.assertIn('data-keep="set:limit"', HTML)
+        self.assertIn('t.id==="crawlDepth"', HTML)
+        self.assertIn('t.id==="crawlLimit"', HTML)
+
+    def test_open_button(self):
+        self.assertIn("data-open=", _func(HTML, "noteLink"))
+        self.assertIn("guildDir=h", HTML)
+        self.assertLess(HTML.index("guildDir=h"), HTML.index("dir=sh;"))
+        self.assertIn("openGuildFile", HTML)
+        self.assertIn("開けません。パスをコピーしてください", HTML)
+        self.assertIn("URL.revokeObjectURL", HTML)
 
     def test_label_table_is_literal(self):
         self.assertTrue(_labels_literal(HTML))

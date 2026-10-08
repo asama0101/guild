@@ -508,6 +508,16 @@ class TestModelAndSimple(_VaultMixin, unittest.TestCase):
             self.assertTrue(json.loads((sysd / "logs" / "last.json").read_text(encoding="utf-8"))["skipped"])
             self.assertFalse((auto / "run.lock").exists())
 
+    def test_crawl_setting_only_skips_claude(self):
+        with tempfile.TemporaryDirectory() as d:
+            auto, sysd = self._vault(d)
+            (sysd / "requests" / "M20261006100000.json").write_text(
+                json.dumps({"kind": "setting", "key": "crawl_depth", "value": 4, "posted": "x"}), encoding="utf-8")
+            called = []
+            self.assertEqual(gr.run(auto, runner=lambda *a: called.append(a) or 0), 0)
+            self.assertEqual(called, [])
+            self.assertEqual(json.loads((sysd / "board.json").read_text(encoding="utf-8"))["crawl_depth"], 4)
+
     def test_real_request_still_calls_claude_with_model(self):
         with tempfile.TemporaryDirectory() as d:
             auto, sysd = self._vault(d)

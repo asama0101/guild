@@ -362,7 +362,8 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
       </div>
       <div class="r2">
         <div><label for="nDetail">くわしく（任意：背景、関係するノート、使いみち）</label><textarea id="nDetail" placeholder="例：部長への稟議に使う"></textarea></div>
-        <div><label for="nFiles">資料を添える（いくつでも）</label><input id="nFiles" type="file" multiple></div>
+        <div><label for="nFiles">資料を添える（何度でも足せます）</label><div class="fdrop" data-drop="nFiles"><input id="nFiles" type="file" multiple style="display:none"><button type="button" data-fadd="nFiles">ファイルを追加</button> <span class="muted">ここにドロップもできます</span><ul id="nFilesList" class="muted"></ul></div>
+          <label for="nUrls">参考にする URL（複数可、1行1件）</label><textarea id="nUrls" placeholder="https://..."></textarea></div>
         <div><button id="post" style="padding:10px 22px;font-weight:bold">貼る</button></div>
       </div>
     </section>
@@ -423,7 +424,8 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
       <label for="sTitle">研究の目標（何ができたら達成か）</label><input id="sTitle" placeholder="例：読書記録を Obsidian で続けられる仕組みを作る">
       <label for="sDue">期限（あれば）</label><input id="sDue" type="date">
       <label for="sDetail">くわしく（任意）</label><textarea id="sDetail" placeholder="背景や、関係するノートなど"></textarea>
-      <label for="sFiles">資料を添える（いくつでも）</label><input id="sFiles" type="file" multiple>
+      <label for="sFiles">資料を添える（何度でも足せます）</label><div class="fdrop" data-drop="sFiles"><input id="sFiles" type="file" multiple style="display:none"><button type="button" data-fadd="sFiles">ファイルを追加</button> <span class="muted">ここにドロップもできます</span><ul id="sFilesList" class="muted"></ul></div>
+      <label for="sUrls">参考にする URL（複数可、1行1件）</label><textarea id="sUrls" placeholder="https://..."></textarea>
       <p style="margin:10px 0 0;text-align:right"><button id="sPost">貼る</button></p>
     </section>
     <section>
@@ -460,7 +462,7 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
   const ESTATUS = ["受付待ち","計画中","承認待ち","進行中","達成","中止"];
   const ROLE = {alchemist:"錬金術師",strategist:"錬金術師",receptionist:"受付嬢",herald:"伝令",scribe:"書記",sage:"賢者",adventurer:"冒険者",scout:"冒険者",informant:"冒険者",bard:"吟遊詩人",librarian:"司書",appraiser:"鑑定士",seer:"占い師",smith:"鍛冶師",guildmaster:"ギルドマスター",client:"依頼主",user:"依頼主"};
   const TABS = ["guide","asks","board","research","assets"];
-  let dir = null, board = null, pendingReq = [], pendingAns = {}, pendingFb = [], assets = null, autoCfg = null, lastRun = null, usageText = null, timer = null;
+  let dir = null, board = null, pendingReq = [], pendingAns = {}, pendingFb = [], assets = null, autoCfg = null, lastRun = null, usageText = null, timer = null; let guildDir=null;
   let tab = "guide", efilter = "未完了", selected = null, selectedTitle = null;
   const filters = {asks:"", board:"", research:""};   // 返事欄の絞り込み（クエスト・研究の番号。空はすべて）
   const missing = new Set();                           // まとめて送るで「未入力」だった質問
@@ -489,11 +491,52 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
   // 同じ秒に 2 件書くときは、同名があれば -2（-3 …）を付ける。返すのは拡張子なしの名前（R20261005120000 か R20261005120000-2）
   async function freshName(d, base){ let n=base; for(let i=2;;i++){ try{ await d.getFileHandle(n+".json"); }catch(e){ return n; } n=`${base}-${i}`; } }
   // 添えた資料は requests/files/R<日時>/ に写す。受付のときにギルドマスターが研究かクエストの input/ に移す
-  async function saveFiles(name, input){
-    const fs=[...((input&&input.files)||[])]; if(!fs.length) return [];
+  async function saveFiles(name, files){
+    const fs=[...(files||[])]; if(!fs.length) return [];
     const d=await (await (await sub("requests")).getDirectoryHandle("files",{create:true})).getDirectoryHandle(name,{create:true});
     for(const f of fs){ const h=await d.getFileHandle(f.name,{create:true}); const w=await h.createWritable(); await w.write(f); await w.close(); }
     return fs.map(f=>f.name);
+  }
+  // 資料の累積リスト（依頼 nFiles・研究 sFiles 共通）。同名は足さずに重複として知らせる
+  const picked = {nFiles:[], sFiles:[]};
+  function renderPick(k){
+    $(k+"List").innerHTML = picked[k].map((f,i)=>`<li>${esc(f.name)} <button type="button" data-fremove="${esc(k)}" data-idx="${i}">外す</button></li>`).join("");
+  }
+  function addPick(k, list){
+    const dup=[];
+    let dir=0;
+    for(const f of list){ if(f.size===0 && f.type===""){ dir++; continue; } if(picked[k].some(x=>x.name===f.name)) dup.push(f.name); else picked[k].push(f); }
+    renderPick(k);
+    if(dir) toast("フォルダは追加できません。中のファイルを選んでください");
+    else if(dup.length) toast("重複のため足しませんでした: "+dup.join("、"));
+  }
+  const urlList = el => {
+    const all=el.value.split("\n").map(x=>x.trim()).filter(Boolean), ok=all.filter(u=>/^https?:\/\//i.test(u));
+    if(ok.length<all.length) toast(`http(s) 以外の URL ${all.length-ok.length} 件は除きました`);
+    return ok;
+  };
+  document.querySelectorAll("[data-fadd]").forEach(b=>{ b.onclick=()=>$(b.dataset.fadd).click(); });
+  ["nFiles","sFiles"].forEach(k=>{
+    $(k).onchange = ev=>{ addPick(k, [...ev.target.files]); ev.target.value=""; };
+    const z=document.querySelector(`[data-drop="${k}"]`);
+    z.ondragover = ev=>ev.preventDefault();
+    z.ondrop = ev=>{ ev.preventDefault(); addPick(k, [...ev.dataTransfer.files]); };
+    $(k+"List").onclick = ev=>{ const b=ev.target.closest("[data-fremove]"); if(b){ picked[k].splice(Number(b.dataset.idx),1); renderPick(k); } };
+  });
+  // guild フォルダ内（vault 相対で guild/ 始まり）のファイルを辿って Blob を開く。辿れなければ null
+  async function guildFile(p){
+    if(!guildDir || !/^guild\//.test(p)) return null;
+    try{
+      const parts=p.replace(/^guild\//,"").split("/").filter(Boolean); let d=guildDir;
+      for(const x of parts.slice(0,-1)) d=await d.getDirectoryHandle(x);
+      return await (await d.getFileHandle(parts[parts.length-1])).getFile();
+    }catch(e){ return null; }
+  }
+  async function openGuildFile(p){
+    const f=await guildFile(p);
+    if(!f){ toast("開けません。パスをコピーしてください"); return; }
+    if(/\.(html|htm|xhtml|svg|js|mjs|xml)$/i.test(f.name)){ toast("このファイルは安全のため開けません。パスをコピーしてください"); return; }
+    const u=URL.createObjectURL(f); window.open(u,"_blank","noopener,noreferrer"); setTimeout(()=>URL.revokeObjectURL(u),60000);
   }
   async function listJSON(d){ const out=[]; for await (const [n,h] of d.entries()){ if(h.kind==="file" && n.endsWith(".json")){ const v=await readJSON(d,n); if(v) out.push({...v,_file:n}); } } return out; }
   // requests/ に 1 件書く。名前は <接頭辞><日時 14 桁>.json
@@ -508,7 +551,7 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
     let sh=null; try{ sh=await h.getDirectoryHandle(".system"); }catch(e){}
     const b = sh && await readJSON(sh,"board.json");
     if(!b) throw new Error("選んだフォルダに board.json がありません。guild フォルダを選んでください（/guild:init で作られます）。");
-    dir=sh; await saveHandle(h);
+    guildDir=h; dir=sh; await saveHandle(h);
     $("gate").classList.add("hidden"); $("app").classList.remove("hidden"); $("reload").classList.remove("hidden");
     await refresh(true); clearInterval(timer); timer=setInterval(()=>refresh(false),10000);
   }
@@ -849,6 +892,9 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
     const row = (name,t) => `<tr><td>${name}</td><td>${nf(t.n)}${t.fail?` <span class="red">（失敗 ${nf(t.fail)}）</span>`:""}</td><td>${nf(t.input)}</td><td>${nf(t.output)}</td><td>${nf(t.cread+t.ccreate)}</td><td>$${t.cost.toFixed(2)}</td></tr>`;
     return `<table class="usage"><thead><tr><th></th><th>回数</th><th>入力トークン</th><th>出力トークン</th><th>キャッシュ</th><th>概算コスト</th></tr></thead><tbody>${row("今日",u.today)}${row("直近 7 日",u.week)}${row("累計",u.all)}</tbody></table>`;
   }
+  const crawlInt = (v,lo,hi,d) => { v=Number(v); return Number.isInteger(v) && v>=lo && v<=hi ? v : d; };
+  const crawlDepth = () => crawlInt(board.crawl_depth,1,5,2);
+  const crawlLimit = () => crawlInt(board.crawl_limit,1,100,20);
   const maxActive = () => { const v = Number(board.max_active); return Number.isInteger(v) && v>=1 && v<=8 ? v : 4; };
   function renderGuide(force){
     // 自動実行の状態
@@ -861,9 +907,14 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
     draw("usageBox", usageHtml(summarizeUsage(usageText, new Date())), $("usageBox"), false, true);
     // 設定（同時数）
     const cur = maxActive();
-    const sent = pendingReq.filter(r=>r.kind==="setting" && r.key==="max_active").sort((x,y)=>String(y.posted||"").localeCompare(String(x.posted||"")))[0];
+    const sentOf = key => pendingReq.filter(r=>r.kind==="setting" && r.key===key).sort((x,y)=>String(y.posted||"").localeCompare(String(x.posted||"")))[0];
+    const sent = sentOf("max_active");
     const sh = `<div class="setrow"><div><label for="maxActive">同時に進めるクエストの数（1〜8。いまは ${cur}）</label><input id="maxActive" type="number" min="1" max="8" step="1" value="${cur}" data-keep="set:max"></div>
       <button type="button" id="setSend">変更を送る</button></div>
+      <div class="setrow"><div><label for="crawlDepth">URL をたどる深さ（1〜5。いまは ${crawlDepth()}）</label><input id="crawlDepth" type="number" min="1" max="5" step="1" value="${crawlDepth()}" data-keep="set:depth"></div>
+      <div><label for="crawlLimit">URL から取る最大ページ数（1〜100。いまは ${crawlLimit()}）</label><input id="crawlLimit" type="number" min="1" max="100" step="1" value="${crawlLimit()}" data-keep="set:limit"></div>
+      <button type="button" id="crawlSend">変更を送る</button></div>
+      ${sentOf("crawl_depth")?`<p class="note" style="margin:8px 0 0">深さの変更を送りました（次の回で反映）：${esc(sentOf("crawl_depth").value)}</p>`:""}${sentOf("crawl_limit")?`<p class="note" style="margin:8px 0 0">最大ページ数の変更を送りました（次の回で反映）：${esc(sentOf("crawl_limit").value)}</p>`:""}
       ${sent?`<p class="note" style="margin:8px 0 0">変更を送りました（次の回で反映）：${esc(sent.value)}</p>`:`<p class="note" style="margin:8px 0 0">変えると、次の /guild:quest の回から、この数まで同時に冒険に出します（既定 4）。</p>`}`;
     draw("setBox", sh, $("setBox"), true, force);
   }
@@ -873,6 +924,16 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
     if(inp.value.trim()==="" || !Number.isInteger(v) || v<1 || v>8){ toast("同時数は 1〜8 の整数で入力してください"); return; }
     try{ await postRequest("M", {kind:"setting", key:"max_active", value:v, posted:now()}); toast("変更を送りました（次の回で反映）"); await refresh(true); }
     catch(e){ toast("書き込めませんでした: "+e.message); }
+  }
+
+  async function sendCrawl(){
+    const a=$("crawlDepth"), b=$("crawlLimit"); if(!a||!b) return;
+    const d=Number(a.value), l=Number(b.value);
+    if(a.value.trim()==="" || !Number.isInteger(d) || d<1 || d>5){ toast("深さは 1〜5 の整数で入力してください"); return; }
+    if(b.value.trim()==="" || !Number.isInteger(l) || l<1 || l>100){ toast("最大ページ数は 1〜100 の整数で入力してください"); return; }
+    let sent=false;
+    try{ await postRequest("M", {kind:"setting", key:"crawl_depth", value:d, posted:now()}); sent=true; await postRequest("M", {kind:"setting", key:"crawl_limit", value:l, posted:now()}); toast("変更を送りました（次の回で反映）"); await refresh(true); }
+    catch(e){ toast("書き込めませんでした: "+e.message+(sent?"（深さは送信済みです）":"")); }
   }
 
   // ---- 依頼掲示板 ----
@@ -938,7 +999,7 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
   function wikiName(p){ return String(p).replace(/^\[\[|\]\]$/g,"").replace(/\|.*$/,"").replace(/\.md$/,"").split("/").pop(); }
   function noteLink(p){
     if(/^https?:/.test(p)) return `<a href="${esc(p)}" target="_blank" rel="noopener">${esc(p.replace(/^https?:\/\//,"").slice(0,40))}</a>`;
-    if(/\.[A-Za-z0-9]{2,5}$/.test(p) && !/\.md$/i.test(p) && !/^\[\[/.test(p)) return `<button type="button" class="wiki file" data-copy="${esc(p)}" title="押すとパスをコピーします">${esc(p.split("/").pop())}</button>`;
+    if(/\.[A-Za-z0-9]{2,5}$/.test(p) && !/\.md$/i.test(p) && !/^\[\[/.test(p)) return `<button type="button" class="wiki file" data-copy="${esc(p)}" title="押すとパスをコピーします">${esc(p.split("/").pop())}</button><button type="button" class="wiki" data-open="${esc(p)}" title="押すとブラウザで開きます">開く</button>`;
     const w = `[[${wikiName(p)}]]`;
     return `<button type="button" class="wiki" data-copy="${esc(w)}" title="押すとコピーします">${esc(w)}</button>`;
   }
@@ -1094,14 +1155,14 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
   // ---- 貼る（依頼・研究・用語・インタビュー）。入力欄は描き直さない ----
   $("post").onclick = async () => {
     const title=$("nTitle").value.trim(); if(!title){ toast("依頼の内容を書いてください"); return; }
-    const r={kind:"quest", title, detail:$("nDetail").value.trim(), priority:Number((document.querySelector('input[name="pri"]:checked')||{value:2}).value), due:$("nDue").value||"", output:$("nOut").value.replace(/（.*$/,""), files:[], posted:now()};
-    try{ const d=await sub("requests"); const name=await freshName(d,"R"+stamp()); r.files=await saveFiles(name,$("nFiles")); await writeJSON(d, name+".json", r); $("nTitle").value=""; $("nDetail").value=""; $("nDue").value=""; $("nOut").value="おまかせ"; $("nFiles").value=""; toast(r.files.length?`依頼と資料 ${r.files.length} 件を貼りました`:"依頼を貼りました"); await refresh(true); }
+    const r={kind:"quest", title, detail:$("nDetail").value.trim(), priority:Number((document.querySelector('input[name="pri"]:checked')||{value:2}).value), due:$("nDue").value||"", output:$("nOut").value.replace(/（.*$/,""), files:[], urls:urlList($("nUrls")), posted:now()};
+    try{ const d=await sub("requests"); const name=await freshName(d,"R"+stamp()); r.files=await saveFiles(name,picked.nFiles); await writeJSON(d, name+".json", r); $("nTitle").value=""; $("nDetail").value=""; $("nDue").value=""; $("nOut").value="おまかせ"; picked.nFiles=[]; renderPick("nFiles"); $("nUrls").value=""; toast(r.files.length?`依頼と資料 ${r.files.length} 件を貼りました`:"依頼を貼りました"); await refresh(true); }
     catch(e){ toast("書き込めませんでした: "+e.message); }
   };
   $("sPost").onclick = async () => {
     const title=$("sTitle").value.trim(); if(!title){ toast("研究の目標を書いてください"); return; }
-    const r={kind:"study", title, detail:$("sDetail").value.trim(), due:$("sDue").value||"", files:[], posted:now()};
-    try{ const d=await sub("requests"); const name=await freshName(d,"R"+stamp()); r.files=await saveFiles(name,$("sFiles")); await writeJSON(d, name+".json", r); $("sTitle").value=""; $("sDetail").value=""; $("sDue").value=""; $("sFiles").value=""; toast(r.files.length?`研究と資料 ${r.files.length} 件を貼りました`:"研究の依頼を貼りました"); await refresh(true); }
+    const r={kind:"study", title, detail:$("sDetail").value.trim(), due:$("sDue").value||"", files:[], urls:urlList($("sUrls")), posted:now()};
+    try{ const d=await sub("requests"); const name=await freshName(d,"R"+stamp()); r.files=await saveFiles(name,picked.sFiles); await writeJSON(d, name+".json", r); $("sTitle").value=""; $("sDetail").value=""; $("sDue").value=""; picked.sFiles=[]; renderPick("sFiles"); $("sUrls").value=""; toast(r.files.length?`研究と資料 ${r.files.length} 件を貼りました`:"研究の依頼を貼りました"); await refresh(true); }
     catch(e){ toast("書き込めませんでした: "+e.message); }
   };
   $("postTerm").onclick = async () => {
@@ -1185,6 +1246,7 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
     if((b=c("[data-batch]"))){ sendBatch(b.dataset.batch); return; }
     if((b=c("[data-fbsend]"))){ sendFb(b.closest("[data-fb]")); return; }
     if(c("#setSend")){ sendSetting(); return; }
+    if(c("#crawlSend")){ sendCrawl(); return; }
     if((b=c("[data-asset]"))){ sendAsset(b.dataset.note, b.dataset.asset, b); return; }
     if((b=c("[data-f]"))){ efilter=b.dataset.f; renderResearch(true); return; }
     if((b=c("[data-sel]"))){ selected=b.dataset.sel; renderResearch(true); return; }
@@ -1219,6 +1281,7 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
       }catch(e){ toast("消せませんでした: "+e.message); }
       return;
     }
+    if((b=c("[data-open]"))){ openGuildFile(b.dataset.open); return; }
     if((b=c("[data-copy]"))){
       try{ await navigator.clipboard.writeText(b.dataset.copy); toast(b.dataset.copy+" をコピーしました"); }
       catch(e){ toast("コピーできませんでした: "+b.dataset.copy); }
@@ -1238,6 +1301,7 @@ table.as th{color:var(--muted);font-weight:normal;font-size:.78rem}
     const t = ev.target;
     if(ev.key==="Enter" && (ev.ctrlKey||ev.metaKey) && t.dataset && t.dataset.free){ ev.preventDefault(); sendAnswer(t.dataset.free, t.closest(".q")); }
     else if(ev.key==="Enter" && t.id==="maxActive"){ ev.preventDefault(); sendSetting(); }
+    else if(ev.key==="Enter" && (t.id==="crawlDepth" || t.id==="crawlLimit")){ ev.preventDefault(); sendCrawl(); }
   });
 
   // ---- 起動：ハッシュのタブを開き、許可済みなら自動で扉を開ける ----

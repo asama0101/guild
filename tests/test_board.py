@@ -170,6 +170,32 @@ class TestApplySimple(unittest.TestCase):
             self.assertEqual(b["max_active"], 4)
             self.assertEqual(list(d.glob("*.json")), [])
 
+    def test_crawl_settings_applied(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            self._req(d, "M1.json", {"kind": "setting", "key": "crawl_depth", "value": 3, "posted": "x"})
+            self._req(d, "M2.json", {"kind": "setting", "key": "crawl_limit", "value": 100, "posted": "x"})
+            b = _board()
+            msgs = bd.apply_simple(b, d, now=NOW)
+            self.assertEqual((b["crawl_depth"], b["crawl_limit"]), (3, 100))
+            self.assertIn("巡回の深さを 3 にした", msgs)
+            self.assertIn("巡回の最大ページ数を 100 にした", msgs)
+            self.assertEqual(bd.summary(b)["crawl_depth"], 3)
+
+    def test_crawl_settings_rejected(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            for i, (k, v) in enumerate([("crawl_depth", 0), ("crawl_depth", 6), ("crawl_depth", True),
+                                        ("crawl_depth", "3"), ("crawl_limit", 0), ("crawl_limit", 101),
+                                        ("crawl_limit", True), ("crawl_limit", "5")]):
+                sub = d / str(i)
+                sub.mkdir()
+                self._req(sub, "M1.json", {"kind": "setting", "key": k, "value": v, "posted": "x"})
+                b = _board()
+                msgs = bd.apply_simple(b, sub, now=NOW)
+                self.assertNotIn(k, b)
+                self.assertIn("受け付けられない", msgs[0])
+
     def test_study_priority(self):
         with tempfile.TemporaryDirectory() as t:
             d = Path(t)
