@@ -283,7 +283,7 @@ const LS_NEWS = 'guild-board-news-seen';
 const S = {
   root: null, board: null, raw: '', tab: TABS[0], selQ: 'all',
   access: 'none',       // none | prompt | ok
-  error: '', drafts: {}, answered: {}, reopened: {}, pending: {}, pickedFiles: {}, intake: null, intakeResult: '',
+  error: '', drafts: {}, answered: {}, reopened: {}, pending: {}, pickedFiles: {}, intake: null, intakeResult: '', waitingReqs: [],
   sharedPicked: [], templatePicked: [], resToken: 0, qf: { quest: 'all', kind: 'all', only: null },
   moreNews: false, tkOpen: {}, newsSeen: null, maxMsg: '', loadedAt: null,
   dirty: false, timer: null
@@ -399,6 +399,25 @@ async function writeRequest(prefix, obj) {
   const r = await reserveRequest(prefix);
   await writeJson(r.dir, r.name, obj);
   return r.name;
+}
+
+// まだクエストになっていない依頼（requests/ 直下の R*.json）。変わったら true。
+async function loadWaitingReqs() {
+  const list = [];
+  try {
+    const dir = await dirAt(['.system', 'requests'], false);
+    for await (const [name, h] of dir.entries()) {
+      if (h.kind !== 'file' || !/^R[\d-]+\.json$/.test(name)) continue;
+      try {
+        const o = JSON.parse(await (await h.getFile()).text());
+        list.push({ name, title: String(o.title || '（題なし）'), priority: o.priority === '優先' ? '優先' : '通常' });
+      } catch (e) { list.push({ name, title: '（読めない依頼）', priority: '通常' }); }
+    }
+  } catch (e) { /* フォルダがまだ無い */ }
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  const changed = JSON.stringify(list) !== JSON.stringify(S.waitingReqs);
+  S.waitingReqs = list;
+  return changed;
 }
 
 // ---------------------------------------------------------------- ファイル追加の安全
@@ -717,8 +736,9 @@ function renderIntake() {
       }
       await writeJson(r.dir, r.name, { kind: 'quest', title: st.title.trim(), detail: st.detail.trim(),
         due: st.due || null, form: st.form, priority: st.priority === '優先' ? '優先' : '通常', files: saved });
-      S.intakeResult = `依頼を送りました。${report}`;
+      S.intakeResult = `依頼を送りました。${report}クエストになるのは、次に /guild:quest を実行したときです。`;
       S.intake = null;
+      await loadWaitingReqs();
       toast('依頼を送りました。');
       render();
     } catch (e) {
@@ -789,6 +809,11 @@ function goalCard(q, g) {
 function renderBoard() {
   const list = questList();
   const panel = h('div', { class: 'panel top' }, h('h2', {}, 'クエスト'));
+  if (S.waitingReqs.length) {
+    panel.add(h('div', { class: 'note', style: 'margin-bottom:8px' },
+      h('b', { text: `受付待ちの依頼：${S.waitingReqs.length} 件` }), '　次の /guild:quest でクエストになります。',
+      h('ul', {}, S.waitingReqs.map(r => h('li', { text: `${r.priority === '優先' ? '【優先】' : ''}${r.title}` })))));
+  }
   if (!list.length) { panel.add(h('p', { class: 'muted', text: 'クエストは、まだありません。上の「依頼を出す」から、依頼を送ってください。' })); return panel; }
   const total = list.reduce((n, q) => n + goalsOfQuest(q).length, 0);
   const pick = (id, label, n) => h('button', { type: 'button', 'aria-pressed': S.selQ === id ? 'true' : 'false',
@@ -1373,7 +1398,11 @@ async function loadBoard() {
   try {
     const raw = await readText(['.system', 'board.json']);
     S.error = '';
-    if (raw === S.raw) { return; }
+    const reqChanged = await loadWaitingReqs();
+    if (raw === S.raw) {
+      if (reqChanged) { if (isTyping()) S.dirty = true; else render(); }
+      return;
+    }
     const data = JSON.parse(raw);
     S.raw = raw;
     S.board = data;
