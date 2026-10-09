@@ -1437,8 +1437,8 @@ async function openRoot(handle) {
 }
 function idb() {
   return new Promise((res, rej) => {
-    const r = indexedDB.open('guild-board', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    const r = indexedDB.open('guild-board', 2);
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
@@ -1454,8 +1454,14 @@ async function kvSet(key, val) {
 async function pickFolder() {
   try {
     const handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'guild-folder' });
-    try { await kvSet('root', handle); } catch (e) { /* 保存できなくても使える */ }
+    let memoErr = '';
+    try {
+      if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch (e) { /* 断られても続ける */ } }
+      await kvSet('root', handle);
+      if (!(await kvGet('root'))) memoErr = '保存したのに読み戻せませんでした';
+    } catch (e) { memoErr = e && e.message ? e.message : String(e); }
     await openRoot(handle);
+    if (memoErr) toast(`フォルダを覚えられませんでした（${memoErr}）。次回も選び直しになります。`);
   } catch (e) {
     if (e && e.name === 'AbortError') return;
     S.error = `フォルダを開けませんでした：${e.message}`;
