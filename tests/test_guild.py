@@ -345,6 +345,7 @@ class InitAndNewTest(unittest.TestCase):
         cfg = json.loads((self.root / "guild" / "config.json").read_text(encoding="utf-8"))
         self.assertEqual(cfg["python"], sys.executable)
         self.assertEqual(r["python"], sys.executable)
+        self.assertEqual(Path(cfg["root"]), self.root.resolve())  # ボードのフルパスのコピー用
         self.assertTrue((self.root / "guild" / "knowledge").is_dir())
         q = guild.new_quest(self.root)
         guild.init_guild(self.root)  # 再実行しても依頼は消えない

@@ -348,8 +348,9 @@ def init_guild(root):
     cfg = load_json(cfg_path) if cfg_path.exists() else {}
     cfg["python"] = sys.executable
     cfg["python_version"] = ".".join(map(str, sys.version_info[:3]))
+    cfg["root"] = str(Path(root).resolve())  # ボードが、パスをフルパスでコピーするために使う
     save_plan(cfg_path, cfg)
-    return {"guild": str(gdir), "python": cfg["python"], "python_version": cfg["python_version"],
+    return {"guild": str(gdir), "root": cfg["root"], "python": cfg["python"], "python_version": cfg["python_version"],
             "board": str(gdir / "board.html") if board.exists() else None}
 
 

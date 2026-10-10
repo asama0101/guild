@@ -241,7 +241,7 @@ class RealFS {
   async readText(path) {
     const i = path.lastIndexOf('/');
     try {
-      const d = await this._dir(path.slice(0, i), false);
+      const d = await this._dir(i < 0 ? '' : path.slice(0, i), false);
       const f = await (await d.getFileHandle(path.slice(i + 1))).getFile();
       return await f.text();
     } catch (e) { if (isNotFound(e)) return null; throw e; }
@@ -335,6 +335,7 @@ async function listFilesDeep(path, depth) {
 }
 
 async function loadAll() {
+  const cfg = await readJSON('config.json');
   const top = await S.fs.list('');
   const requests = [];
   for (const e of await S.fs.list('requests')) {
@@ -368,7 +369,7 @@ async function loadAll() {
   for (const e of await S.fs.list('knowledge')) if (e.kind === 'file' && e.name.endsWith('.md')) knowledge.push({ name: e.name, text: (await S.fs.readText(`knowledge/${e.name}`)) || '' });
   knowledge.sort((a, b) => b.name.localeCompare(a.name));
   const templates = (await S.fs.list('templates')).filter((e) => e.kind === 'file').map((e) => e.name).sort();
-  return { requests, quests, knowledge, templates };
+  return { requests, quests, knowledge, templates, root: (cfg && cfg.root) || '' };
 }
 
 // ============================================================ 読み解き
@@ -432,7 +433,7 @@ function derive(q) {
 
 function buildModel(raw) {
   const quests = raw.quests.map(derive);
-  return { requests: raw.requests, knowledge: raw.knowledge, templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+  return { root: raw.root, requests: raw.requests, knowledge: raw.knowledge, templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
@@ -545,7 +546,7 @@ function fileRow(f, label) {
   return h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, label || f.replace(/^Q\d+\/output\//, '')),
     h('span', { class: 'acts' },
       h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} を開く`, onclick: () => openFile(f) }, '開く'),
-      h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} のパスをコピー`, onclick: () => copyText('guild/' + f, 'パス') }, 'パスをコピー')));
+      h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} のパスをコピー`, onclick: () => copyPath(f) }, 'パスをコピー')));
 }
 // 折りたたみ（details）の開閉を覚えておく。覚えないと、自動更新で画面が作り直されたときに閉じてしまう
 function keepOpen(key, ...kids) {
@@ -557,7 +558,7 @@ function deliverableBlock(qd) {
   const d = deliverables(qd), fmt = FORMATS.find((x) => x.key === ((qd.q.plan && qd.q.plan.format) || 'md'));
   return [
     d.main.length ? h('ul', { class: 'flist' }, d.main.map(fileRow)) : h('p', null, '納品物のファイルはありません（報告だけです）。'),
-    fmt ? h('p', { class: 'fine', style: 'margin:0 0 8px' }, `形式：${fmt.label}（${fmt.ext}）　パスは、プロジェクトのフォルダからの位置です。`) : null,
+    fmt ? h('p', { class: 'fine', style: 'margin:0 0 8px' }, `形式：${fmt.label}（${fmt.ext}）　「パスをコピー」は、フルパスでコピーします。`) : null,
     d.rest.length ? keepOpen('rest:' + qd.id, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map(fileRow))) : null];
 }
 function fileField(key, label, multiple) {
@@ -887,7 +888,7 @@ function knowTab() {
     const d = h('details', { class: 'card', style: 'margin-bottom:10px', open: !!S.open['k:' + k.name] }, h('summary', { style: 'cursor:pointer;font-weight:700' }, `${k.name.replace(/\.md$/, '')}　${titleOf(k.name)}`),
       h('div', { class: 'btns', style: 'margin:10px 0' },
         h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyText(k.text, '中身') }, '中身をコピー'),
-        h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyText('guild/knowledge/' + k.name, 'パス') }, 'パスをコピー')),
+        h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyPath('knowledge/' + k.name) }, 'パスをコピー')),
       S.toast ? null : null, h('pre', { style: 'white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0' }, k.text || '(空です)'));
     d.addEventListener('toggle', () => { S.open['k:' + k.name] = d.open; });
     out.push(d);
@@ -991,7 +992,7 @@ function helpTab() {
 function reader() {
   if (!S.reader) return null;
   return h('div', { class: 'reader', role: 'dialog', 'aria-label': '報告' }, h('div', { class: 'rbox' },
-    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '中身') }, '中身をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyText('guild/' + S.reader.path, 'パス') }, 'パスをコピー'), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
+    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '中身') }, '中身をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyPath(S.reader.path) }, 'パスをコピー'), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
     S.toast ? h('p', { class: 'saved', role: 'status' }, S.toast) : null,
     h('pre', null, S.reader.text)));
 }
@@ -1085,6 +1086,17 @@ async function openFile(full) {
   const t = await S.fs.readText(full);
   S.toast = ''; S.reader = { path: full, text: t == null ? '(読めませんでした)' : t }; render();
 }
+// パスは、プロジェクトのフォルダ（config.json の root）からのフルパスにする。root がなければ、guild/ からの位置になる
+function fullPath(rel) {
+  const root = S.model && S.model.root;
+  if (!root) return { text: 'guild/' + rel, full: false };
+  const sep = root.includes('\\') ? '\\' : '/';
+  return { text: [root.replace(/[\\/]+$/, ''), 'guild', ...rel.split('/')].join(sep), full: true };
+}
+function copyPath(rel) {
+  const p = fullPath(rel);
+  return copyText(p.text, p.full ? 'フルパス' : 'パス（フルパスにするには、チャットで /guild:init をもう一度実行してください）');
+}
 async function copyText(text, what) {
   try { await navigator.clipboard.writeText(text); S.toast = `${what || '中身'}をコピーしました。`; } catch (e) { S.toast = 'コピーできませんでした。選択してコピーしてください。'; }
   render();
@@ -1159,7 +1171,7 @@ function demoTree(scene) {
   }[scene] || [['done'], ['waiting_user'], ['pending']];
   const approved = scene !== 'plan', isDone = scene === 'done' || scene === 'accept';
   if (scene === 'questions') {
-    return { config: J({ python: 'python' }), requests: {}, Q001: { 'request.json': J({ text: '社内の議事録テンプレートを見直したい' }), reports: { 'plan-draft.json': J({ quest: 'Q001', title: '議事録テンプレートの見直し', todos: [], questions: [{ text: '見直す対象は、どのテンプレートですか', options: ['週次定例の議事録', '全社会議の議事録', '両方'], recommended: '両方', reason: '依頼文からは、どちらか分からないため、まず両方を見るのが安全です。' }, { text: '納品物は、どの形がよいですか', options: ['比較表だけ', '新しいテンプレート案まで'], recommended: '新しいテンプレート案まで', reason: '「見直す」には、案を出すことまで含まれると考えられます。' }] }) }, output: {}, inbox: {} } };
+    return { 'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), requests: {}, Q001: { 'request.json': J({ text: '社内の議事録テンプレートを見直したい' }), reports: { 'plan-draft.json': J({ quest: 'Q001', title: '議事録テンプレートの見直し', todos: [], questions: [{ text: '見直す対象は、どのテンプレートですか', options: ['週次定例の議事録', '全社会議の議事録', '両方'], recommended: '両方', reason: '依頼文からは、どちらか分からないため、まず両方を見るのが安全です。' }, { text: '納品物は、どの形がよいですか', options: ['比較表だけ', '新しいテンプレート案まで'], recommended: '新しいテンプレート案まで', reason: '「見直す」には、案を出すことまで含まれると考えられます。' }] }) }, output: {}, inbox: {} } };
   }
   const h1 = [{ t: at(70), event: 'adopted' }];
   if (approved) h1.push({ t: at(69), event: 'approved' }, { t: at(69), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(68), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(67), id: 'T1', event: 'passed', from: 'review', to: 'done' });
@@ -1178,7 +1190,7 @@ function demoTree(scene) {
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   return {
-    config: J({ python: 'python' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, knowledge: { 'Q002.md': T('## 成功したこと\n- 見本') },
+    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, knowledge: { 'Q002.md': T('## 成功したこと\n- 見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
     Q001: { 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }
