@@ -93,8 +93,20 @@
 
 イベント: `deps_done`（`next` が返した Todo に対して Claude が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。
 
-## 未決（実装計画で決める）
+## 決定（未決だった3点）
 
-- ボード（HTML）は `plan.json` を読むだけの読み取り専用にし、依頼主の入力（計画の承認、`human` の結果）はどう `plan.json` へ戻すか。
-- 不可逆・外部公開の操作を持つ Todo に印を付けるか（`confirm: true` など）。
-- `failed` になった Todo の後続をどう扱うか（止める／依頼主に判断を求める）。
+- **入力の戻し方**: 旧版（`feat/guild-0.1`）と同じく、画面は `plan.json` を書かない。画面は File System Access API（`showDirectoryPicker`）で `guild/` 内の `inbox/*.json` に入力だけを書き、`guild.py ingest` が検査して `plan.json` に反映する。`plan.json` を書けるのは `guild.py` だけ。
+  - 入力ファイルの種類: `approve`（計画の承認・修正）、`result`（`human` の結果：できた／できなかった、添付パス）、`decision`（`failed` 時の判断）。
+  - 反映の合図は、画面で送信したあとにチャットで「完了」と伝える方式（旧版の `/guild:quest` 再実行に相当）。
+- **入力の契約と書き込み側の方針**: 境界は『`guild/inbox/*.json` に入力が置かれたら `guild.py ingest` が拾う』に固定する。最初の版の書き込み側は File System Access API とし、書けないときは『JSON をコピー』ボタンに落とす。保存の失敗は理由を画面に出す。ローカルサーバー（`guild.py serve`）は最初の版では作らない。自動で進めたくなったら書き込み側だけを差し替える。
+- **確認の印**: Todo に `confirm: true` を持たせる。分解時に付け、計画の承認で見える。`next` は、`confirm: true` の Todo を『確認待ち』として別に返し、確認が済むまで `running` にしない。
+- **失敗の扱い**: `failed` の Todo に依存する後続は止める（`blocked`）。依存しない系統は進め続ける。ボードで依頼主に『続行（その Todo を除く）／計画を直す／中止』を選んでもらい、`decision` として戻す。
+
+## 旧版から分かった注意点
+
+- `showDirectoryPicker` は Chromium 系のブラウザだけで動く。旧版は選んだフォルダの権限を IndexedDB に保存していた。
+- 旧版の `1c6e755`（フォルダを覚えられない不具合）は、この保存まわりの不具合だった。新版では最初から、保存に失敗したら理由を画面に出す。
+
+## 未決
+
+- `transitions.json` に `blocked`（後続を止めた状態）と `confirm` 待ちを足す具体形。
