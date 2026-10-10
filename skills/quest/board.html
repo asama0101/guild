@@ -140,6 +140,7 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .linkbtn{font:inherit;font-size:13.5px;min-height:34px;border:0;background:transparent;color:var(--gold);text-decoration:underline;cursor:pointer;padding:0 6px}
 .reader{position:fixed;inset:0;background:rgba(20,10,10,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
 .rbox{background:var(--paper2);border:2px solid var(--brass);border-radius:6px;max-width:820px;width:100%;max-height:86vh;overflow:auto;padding:16px 20px}
+.files{margin:0 0 10px;padding-left:20px}.files li{margin:3px 0}
 .rhead{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
 .rbox pre{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0 0 8px}
 input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
@@ -270,7 +271,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 // ============================================================ 状態
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
-  tab: 'board', sel: null, tq: null, view: 'talk', role: 'all',
+  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, view: 'talk', role: 'all',
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -538,7 +539,7 @@ function infoLetter(qd) {
   if (qd.info === 'aborted') return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '中止'), h('h3', null, 'この依頼は中止されました'), h('p', null, 'できていた成果物は ', code(`${qd.id}/output/`), ' に残っています。'));
   if (qd.info === 'finished') {
     return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
-      qd.q.output.length ? h('p', null, qd.q.output.map((f, i) => [i ? h('br') : null, code(f)])) : h('p', null, '納品物のファイルはありません。'),
+      qd.q.output.length ? h('ul', { class: 'files' }, qd.q.output.map((f) => h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, f.replace(/^Q\d+\/output\//, ''))))) : h('p', null, '納品物のファイルはありません。'),
       qd.q.knowledge ? h('p', { class: 'fine', style: 'margin:0' }, '成功したこと、失敗したこと、業務知識を ', code(`knowledge/${qd.id}.md`), ' に記録しました。次の依頼で役に立てます。') : null);
   }
   return null;
@@ -623,9 +624,9 @@ function ledger(m) {
     h('span', null, r.text.split('\n')[0].slice(0, 80), h('span', { class: 'sub', style: 'display:block' }, '/guild:quest が動いていれば受け付けます。動いていなければ、チャットで /guild:quest と送ってください。')),
     h('span', null, stampEl('受付待ち', 'sd-wait')), h('span', null, '—'), h('span', null, '—')));
   for (const qd of m.quests) {
-    rows.push(h('button', { type: 'button', class: 'lr' + (qd.id === sel ? ' sel' : ''), role: 'row', onclick: () => { S.sel = qd.id; S.tq = qd.id; render(); } },
+    rows.push(h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', onclick: () => { S.openQ[qd.id] = !S.openQ[qd.id]; S.sel = qd.id; S.tq = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
       h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me)));
-    if (qd.id === sel) rows.push(questDetail(qd));
+    if (S.openQ[qd.id]) rows.push(questDetail(qd));
   }
   if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「出す」を押してください。')));
   return h('div', { class: 'ledger', role: 'table', 'aria-label': '依頼の一覧' }, rows);
@@ -634,8 +635,9 @@ function ledger(m) {
 function boardTab() {
   const m = S.model, out = [];
   if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
-    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.sel = n.q; S.tq = n.q; render(); } }, n.text))));
+    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.openQ[n.q] = true; S.sel = n.q; S.tq = n.q; render(); } }, n.text))));
   out.push(composer());
+  if (m && m.quests.some((x) => S.openQ[x.id])) out.push(h('div', { class: 'btns', style: 'margin:0 0 8px' }, h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px', onclick: () => { S.openQ = {}; render(); } }, 'すべて閉じる')));
   if (m) out.push(ledger(m));
   return out;
 }
@@ -654,7 +656,7 @@ function talkTab() {
     const roles = [['all', 'すべて'], ['cart', '地図師'], ['adv', '冒険者'], ['app', '鑑定士'], ['me', 'あなた'], ['note', '指摘だけ']];
     out.push(h('div', { class: 'filters', 'aria-label': '役の絞り込み' }, h('span', { class: 'sub', style: 'align-self:center' }, '役：'),
       roles.map(([k, l]) => h('button', { type: 'button', class: S.role === k ? 'on' : '', onclick: () => { S.role = k; render(); } }, l))));
-    let msgs = sel.flatMap((x) => messagesOf(x)).sort((a, b) => new Date(a.t) - new Date(b.t));
+    let msgs = sel.flatMap((x) => messagesOf(x)).sort((a, b) => new Date(b.t) - new Date(a.t));
     msgs = msgs.filter((x) => S.role === 'all' || (S.role === 'note' ? x.role === 'app' && x.note : x.role === S.role));
     if (!msgs.length) out.push(h('p', { class: 'sub' }, S.role === 'note' ? '指摘はありません。' : 'このあたりのやりとりは、まだありません。'));
     for (const x of msgs) { const r = roleOf(x.role);
@@ -707,7 +709,8 @@ function helpTab() {
 function reader() {
   if (!S.reader) return null;
   return h('div', { class: 'reader', role: 'dialog', 'aria-label': '報告' }, h('div', { class: 'rbox' },
-    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; render(); } }, '閉じる')),
+    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text) }, 'コピー'), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
+    S.toast ? h('p', { class: 'saved', role: 'status' }, S.toast) : null,
     h('pre', null, S.reader.text)));
 }
 function fallbackBox() {
@@ -767,9 +770,17 @@ async function sendRequest() {
   S.form['new:text'] = ''; S.form['new:due'] = ''; S.files.new = []; S.newSaved = id;
   await refresh(true);
 }
+async function openFile(full) {
+  const t = await S.fs.readText(full);
+  S.toast = ''; S.reader = { path: full, text: t == null ? '(読めませんでした)' : t }; render();
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); S.toast = 'コピーしました。'; } catch (e) { S.toast = 'コピーできませんでした。選択してコピーしてください。'; }
+  render();
+}
 async function openReport(q, path) {
   const t = await S.fs.readText(`${q}/${path}`);
-  S.reader = { path: `${q}/${path}`, text: t == null ? '(読めませんでした)' : t }; render();
+  S.toast = ''; S.reader = { path: `${q}/${path}`, text: t == null ? '(読めませんでした)' : t }; render();
 }
 
 // ============================================================ つなぐ・更新
@@ -781,6 +792,7 @@ async function refresh(force) {
     if (force || key !== S.dataKey) {
       S.dataKey = key; S.model = buildModel(raw);
       const ids = S.model.quests.map((x) => x.id);
+      if (!S.openInit && ids.length) { S.openInit = true; const f0 = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; if (f0) S.openQ[f0.id] = true; }
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
       if (!S.tq || (S.tq !== 'all' && !ids.includes(S.tq))) S.tq = S.sel;
       render();
