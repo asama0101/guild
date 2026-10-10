@@ -547,12 +547,18 @@ function fileRow(f, label) {
       h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} を開く`, onclick: () => openFile(f) }, '開く'),
       h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} のパスをコピー`, onclick: () => copyText('guild/' + f, 'パス') }, 'パスをコピー')));
 }
+// 折りたたみ（details）の開閉を覚えておく。覚えないと、自動更新で画面が作り直されたときに閉じてしまう
+function keepOpen(key, ...kids) {
+  const d = h('details', { open: !!S.open[key] }, ...kids);
+  d.addEventListener('toggle', () => { S.open[key] = d.open; });
+  return d;
+}
 function deliverableBlock(qd) {
   const d = deliverables(qd), fmt = FORMATS.find((x) => x.key === ((qd.q.plan && qd.q.plan.format) || 'md'));
   return [
     d.main.length ? h('ul', { class: 'flist' }, d.main.map(fileRow)) : h('p', null, '納品物のファイルはありません（報告だけです）。'),
     fmt ? h('p', { class: 'fine', style: 'margin:0 0 8px' }, `形式：${fmt.label}（${fmt.ext}）　パスは、プロジェクトのフォルダからの位置です。`) : null,
-    d.rest.length ? h('details', null, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map(fileRow))) : null];
+    d.rest.length ? keepOpen('rest:' + qd.id, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map(fileRow))) : null];
 }
 function fileField(key, label, multiple) {
   const inp = h('input', { type: 'file', 'aria-label': label }); if (multiple) inp.multiple = true;
@@ -963,7 +969,7 @@ function flowTab() {
 function helpTab() {
   const sec = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
   const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
-  const faq = (q, ...a) => h('details', null, h('summary', null, q), h('p', null, ...a));
+  const faq = (q, ...a) => keepOpen('faq:' + q, h('summary', null, q), h('p', null, ...a));
   return h('div', { class: 'grid2' },
     sec('使い方', h('ol', null,
       h('li', null, h('b', null, '依頼を書く。'), '「掲示板」の上の欄に内容を書いて、「依頼」を押します。'),
