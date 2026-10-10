@@ -295,6 +295,43 @@ class AdoptTest(unittest.TestCase):
         self.assertEqual(run().returncode, 1)  # 2 回目は上書きしない
 
 
+class HistoryTest(unittest.TestCase):
+    def test_apply_event_records_only_when_plan_given(self):
+        t = todo("T1")
+        guild.apply_event(t, "deps_done", TR)  # plan を渡さなければ記録しない
+        p = plan(todo("T1"))
+        guild.apply_event(p["todos"][0], "deps_done", TR, p)
+        h = p["history"]
+        self.assertEqual((h[0]["id"], h[0]["event"], h[0]["from"], h[0]["to"]), ("T1", "deps_done", "pending", "running"))
+        self.assertRegex(h[0]["t"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$")
+
+    def test_sync_and_inputs_are_recorded(self):
+        p = plan(todo("T1"), todo("T2", kind="human", deps=["T1"]), approved=False)
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "inbox").mkdir()
+            (Path(d) / "inbox" / "a.json").write_text(json.dumps({"type": "approve"}), encoding="utf-8")
+            guild.ingest(Path(d) / "plan.json", p, TR)
+        guild.sync(p, TR)
+        events = [(x.get("id"), x["event"]) for x in p["history"]]
+        self.assertEqual(events, [(None, "approved"), ("T1", "deps_done")])
+
+    def test_drop_records_every_dropped_todo(self):
+        p = plan(todo("T1", state="failed"), todo("T2", state="blocked", deps=["T1"]))
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "inbox").mkdir()
+            (Path(d) / "inbox" / "a.json").write_text(json.dumps({"type": "decision", "todo": "T1", "choice": "drop"}), encoding="utf-8")
+            guild.ingest(Path(d) / "plan.json", p, TR)
+        self.assertEqual([(x["id"], x["event"]) for x in p["history"]], [("T1", "skip"), ("T2", "dropped")])
+
+    def test_adopt_starts_history(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "plan.json"
+            (Path(d) / "reports").mkdir()
+            (Path(d) / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q1", "title": "t", "todos": [todo("T1")]}), encoding="utf-8")
+            guild.adopt(path, TR)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["history"][0]["event"], "adopted")
+
+
 class InitAndNewTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -325,6 +362,48 @@ class InitAndNewTest(unittest.TestCase):
             self.assertTrue((Path(b["dir"]) / sub).is_dir())
         self.assertEqual(Path(b["plan"]), Path(b["dir"]) / "plan.json")
 
+    def put_request(self, rid, text, files=()):
+        rdir = self.root / "guild" / "requests"
+        rdir.mkdir(parents=True, exist_ok=True)
+        (rdir / f"{rid}.json").write_text(json.dumps({"type": "request", "text": text, "due": None,
+                                                      "files": list(files)}), encoding="utf-8")
+
+    def test_list_requests(self):
+        guild.init_guild(self.root)
+        self.put_request("R20261010-1130", "二つ目")
+        self.put_request("R20261010-1100", "一つ目")
+        (self.root / "guild" / "requests" / "R20261010-1200.json").write_text("{壊れた", encoding="utf-8")
+        r = guild.list_requests(self.root)
+        self.assertEqual([x["id"] for x in r], ["R20261010-1100", "R20261010-1130"])
+        self.assertEqual(r[0]["text"], "一つ目")
+
+    def test_new_takes_request_and_files(self):
+        guild.init_guild(self.root)
+        self.put_request("R20261010-1100", "依頼文", files=["memo.txt"])
+        fdir = self.root / "guild" / "requests" / "files" / "R20261010-1100"
+        fdir.mkdir(parents=True)
+        (fdir / "memo.txt").write_text("素材", encoding="utf-8")
+        q = guild.new_quest(self.root, "R20261010-1100")
+        self.assertEqual(q["request"]["text"], "依頼文")
+        self.assertTrue((Path(q["dir"]) / "request.json").exists())
+        self.assertEqual((Path(q["dir"]) / "inputs" / "memo.txt").read_text(encoding="utf-8"), "素材")
+        self.assertEqual(guild.list_requests(self.root), [])  # 受付待ちから消える
+
+    def test_new_rejects_bad_or_missing_request(self):
+        guild.init_guild(self.root)
+        for rid in ("../config", "R1/../../x", "Rabc", "R20261010-9999"):
+            with self.assertRaises(guild.GuildError):
+                guild.new_quest(self.root, rid)
+        self.assertEqual(guild.new_quest(self.root)["quest"], "Q001")  # 失敗しても番号は進まない
+
+    def test_init_copies_board_and_creates_requests_dir(self):
+        r = guild.init_guild(self.root)
+        self.assertTrue((self.root / "guild" / "requests").is_dir())
+        board = ROOT / "skills" / "quest" / "board.html"
+        if board.exists():
+            self.assertEqual((self.root / "guild" / "board.html").read_bytes(), board.read_bytes())
+            self.assertIsNotNone(r["board"])
+
     def test_cli(self):
         run = lambda *a: subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), *a],
                                         capture_output=True, text=True, encoding="utf-8")
@@ -332,6 +411,44 @@ class InitAndNewTest(unittest.TestCase):
         self.assertEqual(run("init", str(self.root)).returncode, 0)
         r = run("new", str(self.root))
         self.assertEqual(json.loads(r.stdout)["quest"], "Q001")
+
+
+class BoardContractTest(unittest.TestCase):
+    """ボード（board.html）が inbox に書く JSON を、guild.py がそのまま受け取れる。
+    形は、ボードを実際に動かして書き出させたもの（承認・直す・中止・確認・結果・失敗の判断4種）。"""
+
+    CASES = [
+        ({"type": "approve"}, lambda: plan(todo("T1"), approved=False), None),
+        ({"type": "decision", "choice": "replan", "comment": "T2 の前に資料共有を足して"}, lambda: plan(todo("T1"), approved=False), None),
+        ({"type": "decision", "choice": "abort"}, lambda: plan(todo("T1"), approved=False), None),
+        ({"type": "confirm", "todo": "T3", "ok": True}, lambda: plan(todo("T3", state="awaiting_confirm", confirm=True)), {"T3": "running"}),
+        ({"type": "confirm", "todo": "T3", "ok": False}, lambda: plan(todo("T3", state="awaiting_confirm", confirm=True)), {"T3": "failed"}),
+        ({"type": "result", "todo": "T2", "ok": True, "note": "済", "files": ["inbox/files/T2-memo.txt"]}, lambda: plan(todo("T2", kind="human", state="waiting_user")), {"T2": "review"}),
+        ({"type": "result", "todo": "T2", "ok": False, "note": "", "files": []}, lambda: plan(todo("T2", kind="human", state="waiting_user")), {"T2": "failed"}),
+        ({"type": "decision", "todo": "T2", "choice": "drop"}, lambda: plan(todo("T2", kind="human", state="failed"), todo("T3", state="blocked", deps=["T2"])), {"T2": "skipped", "T3": "skipped"}),
+        ({"type": "decision", "todo": "T2", "choice": "skip"}, lambda: plan(todo("T2", kind="human", state="failed"), todo("T3", state="blocked", deps=["T2"])), {"T2": "skipped"}),
+        ({"type": "decision", "choice": "replan"}, lambda: plan(todo("T2", state="failed")), None),
+        ({"type": "decision", "choice": "abort"}, lambda: plan(todo("T2", state="failed")), None),
+    ]
+
+    def test_every_input_the_board_writes_is_accepted(self):
+        for data, make, expect in self.CASES:
+            with self.subTest(data=data):
+                with tempfile.TemporaryDirectory() as d:
+                    (Path(d) / "inbox").mkdir()
+                    (Path(d) / "inbox" / "20261010120000-x.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+                    p = make()
+                    r = guild.ingest(Path(d) / "plan.json", p, TR)
+                    self.assertEqual(r["rejected"], [], r)
+                    if expect:
+                        got = states(p)
+                        for k, v in expect.items():
+                            self.assertEqual(got[k], v)
+
+    def test_board_source_writes_the_same_shapes(self):
+        board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
+        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how"):
+            self.assertIn(needle, board)
 
 
 class NextViewTest(unittest.TestCase):

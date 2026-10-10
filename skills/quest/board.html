@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>guild 依頼掲示板</title>
+<style>
+
+:root{--bg:#E7DEC9;--banner:#6E1B28;--banner-ink:#F0CF7A;--banner-sub:#E6C9C9;--dot:#9BE0AE;--plaque:#6E1B28;--paper:#F6EEDB;--paper2:#FCF8EC;--ink:#2B2019;--sub:#5C4A3C;--line:#CDB98A;--brass:#A8863A;--gold:#7A1E2C;--ok:#2E6B47;--ok-bg:#DDEBDD;--warn:#7D5200;--warn-bg:#F5E3B5;--ng:#B3261E;--seal:#7A1E2C;--mute:#6A5A48;--surface:#FFFDF5;--surface2:#F2E8CF;--head:#E8DBB8;--track:#E2D6B6;--grid:#E8DFC8;--sel-bg:#EDF3E6;--seal-edge:#4A0F18;--ng-edge:#5A1018;--ok-edge:#1B4630;--stop:#4A4036;--stop-line:#7A6E5E;--stop-bg:#E7DFCB;--on:#fff;--stripe1:#CDBF9C;--stripe2:#E7DFCB}
+body{margin:0;background:var(--bg)}
+.root{font-family:'Noto Sans JP','Yu Gothic UI','Hiragino Sans','Meiryo',sans-serif;color:var(--ink);background:var(--bg);min-height:100%;font-size:15px;line-height:1.7}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 28px 56px;box-sizing:border-box}
+.plaque{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;border:1px solid var(--brass);border-radius:6px;padding:12px 20px;background:var(--banner)}
+.plaque h1{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800;font-size:25px;margin:0;letter-spacing:.06em;color:var(--banner-ink)}
+.plaque .sub2{font-size:13px;color:var(--banner-sub)}
+.conn{margin-left:auto;font-size:13px;color:var(--banner-sub);display:flex;gap:8px;align-items:center}
+.conn i{width:8px;height:8px;border-radius:50%;background:var(--dot);display:inline-block}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:14px;border-bottom:2px solid var(--brass)}
+.tabs button{font:inherit;font-weight:700;min-height:44px;padding:6px 22px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--banner);color:var(--banner-ink);cursor:pointer;margin-bottom:-2px}
+.tabs button.on{background:var(--paper);color:var(--ink);border-color:var(--line)}
+.panel{background:var(--paper);border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;padding:22px 26px 30px}
+.attn{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;background:var(--warn-bg);border:1px solid var(--warn);border-radius:6px;padding:8px 16px;margin-bottom:16px;font-size:14px}
+.attn b{color:var(--warn)}
+.id{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px;color:var(--sub)}
+.topline{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.topline .attn{flex:1 1 320px;margin:0}
+.newbtn{background:var(--seal);border-color:var(--seal-edge);color:var(--on);margin-left:auto}
+.ledger{background:var(--paper2);border:1px solid var(--line);font-size:14px}
+.lh,.lr{display:grid;grid-template-columns:86px minmax(0,1fr) 112px 70px 130px;gap:0 12px;padding:9px 14px;align-items:start;box-sizing:border-box;width:100%}
+.lh{font-size:12px;color:var(--sub);background:var(--head);border-bottom:1px solid var(--line)}
+.lr{border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.lr.plain{cursor:default}
+.lr.sel{background:var(--surface);font-weight:700;box-shadow:inset 6px 0 0 var(--seal);border-bottom:0}
+.lr:not(.plain):not(.sel):hover{background:var(--surface)}
+.detail{padding:6px 24px 26px 30px;background:var(--surface);border-bottom:2px solid var(--seal)}
+.quick{background:var(--paper2);border:2px solid var(--brass);border-radius:6px;padding:14px 18px 12px;margin-bottom:16px}
+.qrow{display:flex;gap:10px;align-items:stretch}
+.qrow textarea{flex:1 1 auto;min-height:60px;margin:0}
+.qgo{flex:0 0 96px;min-height:60px;font-size:16px}
+.qmore{margin-top:6px}
+.qopts{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:8px}
+.saved{margin:8px 0 0;font-size:13.5px;color:var(--ok);font-weight:700}
+.legend2{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--sub);margin:0 0 12px}
+.legend2 .sw{display:inline-block;width:22px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.gantt{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 18px 16px;margin-bottom:16px}
+.gantt h3{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:16px;margin:0 0 8px}
+.gx{display:flex;align-items:center;gap:10px;min-height:42px}
+.glab{flex:0 0 140px;line-height:1.35}
+.glab b{display:block;font-size:13.5px}
+.gtrack{position:relative;flex:1 1 auto;height:28px;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(12.5% - 1px),var(--grid) calc(12.5% - 1px),var(--grid) 12.5%);border-radius:3px}
+.gtrack.axis{height:20px;background:none}
+.tick{position:absolute;top:0;transform:translateX(-50%);font-size:11px;color:var(--sub);font-family:'JetBrains Mono',Consolas,'Courier New',monospace;white-space:nowrap}
+.bar2{position:absolute;top:2px;height:24px;border-radius:3px;font-size:11.5px;line-height:24px;color:#fff;text-align:center;overflow:hidden;white-space:nowrap;box-sizing:border-box;font-weight:700;min-width:4px}
+.s-adv{background:#6B5A3E}.s-cart{background:#4F6A70}.s-app{background:#5B4A6B}
+.s-me{background:var(--warn-bg);color:var(--warn);border:2px solid var(--warn);line-height:20px}
+.s-conf{background:var(--surface);color:var(--ng);border:2px dashed var(--ng);line-height:20px}
+.s-ng{background:var(--ng)}
+.s-blk{background:repeating-linear-gradient(45deg,var(--stripe1) 0 6px,var(--stripe2) 6px 12px);color:var(--stop);border:1px solid var(--stop-line);line-height:22px}
+.nowline{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ng)}
+.qtag{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:11.5px;background:var(--ink);color:var(--paper);border-radius:3px;padding:0 6px;margin-right:8px}
+@media (max-width:760px){.lh{display:none}.lr{grid-template-columns:70px 1fr}}
+.stamp{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800;font-size:13px;border:2px solid;border-radius:4px;padding:0 9px;display:inline-block;white-space:nowrap;transform:rotate(-2deg)}
+.sd-ok{color:var(--ok);border-color:var(--ok);background:var(--ok-bg)}
+.sd-ng{color:var(--ng);border-color:var(--ng)}
+.sd-turn{color:var(--warn);border-color:var(--warn);background:var(--warn-bg)}
+.sd-wait{color:var(--mute);border-color:var(--mute);border-style:dashed}
+.sd-stop{color:var(--stop);border-color:var(--stop-line);background:var(--stop-bg)}
+.sd-draft{color:var(--sub);border-color:var(--brass);border-style:dotted}
+.bar{height:9px;border:1px solid var(--line);background:var(--track);border-radius:2px;overflow:hidden;margin:4px 0 2px}
+.bar span{display:block;height:100%;background:var(--ok)}
+.sub{font-size:13px;color:var(--sub)}
+.letter{background:var(--surface);border:2px solid var(--brass);border-radius:6px;padding:22px 26px 26px;position:relative;margin:26px 0 8px}
+.seal{position:absolute;right:20px;top:-17px;width:44px;height:44px;border-radius:50%;background:var(--seal);border:3px solid var(--seal-edge);color:var(--on);display:flex;align-items:center;justify-content:center;font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800;font-size:17px}
+.kick{font-size:13px;font-weight:700;color:var(--ng)}
+.letter h3{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:20px;margin:0 0 6px}
+.letter p{margin:0 0 10px;font-size:14.5px}
+.fine{font-size:13px;color:var(--sub)}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.btn{min-height:46px;padding:6px 22px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer;border:2px solid var(--ink);background:var(--paper2);color:var(--ink)}
+.btn.go{background:var(--ok);border-color:var(--ok-edge);color:var(--on)}
+.btn.wax{background:var(--ng);border-color:var(--ng-edge);color:var(--on)}
+.btn.ghost{border-color:var(--brass);color:var(--sub)}
+textarea{width:100%;box-sizing:border-box;min-height:66px;border:1px solid var(--brass);border-radius:4px;padding:10px;font:inherit;font-size:14px;background:var(--surface);color:var(--ink);resize:vertical}
+input[type=date]{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass);border-radius:4px;padding:6px 10px;background:var(--surface)}
+.lbl{display:block;font-weight:700;font-size:13px;margin:14px 0 6px}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:10px 14px;border:1px solid var(--line);border-radius:4px;margin-bottom:8px;background:var(--surface);cursor:pointer}
+.opt input{width:18px;height:18px;margin:5px 0 0;accent-color:var(--ok);flex:none}
+.opt b{display:block}
+.opt .d{font-size:13px;color:var(--sub);display:block}
+.opt:has(input:checked){border:2px solid var(--ok);background:var(--sel-bg)}
+.warnline{font-size:13px;color:var(--warn);display:block}
+.drop{border:2px dashed var(--brass);border-radius:4px;padding:12px;text-align:center;font-size:13.5px;color:var(--sub);background:var(--surface2)}
+.sec{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:17px;margin:24px 0 10px}
+.tag{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--brass);border-radius:3px;padding:10px 14px;margin-bottom:8px}
+.tag .row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}
+.tid{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px;background:var(--ink);color:var(--paper);border-radius:3px;padding:0 7px}
+.ttl{font-weight:700;flex:1 1 240px}
+.kind{font-size:12.5px;color:var(--sub)}
+.lock{color:var(--ng);font-weight:700;font-size:12.5px}
+details{margin-top:6px;font-size:13.5px}
+summary{cursor:pointer;color:var(--sub);min-height:28px}
+dl.c{display:grid;grid-template-columns:84px 1fr;gap:4px 12px;margin:6px 0 0;padding:10px 12px;background:var(--surface2);border-radius:3px}
+dl.c dt{color:var(--sub);font-size:12.5px}
+dl.c dd{margin:0}
+.way{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px;font-size:13px}
+.way .n{border:1px solid var(--brass);border-radius:3px;padding:3px 10px;background:var(--surface)}
+.way .n.h{border-style:dashed}
+code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px}
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.filters button{font:inherit;font-size:13px;min-height:36px;border:1px solid var(--brass);border-radius:999px;padding:2px 14px;background:transparent;color:var(--ink);cursor:pointer}
+.filters button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.msg{display:flex;gap:12px;margin-bottom:12px}
+.who{flex:none;width:70px;text-align:center;font-size:11.5px;color:var(--sub);line-height:1.3}
+.av{display:flex;width:42px;height:42px;margin:0 auto 4px;border-radius:50%;align-items:center;justify-content:center;font-weight:800;font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:16px;color:#fff}
+.av.gm{background:#3D4A5C}.av.cart{background:#4F6A70}.av.adv{background:#6B5A3E}.av.app{background:#5B4A6B}.av.me{background:var(--warn)}
+.bub{flex:1 1 auto;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:8px 16px}
+.bub time{display:block;font-size:11.5px;color:var(--sub)}
+.bub p{margin:0}
+.bub a{font-size:12.5px;color:var(--gold)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:18px 22px}
+.card h3{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:17px;margin:0 0 8px}
+.card ol{margin:0;padding-left:22px;font-size:14.5px}
+.card ol li{margin-bottom:6px}
+.legend{display:grid;grid-template-columns:auto 1fr;gap:10px 14px;align-items:center;font-size:14px}
+.card dl.h{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;margin:0;font-size:14px}
+.card dl.h dt{font-weight:700;font-size:13.5px}
+.card dl.h dd{margin:0}
+.faq summary{font-weight:700;color:var(--ink);font-size:14.5px}
+.faq p{margin:4px 0 12px 4px;font-size:14px}
+
+.sd-run{color:var(--sub);border-color:var(--brass);background:var(--surface2)}
+.letter.danger{border-color:var(--ng)}
+.letter.done{border-color:var(--ok)}
+.letter.sentbox{border-color:var(--ok)}
+.seal.ok{background:var(--ok);border-color:var(--ok-edge)}
+.seal.ng{background:var(--ng);border-color:var(--ng-edge)}
+.h2{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN',serif;font-size:20px;margin:0 0 2px}
+.err{color:var(--ng);font-size:13.5px;font-weight:700;margin:8px 0 0}
+.linkbtn{font:inherit;font-size:13.5px;min-height:34px;border:0;background:transparent;color:var(--gold);text-decoration:underline;cursor:pointer;padding:0 6px}
+.reader{position:fixed;inset:0;background:rgba(20,10,10,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+.rbox{background:var(--paper2);border:2px solid var(--brass);border-radius:6px;max-width:820px;width:100%;max-height:86vh;overflow:auto;padding:16px 20px}
+.rhead{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.rbox pre{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0 0 8px}
+input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
+.connbox{margin-bottom:16px}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+</style>
+</head>
+<body>
+<div class="root"><div id="app"></div></div>
+<noscript>この画面は JavaScript が必要です。</noscript>
+<script>
+(function () {
+'use strict';
+
+// ============================================================ 道具
+const h = (tag, attrs, ...kids) => {
+  const e = document.createElement(tag);
+  if (attrs) for (const k of Object.keys(attrs)) {
+    const v = attrs[k];
+    if (v === false || v == null) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (k === 'checked' || k === 'disabled' || k === 'open') { if (v) e.setAttribute(k, ''); }
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid == null || kid === false) continue;
+    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+};
+const code = (t) => h('code', null, t);
+const pad = (n) => String(n).padStart(2, '0');
+const stamp14 = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+const sameDay = (a, b) => a.toDateString() === b.toDateString();
+function fmtTime(iso) {
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const now = new Date(), y = new Date(now.getTime() - 86400000);
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (sameDay(d, now)) return `今日 ${hm}`;
+  if (sameDay(d, y)) return `昨日 ${hm}`;
+  return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+}
+const parseJSON = (t) => { try { return JSON.parse(t); } catch (e) { return null; } };
+const isNotFound = (e) => e && (e.name === 'NotFoundError' || e.name === 'TypeMismatchError');
+
+// ============================================================ 保存先（フォルダ）の包み
+class RealFS {
+  constructor(dir) { this.dir = dir; }
+  async _dir(path, create) {
+    let d = this.dir;
+    for (const p of path.split('/').filter(Boolean)) d = await d.getDirectoryHandle(p, { create: !!create });
+    return d;
+  }
+  async list(path) {
+    let d; try { d = await this._dir(path, false); } catch (e) { if (isNotFound(e)) return []; throw e; }
+    const out = [];
+    for await (const [name, hd] of d.entries()) {
+      if (hd.kind === 'file') { const f = await hd.getFile(); out.push({ name, kind: 'file', mtime: f.lastModified }); }
+      else out.push({ name, kind: 'dir' });
+    }
+    return out;
+  }
+  async readText(path) {
+    const i = path.lastIndexOf('/');
+    try {
+      const d = await this._dir(path.slice(0, i), false);
+      const f = await (await d.getFileHandle(path.slice(i + 1))).getFile();
+      return await f.text();
+    } catch (e) { if (isNotFound(e)) return null; throw e; }
+  }
+  async _write(path, data) {
+    const i = path.lastIndexOf('/');
+    const d = await this._dir(path.slice(0, i), true);
+    const w = await (await d.getFileHandle(path.slice(i + 1), { create: true })).createWritable();
+    await w.write(data); await w.close();
+  }
+  writeText(path, text) { return this._write(path, text); }
+  writeBlob(path, blob) { return this._write(path, blob); }
+}
+
+// 見本・テスト用の、メモリ上の保存先
+class MemFS {
+  constructor(tree) { this.root = tree || {}; }
+  _node(path, create) {
+    let n = this.root;
+    for (const p of path.split('/').filter(Boolean)) {
+      if (n.__t !== undefined) return null;
+      if (!(p in n)) { if (!create) return null; n[p] = {}; }
+      n = n[p];
+    }
+    return n;
+  }
+  async list(path) {
+    const n = this._node(path, false); if (!n || n.__t !== undefined) return [];
+    return Object.keys(n).map((name) => n[name].__t !== undefined ? { name, kind: 'file', mtime: n[name].__m } : { name, kind: 'dir' });
+  }
+  async readText(path) { const n = this._node(path, false); return n && n.__t !== undefined ? n.__t : null; }
+  async writeText(path, text) {
+    const i = path.lastIndexOf('/'); const d = this._node(path.slice(0, i), true);
+    d[path.slice(i + 1)] = { __t: String(text), __m: Date.now() };
+  }
+  async writeBlob(path, blob) { return this.writeText(path, '(添付ファイル ' + (blob.name || '') + ')'); }
+}
+
+const DB = {
+  // 前に作られた同名のデータベースに、必要な入れ物（object store）が無いことがある。そのときは作り直す。
+  async open() {
+    const once = () => new Promise((res, rej) => { const r = indexedDB.open('guild-board-handles', 1); r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('h')) r.result.createObjectStore('h'); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    let db = await once();
+    if (!db.objectStoreNames.contains('h')) {
+      db.close();
+      await new Promise((res, rej) => { const d = indexedDB.deleteDatabase('guild-board-handles'); d.onsuccess = res; d.onerror = () => rej(d.error); d.onblocked = res; });
+      db = await once();
+    }
+    return db;
+  },
+  async get() { const db = await DB.open(); return new Promise((res, rej) => { const r = db.transaction('h').objectStore('h').get('dir'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+  async put(v) { const db = await DB.open(); return new Promise((res, rej) => { const tx = db.transaction('h', 'readwrite'); tx.objectStore('h').put(v, 'dir'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+};
+
+// ============================================================ 状態
+const S = {
+  fs: null, conn: 'none', connMsg: '', demo: false,
+  tab: 'board', sel: null, tq: null, view: 'talk', role: 'all',
+  data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
+};
+
+// ============================================================ 読み込み
+async function readJSON(path) { const t = await S.fs.readText(path); return t == null ? null : parseJSON(t); }
+
+async function listFilesDeep(path, depth) {
+  const out = [];
+  for (const e of await S.fs.list(path)) {
+    if (e.kind === 'file') out.push(path ? `${path}/${e.name}` : e.name);
+    else if (depth > 0) out.push(...await listFilesDeep(`${path}/${e.name}`, depth - 1));
+  }
+  return out.sort();
+}
+
+async function loadAll() {
+  const top = await S.fs.list('');
+  const requests = [];
+  for (const e of await S.fs.list('requests')) {
+    if (e.kind === 'file' && /^R[0-9][0-9-]*\.json$/.test(e.name)) {
+      const r = await readJSON(`requests/${e.name}`);
+      if (r) requests.push({ id: e.name.slice(0, -5), text: r.text || '', due: r.due || null, files: r.files || [], created: r.created || '' });
+    }
+  }
+  requests.sort((a, b) => a.id.localeCompare(b.id));
+  const quests = [];
+  for (const e of top) {
+    if (e.kind !== 'dir' || !/^Q\d+$/.test(e.name)) continue;
+    const q = e.name;
+    const plan = await readJSON(`${q}/plan.json`);
+    const request = await readJSON(`${q}/request.json`);
+    const reports = (await S.fs.list(`${q}/reports`)).filter((x) => x.kind === 'file').map((x) => x.name);
+    const output = await listFilesDeep(`${q}/output`, 2);
+    const inbox = [];
+    for (const f of await S.fs.list(`${q}/inbox`)) {
+      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null }); }
+    }
+    const knowledge = (await S.fs.list('knowledge')).some((x) => x.name === `${q}.md`);
+    quests.push({ id: q, plan, request, reports, output, inbox, knowledge });
+  }
+  quests.sort((a, b) => b.id.localeCompare(a.id));
+  return { requests, quests };
+}
+
+// ============================================================ 読み解き
+const TSTATE = {
+  pending: ['待機', 'sd-wait'], blocked: ['止まり', 'sd-stop'], awaiting_confirm: ['確認待ち', 'sd-turn'], running: ['作業中', 'sd-run'],
+  waiting_user: ['あなたの番', 'sd-turn'], review: ['鑑定中', 'sd-run'], done: ['合格', 'sd-ok'], failed: ['できず', 'sd-ng'], skipped: ['やめた', 'sd-stop']
+};
+const closed = (s) => s === 'done' || s === 'skipped';
+
+function dependents(plan, id) {
+  const set = new Set([id]); let grew = true;
+  while (grew) { grew = false; for (const t of plan.todos) if (!set.has(t.id) && (t.deps || []).some((d) => set.has(d))) { set.add(t.id); grew = true; } }
+  set.delete(id); return plan.todos.filter((t) => set.has(t.id));
+}
+
+function derive(q) {
+  const p = q.plan;
+  const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 80)) || q.id;
+  const d = { id: q.id, title, asks: [], info: null, todos: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q };
+  const inboxHas = (type, todo, choice) => q.inbox.some((x) => x.type === type && (todo == null || x.todo === todo) && (choice == null || x.choice === choice));
+  if (!p) { d.label = '分解中'; d.cls = 'sd-run'; d.info = 'decomposing'; return d; }
+  d.todos = p.todos.map((t) => {
+    const st = TSTATE[t.state] || [t.state, 'sd-wait'];
+    const draft = !p.approved && t.state === 'pending';
+    return { ...t, stamp: draft ? '案' : st[0], cls: draft ? 'sd-draft' : st[1] };
+  });
+  d.total = p.todos.length; d.done = p.todos.filter((t) => closed(t.state)).length;
+  d.finished = d.total > 0 && d.done === d.total;
+  if (p.status === 'aborted') { d.label = '中止'; d.cls = 'sd-stop'; d.info = 'aborted'; return d; }
+  if (p.status === 'replan') { d.label = '計画を直し中'; d.cls = 'sd-run'; d.info = 'replan'; return d; }
+  if (!p.approved) {
+    d.asks.push({ kind: 'approve', key: `${q.id}:approve`, label: '承認', sent: inboxHas('approve') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
+  } else {
+    for (const t of p.todos) {
+      if (t.state === 'awaiting_confirm') d.asks.push({ kind: 'confirm', todo: t, key: `${q.id}:${t.id}:confirm`, label: `${t.id}（確認）`, sent: inboxHas('confirm', t.id) });
+      if (t.state === 'waiting_user') d.asks.push({ kind: 'result', todo: t, key: `${q.id}:${t.id}:result`, label: t.id, sent: inboxHas('result', t.id) });
+      if (t.state === 'failed') d.asks.push({ kind: 'decision', todo: t, key: `${q.id}:${t.id}:decision`, label: `${t.id}（判断）`, sent: inboxHas('decision', t.id) || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
+    }
+  }
+  const waiting = d.asks.filter((a) => !a.sent);
+  if (d.finished) { d.label = '完了'; d.cls = 'sd-ok'; }
+  else if (waiting.some((a) => a.kind === 'decision')) { d.label = '要判断'; d.cls = 'sd-ng'; }
+  else if (!p.approved) { d.label = '承認待ち'; d.cls = 'sd-draft'; }
+  else if (waiting.length) { d.label = '進行中'; d.cls = 'sd-turn'; }
+  else { d.label = '進行中'; d.cls = 'sd-run'; }
+  d.me = waiting.length ? waiting.map((a) => a.label).join('・') : '—';
+  if (d.finished) d.info = 'finished';
+  return d;
+}
+
+function buildModel(raw) {
+  const quests = raw.quests.map(derive);
+  return { requests: raw.requests, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+}
+function askText(x, a) {
+  if (a.kind === 'approve') return '計画の承認';
+  if (a.kind === 'confirm') return `${a.todo.id}「${a.todo.title}」の実行前の確認`;
+  if (a.kind === 'result') return `${a.todo.id}「${a.todo.title}」`;
+  return `${a.todo.id} ができなかったため、進め方の判断`;
+}
+
+// ---- 会話の材料と、タイムラインの帯
+function roleOf(kind) { return { gm: ['受', 'マスター', 'gm'], cart: ['地', '地図師', 'cart'], adv: ['冒', '冒険者', 'adv'], app: ['鑑', '鑑定士', 'app'], me: ['君', 'あなた', 'me'] }[kind]; }
+function messagesOf(q) {
+  const p = q.q.plan; if (!p) return [];
+  const has = (n) => q.q.reports.includes(n);
+  const out = [];
+  const kindOf = {}; p.todos.forEach((t) => { kindOf[t.id] = t.kind; });
+  const add = (h0, role, text, report, note) => out.push({ q: q.id, t: h0.t, role, text, report: report && has(report.split('/').pop()) ? report : '', note: !!note });
+  for (const e of p.history || []) {
+    const id = e.id;
+    if (e.event === 'adopted') add(e, 'cart', `${p.todos.length}つの Todo に分けました。`, 'reports/plan-draft.json');
+    else if (e.event === 'approved') add(e, 'me', '計画を承認しました。');
+    else if (e.event === 'decision') add(e, 'me', e.choice === 'abort' ? '依頼を中止しました。' : '計画を直すよう頼みました。' + (e.comment ? `（${e.comment}）` : ''));
+    else if (e.event === 'deps_done') {
+      if (e.to === 'waiting_user') add(e, 'gm', `${id} をあなたに渡しました。「掲示板」の手紙に、答える欄があります。`);
+      else if (e.to === 'awaiting_confirm') add(e, 'gm', `${id} は実行前の確認待ちです。`);
+      else add(e, 'gm', `${id} を冒険者に渡しました。`);
+    }
+    else if (e.event === 'dep_failed') add(e, 'gm', `${id} が止まりました（前提の Todo ができなかったため）。`);
+    else if (e.event === 'unblock') add(e, 'gm', `${id} の止まりが解けました。`);
+    else if (e.event === 'confirmed') add(e, 'me', `${id}：実行する、を選びました。`);
+    else if (e.event === 'declined') add(e, 'me', `${id}：実行しない、を選びました。`);
+    else if (e.event === 'submitted') { if (kindOf[id] === 'human') add(e, 'me', `${id}：できた（結果を送りました）。`); else add(e, 'adv', `${id}：作業を終えました。`, `reports/${id}-adventurer.md`); }
+    else if (e.event === 'reported_failed') add(e, 'me', `${id}：できなかった。`);
+    else if (e.event === 'passed') add(e, 'app', `${id}：合格。`, `reports/${id}-appraiser.md`);
+    else if (e.event === 'rejected') add(e, 'app', `${id}：不合格です。${e.to === 'failed' ? 'やり直しの回数を超えました。' : 'やり直します。'}`, `reports/${id}-appraiser.md`, true);
+    else if (e.event === 'skip') add(e, 'me', `${id}：やめました。`);
+    else if (e.event === 'dropped') add(e, 'gm', `${id}：前提がやめられたため、やめました。`);
+  }
+  return out;
+}
+
+const BARKIND = { running: ['adv', '作業'], review: ['app', '鑑定'], waiting_user: ['me', 'あなたの番'], awaiting_confirm: ['conf', '確認待ち'], blocked: ['blk', '止まり'], failed: ['ng', 'できず'] };
+function ganttOf(q) {
+  const p = q.q.plan; if (!p || !(p.history || []).length) return null;
+  const now = Date.now(), hist = p.history.map((e) => ({ ...e, ms: new Date(e.t).getTime() })).filter((e) => !isNaN(e.ms));
+  const rows = [];
+  const adopted = hist.find((e) => e.event === 'adopted'), approved = hist.find((e) => e.event === 'approved');
+  let lo = hist[0].ms, hi = hist[hist.length - 1].ms, open = false;
+  if (adopted) {
+    const end = approved ? approved.ms : now; if (!approved) open = true;
+    rows.push({ label: '分解・承認', sub: '地図師／あなた', bars: [{ kind: 'me', text: '承認待ち', a: adopted.ms, b: end }] });
+    hi = Math.max(hi, end);
+  }
+  for (const t of p.todos) {
+    const ev = hist.filter((e) => e.id === t.id && e.to);
+    const bars = [];
+    ev.forEach((e, i) => {
+      const k = BARKIND[e.to]; if (!k) return;
+      const nxt = ev[i + 1]; const end = nxt ? nxt.ms : now; if (!nxt) open = true;
+      bars.push({ kind: k[0], text: k[1], a: e.ms, b: end }); hi = Math.max(hi, end);
+    });
+    rows.push({ label: t.id, sub: t.title.length > 14 ? t.title.slice(0, 14) + '…' : t.title, bars });
+  }
+  if (open) hi = Math.max(hi, now);
+  const span = Math.max(hi - lo, 60000), pad2 = span * 0.04; lo -= 0; hi += pad2;
+  const steps = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].map((m) => m * 60000);
+  const step = steps.find((s) => (hi - lo) / s <= 8) || steps[steps.length - 1];
+  const ticks = []; for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) ticks.push(v);
+  return { rows, lo, hi, ticks, now: open ? now : null, long: hi - lo > 86400000 };
+}
+
+// ============================================================ 描画（部品）
+function stampEl(label, cls) { return h('span', { class: `stamp ${cls}` }, label); }
+
+function sentNote(key) {
+  return S.sent[key] ? h('p', { class: 'saved', role: 'status' }, '送りました。チャットで「完了」と伝えてください。') : null;
+}
+function bindKey(el, key) { el.dataset.key = key; return el; }
+function textarea(key, attrs) { const e = h('textarea', attrs); e.value = S.form[key] || ''; return bindKey(e, key); }
+function radio(name, key, value, label, desc, warn, checkedDefault) {
+  const cur = S.form[key] !== undefined ? S.form[key] : checkedDefault;
+  const inp = h('input', { type: 'radio', name, value, checked: cur === value });
+  bindKey(inp, key);
+  return h('label', { class: 'opt' }, inp, h('span', null, h('b', null, label), desc ? h('span', { class: 'd' }, desc) : null, warn ? h('span', { class: 'warnline' }, warn) : null));
+}
+function seal(ch, cls) { return h('div', { class: `seal ${cls || ''}`, 'aria-hidden': 'true' }, ch); }
+
+function letterFor(qd, a) {
+  const k = a.key;
+  if (a.sent) return h('section', { class: 'letter sentbox' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '送信済み'),
+    h('h3', null, `${a.kind === 'approve' ? '計画の承認' : askText(qd, a)}を送りました`),
+    h('p', null, 'チャットで「完了」と伝えると、読み取って進みます。'));
+  if (a.kind === 'approve') {
+    return h('section', { class: 'letter', 'aria-label': '計画の承認' }, seal('印'),
+      h('div', { class: 'kick' }, 'お願い：承認'), h('h3', null, 'この計画で進めてよいですか'),
+      h('p', null, `地図師が、依頼を ${qd.total} つの Todo に分けました。下の「道のり」を確かめて、承認してください。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
+      h('label', { class: 'lbl', for: k + 'fix' }, '直してほしいこと（直す場合だけ）'),
+      (() => { const t = textarea(k + ':fix', { id: k + 'fix', placeholder: '例：T2 の前に、資料を共有する Todo を足してほしい' }); return t; })(),
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'approve' }, k) }, '承認して進める'),
+        h('button', { class: 'btn', type: 'button', onclick: () => send(qd.id, { type: 'decision', choice: 'replan', comment: (S.form[k + ':fix'] || '').trim() }, k) }, 'この内容で計画を直す'),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => send(qd.id, { type: 'decision', choice: 'abort' }, k) }, '中止する')),
+      sentNote(k));
+  }
+  if (a.kind === 'result') {
+    const t = a.todo, ok = k + ':ok', memo = k + ':memo', fl = h('input', { type: 'file', multiple: true, 'aria-label': '記録の添付' });
+    fl.dataset.fileKey = k;
+    const fnames = (S.files[k] || []).map((f) => f.name);
+    return h('section', { class: 'letter', 'aria-label': 'あなたの実行' }, seal('君'),
+      h('div', { class: 'kick' }, `あなたの番：${t.id}`), h('h3', null, t.title),
+      h('p', null, '合格ライン：' + ((t.criteria && t.criteria.pass_line) || '')),
+      h('span', { class: 'lbl' }, '結果を教えてください'),
+      radio(k + 'r', ok, 'yes', 'できた', '', '', 'yes'), radio(k + 'r', ok, 'no', 'できなかった', '', '', 'yes'),
+      h('label', { class: 'lbl', for: k + 'memo' }, '一言メモ（任意）'), textarea(memo, { id: k + 'memo' }),
+      h('span', { class: 'lbl' }, '記録の添付（任意）'), fl, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
+      h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendResult(qd.id, t, k) }, '結果を送る')),
+      h('p', { class: 'fine', style: 'margin:10px 0 0' }, '送ると ', code(`${qd.id}/inbox/`), ' に保存されます。そのあと、チャットで「完了」と伝えてください。'), sentNote(k));
+  }
+  if (a.kind === 'confirm') {
+    const t = a.todo;
+    return h('section', { class: 'letter danger', 'aria-label': '実行前の確認' }, seal('封', 'ng'),
+      h('div', { class: 'kick' }, '実行の前に確認です'), h('h3', null, `${t.id}「${t.title}」を実行してよいですか`),
+      h('p', null, 'この Todo には「外部への公開」など、元に戻せないことがある作業の確認の印が付いています。計画の承認とは別にお聞きしています。'),
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn wax', type: 'button', onclick: () => send(qd.id, { type: 'confirm', todo: t.id, ok: true }, k) }, '実行する'),
+        h('button', { class: 'btn', type: 'button', onclick: () => send(qd.id, { type: 'confirm', todo: t.id, ok: false }, k) }, '実行しない')),
+      h('p', { class: 'fine', style: 'margin:10px 0 0' }, '「実行しない」を選ぶと、失敗として扱われ、進め方を選ぶ手紙に変わります。'), sentNote(k));
+  }
+  // decision
+  const t = a.todo, plan = qd.q.plan, deps = dependents(plan, t.id), names = deps.map((x) => x.id).join('、');
+  const hk = k + ':how';
+  return h('section', { class: 'letter danger', 'aria-label': '失敗の判断' }, seal('急', 'ng'),
+    h('div', { class: 'kick' }, `困りごと：${t.id} ができませんでした`), h('h3', null, 'どう進めるか、選んでください'),
+    h('p', null, `${t.id}「${t.title}」ができませんでした。` + (deps.length ? `これに続く ${names} は止まっています。` : '')),
+    radio(k + 'h', hk, 'drop', deps.length ? `${t.id} と、それに続く ${names} もやめる` : `${t.id} をやめる`, deps.length ? `${names} は実行しません。ほかの Todo の成果物は残ります。` : 'この Todo を計画から外します。', '', 'drop'),
+    deps.length ? radio(k + 'h', hk, 'skip', `${t.id} だけやめて、${names} は進める`, `${names} を実行します。`, `注意：${names} は ${t.id} が前提です。${t.id} の結果がないまま進みます。`, 'drop') : null,
+    radio(k + 'h', hk, 'replan', '計画を直す', 'たとえば「修正をもらってから、もう一度やる」Todo を足します。', '', 'drop'),
+    radio(k + 'h', hk, 'abort', 'この依頼を中止する', 'ここで止めます。できた成果物は残ります。', '', 'drop'),
+    h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => {
+      const how = S.form[hk] || 'drop';
+      send(qd.id, how === 'replan' || how === 'abort' ? { type: 'decision', choice: how } : { type: 'decision', todo: t.id, choice: how }, k);
+    } }, 'この方針で進める')), sentNote(k));
+}
+
+function infoLetter(qd) {
+  if (qd.info === 'decomposing') return h('section', { class: 'letter' }, seal('分'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '分解中'), h('h3', null, '依頼を受け付けました'), h('p', null, '地図師が道のりを描いています。まだ計画はありません。進まないときは、チャットで ', code('/guild:quest'), ' と送ってください。'));
+  if (qd.info === 'replan') return h('section', { class: 'letter' }, seal('直'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '計画を直しています'), h('h3', null, '計画の作り直しを待っています'), h('p', null, 'チャットで ', code('/guild:quest'), ' と送ると、地図師が計画を作り直します。'));
+  if (qd.info === 'aborted') return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '中止'), h('h3', null, 'この依頼は中止されました'), h('p', null, 'できていた成果物は ', code(`${qd.id}/output/`), ' に残っています。'));
+  if (qd.info === 'finished') {
+    return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
+      qd.q.output.length ? h('p', null, qd.q.output.map((f, i) => [i ? h('br') : null, code(f)])) : h('p', null, '納品物のファイルはありません。'),
+      qd.q.knowledge ? h('p', { class: 'fine', style: 'margin:0' }, '成功したこと、失敗したこと、業務知識を ', code(`knowledge/${qd.id}.md`), ' に記録しました。次の依頼で役に立てます。') : null);
+  }
+  return null;
+}
+
+function todoTags(qd) {
+  return qd.todos.map((t) => h('article', { class: 'tag' },
+    h('div', { class: 'row' }, h('span', { class: 'tid' }, t.id), h('span', { class: 'ttl' }, t.title), stampEl(t.stamp, t.cls)),
+    h('div', { class: 'kind' }, (t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動で実行（実行前に確認）' : '自動で実行') + '　前提：' + ((t.deps || []).join('・') || 'なし')),
+    t.confirm ? h('div', { class: 'lock' }, '実行の直前に、もう一度お聞きします') : null,
+    (() => { const c = t.criteria || {}; const d = h('details', { open: !!S.open['c:' + qd.id + t.id] }, h('summary', null, '合格基準を見る'),
+      h('dl', { class: 'c' }, h('dt', null, '観点'), h('dd', null, c.viewpoint || ''), h('dt', null, '合格ライン'), h('dd', null, c.pass_line || ''), h('dt', null, '確かめ方'), h('dd', null, c.check || '')));
+      d.addEventListener('toggle', () => { S.open['c:' + qd.id + t.id] = d.open; }); return d; })()));
+}
+
+function questDetail(qd) {
+  const pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
+  const letters = qd.asks.map((a) => letterFor(qd, a));
+  const info = infoLetter(qd);
+  return h('div', { class: 'detail' },
+    h('div', { class: 'bar', role: 'img', 'aria-label': `${qd.done} / ${qd.total}` }, h('span', { style: `width:${pct}%` })),
+    letters, info,
+    qd.todos.length ? [h('h3', { class: 'sec' }, '道のり'),
+      h('div', { class: 'way', 'aria-label': 'Todo の順序' }, qd.todos.flatMap((t, i) => [i ? h('span', { 'aria-hidden': 'true' }, '→') : null, h('span', { class: 'n' + (t.kind === 'human' ? ' h' : '') }, `${t.id} ${t.title.length > 12 ? t.title.slice(0, 12) + '…' : t.title}`)])),
+      todoTags(qd)] : null);
+}
+
+// ============================================================ 描画（画面）
+function banner() {
+  const conn = h('div', { class: 'conn' });
+  if (S.conn === 'ok') conn.append(h('i'), document.createTextNode(S.demo ? '見本のデータを表示中（保存はしません）' : '保存先に接続中：'), ...(S.demo ? [] : [code('guild/')]));
+  else conn.append('保存先に未接続');
+  return h('header', { class: 'plaque' },
+    crest(),
+    h('div', null, h('h1', null, 'guild　依頼掲示板'), h('div', { class: 'sub2' }, '依頼は、ここで受け付け、進め、納めます')), conn);
+}
+function crest() {
+  const ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg');
+  s.setAttribute('width', '42'); s.setAttribute('height', '42'); s.setAttribute('viewBox', '0 0 44 44'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2'); s.setAttribute('aria-hidden', 'true'); s.style.color = 'var(--banner-ink)';
+  const p1 = document.createElementNS(ns, 'path'); p1.setAttribute('d', 'M22 3 L38 9 V22 C38 31 31 38 22 41 C13 38 6 31 6 22 V9 Z');
+  const p2 = document.createElementNS(ns, 'path'); p2.setAttribute('d', 'M22 12 V32 M14 20 H30'); p2.setAttribute('stroke-linecap', 'round');
+  s.append(p1, p2); return s;
+}
+
+function connectBox() {
+  if (S.conn === 'ok') return null;
+  const box = h('section', { class: 'letter connbox', 'aria-label': '保存先' }, seal('錠'));
+  if (S.conn === 'unsupported') box.append(h('div', { class: 'kick' }, 'このブラウザでは保存できません'), h('h3', null, 'Chrome か Edge で開いてください'),
+    h('p', null, 'この画面は、フォルダへの書き込みを許可する機能（File System Access API）を使います。Firefox や Safari では使えません。'));
+  else if (S.conn === 'need-permission') box.append(h('div', { class: 'kick' }, '許可が切れています'), h('h3', null, '保存先に、もう一度つなぎます'),
+    h('p', null, '前に選んだフォルダを覚えていますが、ブラウザを開き直したので、書き込みの許可をもう一度求めます。'),
+    h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: reconnect }, '再接続する'), h('button', { class: 'btn', type: 'button', onclick: pickFolder }, '別のフォルダを選ぶ')));
+  else box.append(h('div', { class: 'kick' }, 'はじめに'), h('h3', null, '保存先のフォルダを選んでください'),
+    h('p', null, 'プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。', code('guild/'), ' が無いときは、チャットで ', code('/guild:init'), ' を先に実行します。'),
+    h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: pickFolder }, 'フォルダを選ぶ'),
+      h('a', { class: 'btn ghost', href: '?demo=human', style: 'text-decoration:none;display:inline-flex;align-items:center' }, '見本を見る')));
+  if (S.connMsg) box.append(h('p', { class: 'err', role: 'alert' }, S.connMsg));
+  return box;
+}
+
+function composer() {
+  const key = 'new:text', ta = textarea(key, { id: 'qreq', rows: '2', placeholder: '困りごとや、やってほしいことを書いて、「出す」を押してください（Ctrl + Enter でも送れます）' });
+  ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendRequest(); } });
+  const fl = h('input', { type: 'file', multiple: true, 'aria-label': '素材ファイル' }); fl.dataset.fileKey = 'new';
+  const due = h('input', { type: 'date', 'aria-label': '期限' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
+  const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・期限をつける（任意）'),
+    h('div', { class: 'qopts' }, fl, h('label', { class: 'sub' }, '期限　', due)));
+  more.addEventListener('toggle', () => { S.open.qmore = more.open; });
+  const fnames = (S.files.new || []).map((f) => f.name);
+  return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
+    h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼を出す'),
+    h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '出す')),
+    more, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
+    S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
+    S.newSaved ? h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。下の一覧に「受付待ち」で入っています。チャットで /guild:quest と送ると、受け付けます。`) : null);
+}
+
+function ledger(m) {
+  const sel = S.sel;
+  const rows = [h('div', { class: 'lh', role: 'row' }, h('span', null, 'ID'), h('span', null, '依頼'), h('span', null, '状態'), h('span', null, '進み'), h('span', null, 'あなたの番'))];
+  for (const r of m.requests) rows.push(h('div', { class: 'lr plain', role: 'row' }, h('span', { class: 'id' }, r.id),
+    h('span', null, r.text.split('\n')[0].slice(0, 80), h('span', { class: 'sub', style: 'display:block' }, 'チャットで /guild:quest と送ると、受け付けます。')),
+    h('span', null, stampEl('受付待ち', 'sd-wait')), h('span', null, '—'), h('span', null, '—')));
+  for (const qd of m.quests) {
+    rows.push(h('button', { type: 'button', class: 'lr' + (qd.id === sel ? ' sel' : ''), role: 'row', onclick: () => { S.sel = qd.id; S.tq = qd.id; render(); } },
+      h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me)));
+    if (qd.id === sel) rows.push(questDetail(qd));
+  }
+  if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「出す」を押してください。')));
+  return h('div', { class: 'ledger', role: 'table', 'aria-label': '依頼の一覧' }, rows);
+}
+
+function boardTab() {
+  const m = S.model, out = [];
+  if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
+    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.sel = n.q; S.tq = n.q; render(); } }, n.text))));
+  out.push(composer());
+  if (m) out.push(ledger(m));
+  return out;
+}
+
+function talkTab() {
+  const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
+  const scopeIds = S.tq === 'all' ? m.quests.map((x) => x.id) : [S.tq || (m.quests[0] && m.quests[0].id)].filter(Boolean);
+  const chips = h('div', { class: 'filters', 'aria-label': '依頼の選択' }, h('span', { class: 'sub', style: 'align-self:center' }, '依頼：'),
+    m.quests.map((x) => h('button', { type: 'button', class: S.tq === x.id ? 'on' : '', onclick: () => { S.tq = x.id; render(); } }, `${x.id} ${x.title.slice(0, 14)}`, x.asks.some((a) => !a.sent) ? ' ●あなたの番' : '')),
+    h('button', { type: 'button', class: S.tq === 'all' ? 'on' : '', onclick: () => { S.tq = 'all'; render(); } }, 'すべての依頼'));
+  const views = h('div', { class: 'filters', 'aria-label': '表示' }, h('span', { class: 'sub', style: 'align-self:center' }, '表示：'),
+    [['talk', '会話の流れ'], ['gantt', 'タイムライン']].map(([k, l]) => h('button', { type: 'button', class: S.view === k ? 'on' : '', onclick: () => { S.view = k; render(); } }, l)));
+  const out = [h('h2', { class: 'h2' }, 'やりとり'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、会話の流れと、時間の帯（タイムライン）で見られます。'), chips, views];
+  const sel = scopeIds.map((id) => m.quests.find((x) => x.id === id)).filter(Boolean);
+  if (S.view === 'talk') {
+    const roles = [['all', 'すべて'], ['cart', '地図師'], ['adv', '冒険者'], ['app', '鑑定士'], ['me', 'あなた'], ['note', '指摘だけ']];
+    out.push(h('div', { class: 'filters', 'aria-label': '役の絞り込み' }, h('span', { class: 'sub', style: 'align-self:center' }, '役：'),
+      roles.map(([k, l]) => h('button', { type: 'button', class: S.role === k ? 'on' : '', onclick: () => { S.role = k; render(); } }, l))));
+    let msgs = sel.flatMap((x) => messagesOf(x)).sort((a, b) => new Date(a.t) - new Date(b.t));
+    msgs = msgs.filter((x) => S.role === 'all' || (S.role === 'note' ? x.role === 'app' && x.note : x.role === S.role));
+    if (!msgs.length) out.push(h('p', { class: 'sub' }, S.role === 'note' ? '指摘はありません。' : 'このあたりのやりとりは、まだありません。'));
+    for (const x of msgs) { const r = roleOf(x.role);
+      out.push(h('div', { class: 'msg' }, h('div', { class: 'who' }, h('span', { class: `av ${r[2]}` }, r[0]), r[1]),
+        h('div', { class: 'bub' }, h('time', null, fmtTime(x.t)), h('p', null, S.tq === 'all' ? h('span', { class: 'qtag' }, x.q) : null, x.text),
+          x.report ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(x.q, x.report); } }, '報告を読む：' + x.report) : null))); }
+  } else {
+    out.push(h('div', { class: 'legend2', 'aria-label': '凡例' }, [['adv', '冒険者が作業中'], ['app', '鑑定中'], ['me', 'あなたの番（待ち）'], ['conf', '実行前の確認待ち'], ['ng', 'できず'], ['blk', '止まっている']].map(([k, l]) => h('span', null, h('i', { class: `sw s-${k}` }), l))));
+    let any = false;
+    for (const x of sel) {
+      const g = ganttOf(x); if (!g) continue; any = true;
+      const pc = (v) => ((v - g.lo) / (g.hi - g.lo) * 100).toFixed(2) + '%';
+      const lab = (ms) => { const d = new Date(ms); return (g.long ? `${d.getMonth() + 1}/${d.getDate()} ` : '') + `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+      out.push(h('section', { class: 'gantt', 'aria-label': x.id }, h('h3', null, `${x.id}　${x.title.slice(0, 40)}`),
+        h('div', { class: 'gx' }, h('div', { class: 'glab' }), h('div', { class: 'gtrack axis' }, g.ticks.map((v) => h('span', { class: 'tick', style: `left:${pc(v)}` }, lab(v))))),
+        g.rows.map((r) => h('div', { class: 'gx' }, h('div', { class: 'glab' }, h('b', null, r.label), h('span', { class: 'sub' }, r.sub)),
+          h('div', { class: 'gtrack' }, r.bars.map((b) => { const w = (b.b - b.a) / (g.hi - g.lo) * 100;
+            return h('span', { class: `bar2 s-${b.kind}`, style: `left:${pc(b.a)};width:${Math.max(w, 0.6).toFixed(2)}%`, title: `${b.text}　${lab(b.a)}〜${lab(b.b)}` }, w >= 9 ? b.text : ''); }),
+            g.now != null ? h('span', { class: 'nowline', style: `left:${pc(g.now)}` }) : null))),
+        g.now != null ? h('p', { class: 'sub', style: 'margin:6px 0 0;padding-left:150px' }, '赤い線が「いま」です。') : null));
+    }
+    if (!any) out.push(h('p', { class: 'sub' }, '記録がまだありません（計画ができて、動き出すと表示されます）。'));
+  }
+  out.push(h('p', { class: 'fine', style: 'margin-top:14px' }, '答える用件は、「掲示板」の手紙に出ます。', h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px;margin-left:8px', onclick: () => { S.tab = 'board'; render(); } }, '掲示板へ')));
+  return out;
+}
+
+function helpTab() {
+  const sec = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
+  const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
+  const faq = (q, ...a) => h('details', null, h('summary', null, q), h('p', null, ...a));
+  return h('div', { class: 'grid2' },
+    sec('使い方', h('ol', null,
+      h('li', null, h('b', null, '依頼を書く。'), '「掲示板」の上の欄に内容を書いて、「出す」を押します。'),
+      h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります。足りないことは、選択式で聞かれます。'),
+      h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられて、「道のり」が出ます。承認はこの1回だけです。'),
+      h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
+      h('li', null, h('b', null, '受け取る。'), '完了すると、納品物の場所が出ます。'))),
+    sec('印の見方', h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
+    sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['道のり', 'Todo の順序。前提が済んだものから進みます。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['やめる', '失敗した Todo を計画から外すこと。続く Todo もやめるか、進めるかを選べます。'], ['ノウハウ', '完了した依頼から、成功・失敗・業務知識を記録したもの。次の依頼で使われます。']])),
+    sec('困ったとき', h('div', { class: 'faq' },
+      faq('結果を送ったのに、進まない', 'チャットで「完了」と伝えてください。送った内容は ', code('guild/'), ' の中に保存されていて、チャットで伝えると読み取って進みます。'),
+      faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
+      faq('保存できないとき', '送る内容が画面に出て、「コピー」で複写できます。チャットに貼ってください。'),
+      faq('間違えて承認した', 'チャットで「計画を直したい」と伝えてください。実行が始まる前なら、計画を作り直せます。'),
+      faq('依頼を取り消したい', '進行中なら、失敗の判断で「この依頼を中止する」を選べます。受付待ちの依頼は、', code('guild/requests/'), ' の該当ファイルを削除してください。'))),
+    sec('コマンド', dl([['/guild:init', '最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面を置きます。'], ['/guild:quest', '受付待ちの依頼を受け付けたり、進行中の依頼を進めたりします。']])));
+}
+
+function reader() {
+  if (!S.reader) return null;
+  return h('div', { class: 'reader', role: 'dialog', 'aria-label': '報告' }, h('div', { class: 'rbox' },
+    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; render(); } }, '閉じる')),
+    h('pre', null, S.reader.text)));
+}
+function fallbackBox() {
+  if (!S.fallback) return null;
+  const f = S.fallback;
+  return h('div', { class: 'reader', role: 'dialog', 'aria-label': '手で渡す' }, h('div', { class: 'rbox' },
+    h('div', { class: 'rhead' }, h('b', null, '保存できませんでした。内容をコピーして、チャットに貼ってください')),
+    f.err ? h('p', { class: 'err' }, '理由：' + f.err) : null,
+    h('p', { class: 'fine' }, '保存先：', code(f.path)),
+    h('pre', null, f.text),
+    h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn go', onclick: async () => { try { await navigator.clipboard.writeText(f.text); S.toast = 'コピーしました。'; } catch (e) { S.toast = 'コピーできませんでした。選択してコピーしてください。'; } render(); } }, 'コピー'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => { S.fallback = null; render(); } }, '閉じる')),
+    S.toast ? h('p', { class: 'saved' }, S.toast) : null));
+}
+
+function render() {
+  const app = document.getElementById('app');
+  const ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.key : null, ss = ae && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
+  const sy = window.scrollY;
+  const tabs = [['board', '掲示板'], ['talk', 'やりとり'], ['help', 'ヘルプ']];
+  const body = S.tab === 'board' ? boardTab() : S.tab === 'talk' ? talkTab() : helpTab();
+  app.replaceChildren(h('div', { class: 'wrap' }, banner(),
+    h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l))),
+    h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox()].filter(Boolean));
+  window.scrollTo(0, sy);
+  if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus(); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
+}
+
+// ============================================================ 書き込み
+function nowName(type, todo) { return `${stamp14(new Date())}-${type}${todo ? '-' + todo : ''}.json`; }
+async function writeOrFallback(path, text, onOk) {
+  if (S.conn !== 'ok' || !S.fs) { S.fallback = { path: `guild/${path}`, text, err: '保存先につながっていません' }; render(); return false; }
+  try { await S.fs.writeText(path, text); if (onOk) onOk(); return true; }
+  catch (e) { S.fallback = { path: `guild/${path}`, text, err: `${e.name || 'エラー'}：${e.message || e}` }; render(); return false; }
+}
+async function send(qid, obj, key) {
+  const ok = await writeOrFallback(`${qid}/inbox/${nowName(obj.type, obj.todo)}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; });
+  if (ok) { await refresh(true); }
+}
+async function sendResult(qid, t, key) {
+  const files = S.files[key] || [], names = [];
+  try {
+    for (const f of files) { const n = `${t.id}-${f.name}`; await S.fs.writeBlob(`${qid}/inbox/files/${n}`, f); names.push(`inbox/files/${n}`); }
+  } catch (e) { S.fallback = { path: `guild/${qid}/inbox/files/`, text: '添付ファイルを保存できませんでした。', err: `${e.name}：${e.message}` }; render(); return; }
+  await send(qid, { type: 'result', todo: t.id, ok: (S.form[key + ':ok'] || 'yes') === 'yes', note: (S.form[key + ':memo'] || '').trim(), files: names }, key);
+}
+async function sendRequest() {
+  const text = (S.form['new:text'] || '').trim();
+  S.newError = ''; S.newSaved = '';
+  if (!text) { S.newError = '依頼の内容を書いてください。'; render(); return; }
+  if (S.conn !== 'ok') { S.newError = '保存先につながっていません。上の「フォルダを選ぶ」から選んでください。'; render(); return; }
+  const id = 'R' + stamp14(new Date()).replace(/^(\d{8})/, '$1-'), files = S.files.new || [], names = [];
+  try {
+    for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
+    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, due: S.form['new:due'] || null, files: names, created: new Date().toISOString() }, null, 2));
+  } catch (e) { S.newError = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); return; }
+  S.form['new:text'] = ''; S.form['new:due'] = ''; S.files.new = []; S.newSaved = id;
+  await refresh(true);
+}
+async function openReport(q, path) {
+  const t = await S.fs.readText(`${q}/${path}`);
+  S.reader = { path: `${q}/${path}`, text: t == null ? '(読めませんでした)' : t }; render();
+}
+
+// ============================================================ つなぐ・更新
+async function refresh(force) {
+  if (S.conn !== 'ok' || S.busy) return;
+  S.busy = true;
+  try {
+    const raw = await loadAll(); const key = JSON.stringify(raw);
+    if (force || key !== S.dataKey) {
+      S.dataKey = key; S.model = buildModel(raw);
+      const ids = S.model.quests.map((x) => x.id);
+      if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
+      if (!S.tq || (S.tq !== 'all' && !ids.includes(S.tq))) S.tq = S.sel;
+      render();
+    }
+  } catch (e) { S.connMsg = `読み込めませんでした（${e.name || 'エラー'}：${e.message || e}）。`; S.conn = 'error'; render(); }
+  finally { S.busy = false; }
+}
+async function useHandle(handle) {
+  let dir = handle;
+  if (handle.name !== 'guild') {
+    try { dir = await handle.getDirectoryHandle('guild'); }
+    catch (e) { S.conn = 'none'; S.connMsg = `選んだフォルダに guild/ がありません。チャットで /guild:init を先に実行してください。（選んだ場所：${handle.name}）`; render(); return false; }
+  }
+  S.fs = new RealFS(dir); S.conn = 'ok'; S.connMsg = ''; S.dataKey = ''; await refresh(true); return true;
+}
+async function pickFolder() {
+  try {
+    const handle = await window.showDirectoryPicker({ id: 'guild-folder', mode: 'readwrite' });
+    S.handle = handle;
+    if (await useHandle(handle)) {
+      try { await DB.put(handle); } catch (e) { S.connMsg = `フォルダは使えますが、次回のために覚えておけませんでした（${e.name || 'エラー'}：${e.message || e}）。次に開いたとき、もう一度選んでください。`; render(); }
+    }
+  } catch (e) { if (e && e.name === 'AbortError') return; S.connMsg = `フォルダを選べませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); }
+}
+async function reconnect() {
+  try {
+    const perm = await S.handle.requestPermission({ mode: 'readwrite' });
+    if (perm === 'granted') await useHandle(S.handle); else { S.connMsg = '許可されませんでした。「フォルダを選ぶ」から選び直してください。'; render(); }
+  } catch (e) { S.connMsg = `許可を求められませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); }
+}
+
+// ============================================================ 見本
+function demoTree(scene) {
+  const now = Date.now(), at = (min) => new Date(now - min * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const J = (o) => ({ __t: JSON.stringify(o), __m: now }), T = (s) => ({ __t: s, __m: now });
+  const crit = (v, p, c) => ({ viewpoint: v, pass_line: p, check: c });
+  const t1c = crit('digest.md の有無、行数、notes.txt との対応', 'ファイルが存在し、「- 」で始まる行がちょうど3行。notes.txt の4項目がすべて3行のどれかに含まれる。', '「- 」で始まる行を数え、4項目と1つずつ照らし合わせる。');
+  const t2c = crit('上司の了承の有無', '上司から「了承する」という返事が1回ある。', 'あなたの報告（できた／できなかった）で判断する。');
+  const t3c = crit('publish フォルダの digest.md と元ファイルの一致', 'publish/digest.md が存在し、内容が output/T1/digest.md と同じ。', '2つのファイルの内容を比べる。');
+  const mk = (id, title, kind, deps, state, c, extra) => ({ id, title, kind, deps, criteria: c, state, retries: 0, output: null, ...(extra || {}) });
+  const S3 = {
+    plan: [['pending'], ['pending'], ['pending']], human: [['done'], ['waiting_user'], ['pending']], confirm: [['done'], ['done'], ['awaiting_confirm']],
+    failed: [['done'], ['failed'], ['blocked']], done: [['done'], ['done'], ['done']]
+  }[scene] || [['done'], ['waiting_user'], ['pending']];
+  const approved = scene !== 'plan';
+  const h1 = [{ t: at(70), event: 'adopted' }];
+  if (approved) h1.push({ t: at(69), event: 'approved' }, { t: at(69), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(68), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(67), id: 'T1', event: 'passed', from: 'review', to: 'done' });
+  if (scene === 'human') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' });
+  if (scene === 'confirm' || scene === 'done') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(59), id: 'T2', event: 'passed', from: 'review', to: 'done' }, { t: at(59), id: 'T3', event: 'deps_done', from: 'pending', to: 'awaiting_confirm' });
+  if (scene === 'done') h1.push({ t: at(55), id: 'T3', event: 'confirmed', from: 'awaiting_confirm', to: 'running' }, { t: at(54), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(53), id: 'T3', event: 'passed', from: 'review', to: 'done' });
+  if (scene === 'failed') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'reported_failed', from: 'waiting_user', to: 'failed' }, { t: at(60), id: 'T3', event: 'dep_failed', from: 'pending', to: 'blocked' });
+  const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', approved, status: 'active', history: h1,
+    todos: [mk('T1', 'notes.txt を読み、要点を3行にまとめた digest.md を作る', 'auto', [], S3[0][0], t1c), mk('T2', '上司に口頭で内容を共有し、了承をもらう', 'human', ['T1'], S3[1][0], t2c), mk('T3', 'digest.md を publish フォルダにコピーして公開する', 'auto', ['T2'], S3[2][0], t3c, { confirm: true })] };
+  const day = 24 * 60, p2 = { quest: 'Q002', title: '議事録のテンプレートを3種類比べる', approved: true, status: 'active',
+    history: [{ t: at(day + 120), event: 'adopted' }, { t: at(day + 118), event: 'approved' }, { t: at(day + 118), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 100), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 98), id: 'T1', event: 'passed', from: 'review', to: 'done' },
+      { t: at(day + 98), id: 'T2', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 80), id: 'T2', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 79), id: 'T2', event: 'passed', from: 'review', to: 'done' },
+      { t: at(day + 79), id: 'T3', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 60), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 58), id: 'T3', event: 'passed', from: 'review', to: 'done' }],
+    todos: [mk('T1', 'テンプレートを3種類集める', 'auto', [], 'done', t1c), mk('T2', '観点表をつくって比べる', 'auto', ['T1'], 'done', t1c), mk('T3', '比較表にまとめる', 'auto', ['T2'], 'done', t1c)] };
+  const rep = {};
+  ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
+  return {
+    config: J({ python: 'python' }), knowledge: { 'Q002.md': T('## 成功したこと\n- 見本') },
+    requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
+    Q001: { 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') } }, inbox: {} },
+    Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }
+  };
+}
+
+// ============================================================ 起動
+async function start() {
+  const params = new URLSearchParams(location.search);
+  document.addEventListener('input', (e) => {
+    const k = e.target.dataset && e.target.dataset.key;
+    if (k && e.target.type !== 'radio') S.form[k] = e.target.value;
+  });
+  document.addEventListener('change', (e) => {
+    const t = e.target, k = t.dataset && t.dataset.key;
+    if (k && t.type === 'radio') S.form[k] = t.value;
+    if (k && t.type === 'date') S.form[k] = t.value;
+    if (t.dataset && t.dataset.fileKey) { S.files[t.dataset.fileKey] = Array.from(t.files || []); render(); }
+  });
+  window.__guildBoard = { S, render, refresh, MemFS, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
+  if (params.has('demo')) {
+    S.demo = true; S.fs = new MemFS(demoTree(params.get('demo') || 'human')); S.conn = 'ok'; await refresh(true); return;
+  }
+  if (!window.showDirectoryPicker) { S.conn = 'unsupported'; render(); return; }
+  render();
+  try {
+    const handle = await DB.get();
+    if (handle) {
+      S.handle = handle;
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm === 'granted') await useHandle(handle); else { S.conn = 'need-permission'; render(); }
+    }
+  } catch (e) { S.connMsg = `前に選んだフォルダを読み出せませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); }
+  setInterval(() => { if (!document.hidden) refresh(false); }, 3000);
+}
+start();
+})();
+
+</script>
+</body>
+</html>

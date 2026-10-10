@@ -5,11 +5,14 @@ plan.json を書けるのはこのファイルだけ。遷移は transitions.jso
 使い方: guild.py {adopt|validate|sync|next|ingest} PLAN / guild.py advance PLAN ID EVENT
 adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を作る（承認前の状態で）。
 guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
-guild.py new ROOT: ROOT/guild/ に次の依頼のフォルダ（Q001…）を作る。
+guild.py new ROOT [R…]: ROOT/guild/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む。
+guild.py requests ROOT: 受付待ちの依頼を一覧する。
 エラーは終了コード 1。
 """
+import datetime
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -59,12 +62,24 @@ def guard_ok(name, todo, tr):
             "retries_left": left, "no_retries_left": not left}[name]
 
 
-def apply_event(todo, event, tr):
+def now():
+    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def note(plan, **kw):
+    """状態の移り変わりの記録（ボードのタイムラインが読む）。plan.json の history に追記する。"""
+    if plan is not None:
+        plan.setdefault("history", []).append({"t": now(), **kw})
+
+
+def apply_event(todo, event, tr, plan=None):
     for t in effective(tr, todo["kind"]):
         if t["from"] == todo["state"] and t["event"] == event and guard_ok(t.get("guard"), todo, tr):
             if event == "rejected" and t["to"] != "failed":
                 todo["retries"] = todo.get("retries", 0) + 1
+            before = todo["state"]
             todo["state"] = t["to"]
+            note(plan, id=todo["id"], event=event, **{"from": before, "to": t["to"]})
             return t["to"]
     raise GuildError(f"{todo['id']}: 状態 {todo['state']} では {event} できません")
 
@@ -133,7 +148,7 @@ def sync(plan, tr):
                 event = "unblock"
             if event:
                 before = t["state"]
-                apply_event(t, event, tr)
+                apply_event(t, event, tr, plan)
                 changes.append({"id": t["id"], "event": event, "from": before, "to": t["state"]})
                 moved = True
     return changes
@@ -170,25 +185,27 @@ def apply_input(plan, data, tr):
     tm = todo_map(plan)
     if kind == "approve":
         plan["approved"], plan["status"] = True, "active"
+        note(plan, event="approved")
         return
     if kind == "decision" and data.get("choice") in ("abort", "replan"):
         plan["status"] = "aborted" if data["choice"] == "abort" else "replan"
         if data["choice"] == "replan":
             plan["approved"] = False
+        note(plan, event="decision", choice=data["choice"], comment=data.get("comment", ""))
         return
     t = tm.get(data.get("todo"))
     if t is None:
         raise GuildError(f"todo がありません: {data.get('todo')}")
     if kind == "confirm":
-        apply_event(t, "confirmed" if data["ok"] else "declined", tr)
+        apply_event(t, "confirmed" if data["ok"] else "declined", tr, plan)
     elif kind == "result":
-        apply_event(t, "submitted" if data["ok"] else "reported_failed", tr)
+        apply_event(t, "submitted" if data["ok"] else "reported_failed", tr, plan)
         t["output"] = {"note": data.get("note", ""), "files": data.get("files", [])}
     elif kind == "decision" and data.get("choice") == "skip":
-        apply_event(t, "skip", tr)
+        apply_event(t, "skip", tr, plan)
     elif kind == "decision" and data.get("choice") == "drop":
         # 失敗した Todo と、それに(間接にでも)依存する後続をやめる。後続は実行しない
-        apply_event(t, "skip", tr)
+        apply_event(t, "skip", tr, plan)
         dropped, grew = {t["id"]}, True
         while grew:
             grew = False
@@ -198,6 +215,7 @@ def apply_input(plan, data, tr):
                     grew = True
         for u in plan["todos"]:
             if u["id"] in dropped and u["state"] in ("pending", "blocked"):
+                note(plan, id=u["id"], event="dropped", **{"from": u["state"], "to": "skipped"})
                 u["state"] = "skipped"
     else:
         raise GuildError(f"入力が不正です: {kind} {data.get('choice', '')}")
@@ -219,7 +237,7 @@ def adopt(plan_path, tr):
     if not isinstance(todos, list):
         raise GuildError("plan-draft.json に todos がありません")
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
-            "status": "active", "todos": []}
+            "status": "active", "todos": [], "history": [{"t": now(), "event": "adopted"}]}
     for t in todos:
         if not isinstance(t, dict):
             raise GuildError("todos の要素が不正です")
@@ -239,34 +257,77 @@ def init_guild(root):
     gdir = Path(root) / "guild"
     gdir.mkdir(parents=True, exist_ok=True)
     (gdir / "knowledge").mkdir(exist_ok=True)
+    (gdir / "requests").mkdir(exist_ok=True)
+    board = HERE / "board.html"
+    if board.exists():
+        shutil.copy2(board, gdir / "board.html")  # ボードはプラグイン側が正本。init のたびに最新に置き換える
     cfg_path = gdir / "config.json"
     cfg = load_json(cfg_path) if cfg_path.exists() else {}
     cfg["python"] = sys.executable
     cfg["python_version"] = ".".join(map(str, sys.version_info[:3]))
     save_plan(cfg_path, cfg)
-    return {"guild": str(gdir), "python": cfg["python"], "python_version": cfg["python_version"]}
+    return {"guild": str(gdir), "python": cfg["python"], "python_version": cfg["python_version"],
+            "board": str(gdir / "board.html") if board.exists() else None}
 
 
-def new_quest(root):
-    """ROOT/guild/ に次の依頼のフォルダ（Q001, Q002, …）を作る。"""
+REQUEST_ID = re.compile(r"^R[0-9][0-9-]*$")
+
+
+def list_requests(root):
+    """ROOT/guild/requests/ にある、受付待ちの依頼（ボードが保存したもの）を古い順に返す。"""
+    rdir = Path(root) / "guild" / "requests"
+    out = []
+    if rdir.is_dir():
+        for f in sorted(rdir.glob("R*.json")):
+            try:
+                d = load_json(f)
+            except GuildError:
+                continue
+            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "files": d.get("files", [])})
+    return out
+
+
+def new_quest(root, request_id=None):
+    """ROOT/guild/ に次の依頼のフォルダ（Q001, Q002, …）を作る。request_id があれば、その受付待ちの依頼を取り込む。"""
     gdir = Path(root) / "guild"
     if not (gdir / "config.json").exists():
         raise GuildError(f"{gdir} がありません（/guild:init を先に実行してください）")
+    src = None
+    if request_id is not None:
+        if not REQUEST_ID.match(request_id):
+            raise GuildError(f"依頼の ID が不正です: {request_id}")
+        src = gdir / "requests" / f"{request_id}.json"
+        if not src.exists():
+            raise GuildError(f"{src} がありません")
     nums = [int(p.name[1:]) for p in gdir.iterdir() if p.is_dir() and p.name[:1] == "Q" and p.name[1:].isdigit()]
     qdir = gdir / f"Q{max(nums, default=0) + 1:03d}"
     for sub in ("reports", "output", "inbox"):
         (qdir / sub).mkdir(parents=True)
-    return {"quest": qdir.name, "dir": str(qdir), "plan": str(qdir / "plan.json")}
+    out = {"quest": qdir.name, "dir": str(qdir), "plan": str(qdir / "plan.json")}
+    if src is not None:
+        out["request"] = load_json(src)
+        shutil.move(str(src), str(qdir / "request.json"))
+        files = gdir / "requests" / "files" / request_id
+        if files.is_dir():
+            shutil.move(str(files), str(qdir / "inputs"))
+            out["inputs"] = str(qdir / "inputs")
+    return out
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
     try:
-        if cmd in ("init", "new"):
-            print(json.dumps((init_guild if cmd == "init" else new_quest)(path), ensure_ascii=False))
+        if cmd in ("init", "new", "requests"):
+            if cmd == "init":
+                result = init_guild(path)
+            elif cmd == "requests":
+                result = list_requests(path)
+            else:
+                result = new_quest(path, argv[3] if len(argv) > 3 else None)
+            print(json.dumps(result, ensure_ascii=False))
             return 0
         if cmd == "adopt":
             print(json.dumps(adopt(path, load_transitions()), ensure_ascii=False))
@@ -290,7 +351,7 @@ def main(argv):
             t = todo_map(plan).get(argv[3])
             if t is None:
                 raise GuildError(f"todo がありません: {argv[3]}")
-            apply_event(t, argv[4], tr)
+            apply_event(t, argv[4], tr, plan)
             result = {"id": t["id"], "state": t["state"]}
         else:
             result = ingest(path, plan, tr)

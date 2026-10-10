@@ -22,8 +22,8 @@ disable-model-invocation: true
    <python> "${CLAUDE_SKILL_DIR}/../quest/guild.py" init "<root>"
    ```
 
-   `guild/`、`guild/knowledge/`、`guild/config.json` ができる。`config.json` には、実行した Python のパスが入る。
-3. **結果を伝える。** 作ったフォルダと記録した Python を一行で伝え、次は `/guild:quest` で依頼を送ると案内する。
+   `guild/`、`guild/knowledge/`、`guild/requests/`、`guild/config.json`、`guild/board.html`（依頼を出したり、承認したりする画面）ができる。`config.json` には、実行した Python のパスが入る。`board.html` は、`init` のたびに最新の版に置き換わる。
+3. **結果を伝える。** 作ったフォルダと記録した Python を一行で伝える。次は、`guild/board.html` を Chrome か Edge で開き、「フォルダを選ぶ」でプロジェクトのフォルダを選ぶと、そこから依頼を出せる、と案内する。チャットで依頼を送る場合は `/guild:quest` のあとに依頼文を書く。
 
 ## 守ること
 - 既存の `guild/` の中の依頼（`Q001/` など）やノウハウは消さない。
