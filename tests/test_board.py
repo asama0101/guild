@@ -62,6 +62,9 @@ class Base(unittest.TestCase):
 
     def goal(self, q, title="単価表", dw="表がそろっている", **kw):
         args = ["add-goal", "--quest", q, "--title", title, "--done-when", dw]
+        if "criteria" not in kw:
+            args += ["--criteria", json.dumps([{"viewpoint": "網羅性", "line": "必要な項目がすべてある", "method": "依頼文の項目と突き合わせる"}],
+                                              ensure_ascii=False)]
         for k, v in kw.items():
             args += [f"--{k.replace('_', '-')}", str(v)]
         return self.ok(*args)
@@ -93,6 +96,9 @@ class Base(unittest.TestCase):
 
     def write_report(self, gid, role="adventurer", body="## result\n- 事実｜出典｜2026-03-01\n"):
         self.p.reports.mkdir(parents=True, exist_ok=True)
+        n = len(self.data()["goals"].get(gid, {}).get("criteria") or [])
+        if role == "appraiser" and n and "## 基準ごとの判定" not in body:
+            body += "\n## 基準ごとの判定\n" + "".join(f"- {i}: 合格\n" for i in range(1, n + 1))
         (self.p.reports / f"{gid}-{role}.md").write_text(body, encoding="utf-8")
 
     def make_ready_for_review(self, q, g):
@@ -124,10 +130,54 @@ class TestIdsAndQuests(Base):
         self.assertTrue((d / "quest.md").is_file())
         self.assertNotIn("/", d.name.replace("Q1 ", ""))
 
-    def test_done_whenは1から3個(self):
+    def test_done_whenは1個以上で上限はない(self):
         q = self.quest()
-        self.ng("add-goal", "--quest", q, "--title", "x", "--done-when", "a", "--done-when", "b",
-                "--done-when", "c", "--done-when", "d")
+        self.ng("add-goal", "--quest", q, "--title", "x", "--done-when", "")
+        args = ["add-goal", "--quest", q, "--title", "x"]
+        for t in "abcdef":
+            args += ["--done-when", t]
+        self.ok(*args)
+        self.assertEqual(self.data()["goals"]["G1"]["done_when"], list("abcdef"))
+
+    CRIT = [{"viewpoint": "網羅性", "line": "主要 5 項目がすべてある", "method": "依頼文と突き合わせる"}]
+
+    def test_合格基準がdone_whenと合わないと承認待ちに進めない(self):
+        q = self.quest()
+        g = self.goal(q)
+        self.ok("set-status", q, "分解中")
+        self.ok("set", g, "criteria", "[]")
+        self.assertIn("合格基準", self.ng("set-status", q, "承認待ち"))
+        self.ok("set", g, "criteria", json.dumps([{"viewpoint": "網羅性", "line": "", "method": "x"}], ensure_ascii=False))
+        self.ng("set-status", q, "承認待ち")
+        self.ok("set", g, "criteria", json.dumps(self.CRIT * 2, ensure_ascii=False))  # done_when は 1 個
+        self.ng("set-status", q, "承認待ち")
+        self.ok("set", g, "criteria", json.dumps(self.CRIT, ensure_ascii=False))
+        self.ok("set-status", q, "承認待ち")
+
+    def test_完成像_お願いすること_できないことを登録でき_依頼書に付く(self):
+        q = self.quest()
+        g = self.goal(q, preview="見出し 3 つと表 1 つ", **{"client_task": "社内の単価表を渡す", "out_of_scope": "実機での動作確認"})
+        d = self.data()["goals"][g]
+        self.assertEqual((d["preview"], d["client_tasks"], d["out_of_scope"]), ("見出し 3 つと表 1 つ", ["社内の単価表を渡す"], ["実機での動作確認"]))
+        for role in ("fortune_teller", "adventurer", "alchemist", "appraiser"):
+            t = Path(self.ok("make-brief", g, role)).read_text(encoding="utf-8")
+            for w in ("観点＝網羅性", "合格ライン＝必要な項目がすべてある", "確かめ方＝依頼文の項目と突き合わせる", "完成像：見出し 3 つと表 1 つ",
+                      "社内の単価表を渡す", "実機での動作確認"):
+                self.assertIn(w, t, role)
+
+    def test_鑑定の報告書に基準ごとの判定がないと確認待ちに進めない(self):
+        q, gs = self.to_running()
+        g = gs[0]
+        rel = self.write_output(q)
+        self.ok("set", g, "output_path", json.dumps([rel]))
+        self.write_report(g)
+        self.ok("set-status", g, "冒険中")
+        self.ok("set-status", g, "鑑定中")
+        self.p.reports.mkdir(parents=True, exist_ok=True)
+        (self.p.reports / f"{g}-appraiser.md").write_text("## result\n合格\n\n## fix_kind\nなし\n", encoding="utf-8")
+        self.assertIn("基準ごとの判定", self.ng("set-status", g, "確認待ち", "--who", "appraiser"))
+        self.write_report(g, "appraiser", "## result\n合格\n\n## fix_kind\nなし\n")
+        self.ok("set-status", g, "確認待ち", "--who", "appraiser")
 
     def test_受付と分解中だけ達成条件を足せる(self):
         q, _ = self.to_running()
@@ -533,11 +583,22 @@ class TestRequestsAndTick(Base):
         self.assertEqual(self.data()["limits"]["max_active"], 4)
         self.assertTrue((self.p.requests / "保留" / "M1.json").exists())
 
-    def test_apply_simple_RとUは触らない(self):
-        self.req("R1.json", {"kind": "quest", "title": "新しい依頼"})
+    def test_apply_simple_Uは触らない(self):
         self.req("U1.json", {"kind": "upload"})
         self.ok("apply-simple")
-        self.assertEqual(len(list(self.p.requests.glob("*.json"))), 2)
+        self.assertEqual(len(list(self.p.requests.glob("*.json"))), 1)
+
+    def test_apply_simple_は新しい依頼をクエストにして済に移す(self):
+        self.p.requests.mkdir(parents=True, exist_ok=True)
+        (self.p.requests / "files" / "R20260301-090000").mkdir(parents=True)
+        (self.p.requests / "files" / "R20260301-090000" / "a.txt").write_text("x", encoding="utf-8")
+        self.req("R20260301-090000.json", {"kind": "quest", "title": "宿を探す", "detail": "", "due": None,
+                                           "form": "おまかせ", "priority": "優先", "files": ["a.txt"]})
+        self.ok("apply-simple")
+        (q,) = [x for x in self.data()["quests"].values() if x["title"] == "宿を探す"]
+        self.assertEqual((q["status"], q["priority"]), ("受付", "優先"))
+        self.assertTrue((self.p.requests / "済" / "R20260301-090000.json").exists())
+        self.assertTrue((self.p.root / q["dir"] / "input" / "a.txt").exists())
 
     def test_取り下げ(self):
         q, (g,) = self.to_running()
@@ -964,6 +1025,14 @@ class TestMisc(Base):
         self.assertIn("納品物の形：Excel", Path(self.ok("make-brief", q, "fortune_teller")).read_text(encoding="utf-8"))
         self.ok("add-quest", "--title", "y", "--form", "その他（くわしくへ）")
         self.ng("add-quest", "--title", "z", "--form", "毛筆")
+
+    def test_add_quest_に依頼を渡すと済に移る(self):
+        self.p.requests.mkdir(parents=True, exist_ok=True)
+        f = self.p.requests / "R20260301-090000.json"
+        f.write_text(json.dumps({"kind": "quest", "title": "x"}), encoding="utf-8")
+        self.ok("add-quest", "--title", "x", "--request", "R20260301-090000.json")
+        self.assertFalse(f.exists())
+        self.assertTrue((self.p.requests / "済" / "R20260301-090000.json").exists())
 
     def test_達成条件のないクエストは道のり図を作らない(self):
         q = self.quest()

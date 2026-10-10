@@ -56,7 +56,7 @@ ROLE_WRITES = {
 }
 
 REPORT_SECTIONS = ["聞き取りの問い", "達成条件案", "依頼主への質問", "ギルド員への答え", "result",
-                   "依頼主への報告", "止まっていること", "log", "用語", "fix_kind"]
+                   "依頼主への報告", "止まっていること", "log", "用語", "fix_kind", "基準ごとの判定"]
 DELIVERABLE_SECTIONS = ["事実", "推論", "依頼主の指定", "未確認"]
 FIX_KINDS = ["input", "brief", "goal"]
 POINT_CODES = ["欠落", "矛盾", "誤り", "形式", "出典なし", "範囲外"]

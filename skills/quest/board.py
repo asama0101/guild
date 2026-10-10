@@ -16,7 +16,7 @@ import time
 import zipfile
 from pathlib import Path
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 HERE = Path(__file__).resolve().parent
 
 # ---------------------------------------------------------------- 定数
@@ -77,6 +77,9 @@ FORM_STYLE = {
     "その他": "依頼主がくわしくに書いた形に合わせる。分からなければ、報告に 1 行で書く。",
 }
 POINT_CODES = ["欠落", "矛盾", "誤り", "形式", "出典なし", "範囲外"]
+# 合格基準：done_when と同じ順に 1 つずつ持つ 3 点組（観点・合格ライン・確かめ方）
+CRITERIA_KEYS = ["viewpoint", "line", "method"]
+CRITERIA_LABELS = {"viewpoint": "観点", "line": "合格ライン", "method": "確かめ方"}
 Q_KINDS = ["choice", "approval", "todo", "confirm", "rule", "term"]
 Q_SCOPES = ["route", "output", "execute", "none"]
 Q_STATUS = ["未回答", "回答済", "保留"]
@@ -317,8 +320,11 @@ def validate(d):
         if g.get("effort", "中") not in EFFORTS:
             bad(f"{gid} の effort が不明です")
         dw = g.get("done_when", [])
-        if not isinstance(dw, list) or len(dw) > 3:
-            bad(f"{gid} の done_when は 3 個までのリストです")
+        if not isinstance(dw, list):
+            bad(f"{gid} の done_when はリストです")
+        cr = g.get("criteria", [])
+        if not isinstance(cr, list) or any(not isinstance(c, dict) or set(c) - set(CRITERIA_KEYS) for c in cr):
+            bad(f"{gid} の criteria は {'・'.join(CRITERIA_KEYS)} を持つ辞書のリストです")
         if g.get("form", "おまかせ") not in FORMS:
             bad(f"{gid} の form が不明です")
         for f in g.get("findings", []):
@@ -585,9 +591,12 @@ def eval_guard(b, name, arg, c):
         except GuildError as e:
             return False, str(e)
     if name == "all_have_done_when":
-        miss = [g["id"] for g in goal_graph(b, o["id"]).values()
-                if not (1 <= len([x for x in g.get("done_when", []) if str(x).strip()]) <= 3)]
-        return not miss, "done_when のない達成条件があります: " + ",".join(miss)
+        gs = goal_graph(b, o["id"]).values()
+        miss = [g["id"] for g in gs if not [x for x in g.get("done_when", []) if str(x).strip()]]
+        if miss:
+            return False, "done_when のない達成条件があります: " + ",".join(miss)
+        weak = [g["id"] for g in gs if criteria_problem(g)]
+        return not weak, "合格基準（観点・合格ライン・確かめ方）が done_when と合わない達成条件があります: " + ",".join(weak)
     if name == "approval_recorded":
         ok = find_record(b.p, o["id"], c.edge.get("choices"), arg) is not None
         return ok, f"回答の記録（scope={arg}）がありません"
@@ -645,7 +654,15 @@ def eval_guard(b, name, arg, c):
             and q.get("rework_total", 0) <= b.limit("rework_total") + q.get("rework_bonus", 0)
         return ok, "手直しの上限です。依頼主に聞きます"
     if name == "done_when_met":
-        return bool(report_files(b, o["id"], "appraiser")), "鑑定士の報告書がありません"
+        fs = report_files(b, o["id"], "appraiser")
+        if not fs:
+            return False, "鑑定士の報告書がありません"
+        n = len(o.get("criteria") or [])
+        if n:
+            sec = md_section(fs[-1].read_text(encoding="utf-8", errors="replace"), "基準ごとの判定")
+            if sec is None or len(bullets(sec)) < n:
+                return False, f"鑑定士の報告書に、合格基準 {n} 件ぶんの判定（## 基準ごとの判定）がありません"
+        return True, ""
     if name == "needs_execute":
         return bool(o.get("needs_execute")), "元に戻せない操作はありません"
     if name == "not_needs_execute":
@@ -1168,6 +1185,8 @@ def apply_simple(b):
                 set_status(b, r["quest"], "最終鑑定", "client")
             elif kind == "spellbook":
                 spell_apply(b, r["item"], r.get("action"), r.get("text", ""))
+            elif kind == "quest":
+                intake_request(b, f, r)
             elif kind == "evaluation":
                 fid = b.next_id("F")
                 if r.get("score") not in ("good", "bad"):
@@ -1185,6 +1204,23 @@ def apply_simple(b):
     summary["spell_questions"] = spell_questions(b)
     summary["shared_questions"] = shared_questions(b)
     return summary
+
+
+def intake_request(b, f, r):
+    """画面の新しい依頼（R*.json）をクエスト（受付）にする。聞き取りは受付嬢が後で行う。"""
+    title = str(r.get("title") or "").strip()
+    if not title:
+        raise GuildError("依頼の内容が空です")
+    qid = add_quest(b, title, str(r.get("detail") or ""), r.get("due") or None,
+                    r.get("priority") if r.get("priority") in PRIORITIES else "通常", r.get("form") or "")
+    src = b.p.requests / "files" / f.stem
+    if src.is_dir():
+        dst = b.p.root / b.quest(qid)["dir"] / "input"
+        dst.mkdir(parents=True, exist_ok=True)
+        for x in sorted(src.iterdir()):
+            if x.is_file():
+                shutil.copy2(str(x), str(dst / x.name))
+    render_quest(b, qid)
 
 
 def apply_cancel(b, r):
@@ -1479,7 +1515,7 @@ def make_brief(b, gid, role):
     L = [f"# 依頼書：{gid} {g['title']}（役：{role}）", "",
          f"- クエスト：{q['id']} {q['title']}", f"- 目的：{q.get('detail') or q['title']}",
          f"- effort：{g.get('effort', '中')}　納品物の形：{g.get('form', 'おまかせ')}",
-         "- done_when：", *[f"  - {d}" for d in g.get("done_when", [])],
+         "- done_when：", *[f"  - {d}" for d in g.get("done_when", [])], *criteria_lines(g),
          f"- 素材の場所：{q['dir']}/input/", f"- 納品物の場所：{q['dir']}/output/",
          f"- 報告書の場所：.system/reports/{gid}-{role}.md"]
     if gid.startswith("Q"):
@@ -1721,13 +1757,46 @@ def add_quest(b, title, detail="", due=None, priority="通常", form=""):
     return qid
 
 
+def criteria_problem(g):
+    """合格基準が done_when と 1 対 1 で、3 点組が埋まっているか。問題があれば理由を返す。"""
+    dw = [x for x in g.get("done_when", []) if str(x).strip()]
+    cr = g.get("criteria") or []
+    if len(cr) != len(dw):
+        return f"合格基準が {len(cr)} 件で、done_when は {len(dw)} 件です"
+    for i, c in enumerate(cr, 1):
+        miss = [CRITERIA_LABELS[k] for k in CRITERIA_KEYS if not str(c.get(k, "")).strip()]
+        if miss:
+            return f"{i} 件目の合格基準に {'・'.join(miss)} がありません"
+    return ""
+
+
+def criteria_lines(g, indent="  "):
+    """依頼書・前置きに載せる、合格基準と完成像などの行。"""
+    L = []
+    for i, c in enumerate(g.get("criteria") or [], 1):
+        L.append(f"{indent}- 基準{i}：観点＝{c.get('viewpoint', '')}／合格ライン＝{c.get('line', '')}／確かめ方＝{c.get('method', '')}")
+    if L:
+        L.insert(0, "- 合格基準（done_when と同じ順）：")
+    if g.get("preview"):
+        L.append(f"- 完成像：{g['preview']}")
+    if g.get("client_tasks"):
+        L += ["- 依頼主にお願いすること：", *[f"{indent}- {t}" for t in g["client_tasks"]]]
+    if g.get("out_of_scope"):
+        L += ["- Claude Code ではできないこと・省くこと：", *[f"{indent}- {t}" for t in g["out_of_scope"]]]
+    return L
+
+
 def add_goal(b, quest, title, done_when, effort="中", deadline=None, estimate_min=0, depends_on=None, form="おまかせ",
-             template=None, output_path=None, needs_execute=False, notes_touched=None):
+             template=None, output_path=None, needs_execute=False, notes_touched=None,
+             criteria=None, preview="", client_tasks=None, out_of_scope=None):
     q = b.quest(quest)
     if q["status"] not in ("受付", "分解中"):
         raise GuildError(f"達成条件を足せるのは、受付か分解中のクエストだけです（いま：{q['status']}）")
-    if not 1 <= len(done_when) <= 3:
-        raise GuildError("done_when は 1〜3 個です")
+    if not [x for x in done_when if str(x).strip()]:
+        raise GuildError("done_when は 1 個以上です")
+    criteria = criteria or []
+    if any(not isinstance(c, dict) or set(c) - set(CRITERIA_KEYS) for c in criteria):
+        raise GuildError(f"criteria は {'・'.join(CRITERIA_KEYS)} を持つ辞書のリストです")
     if effort not in EFFORTS or form not in FORMS:
         raise GuildError("effort または form が不正です")
     if deadline:
@@ -1737,7 +1806,9 @@ def add_goal(b, quest, title, done_when, effort="中", deadline=None, estimate_m
                          "deadline": deadline, "estimate_min": int(estimate_min), "actual_min": 0,
                          "depends_on": depends_on or [], "status": "案", "blocked_on": "", "form": form,
                          "template": template, "output_path": output_path or [], "needs_execute": needs_execute,
-                         "notes_touched": notes_touched or [], "retries": 0, "findings": [], "refs": [], "log": []}
+                         "notes_touched": notes_touched or [], "criteria": criteria, "preview": preview or "",
+                         "client_tasks": client_tasks or [], "out_of_scope": out_of_scope or [],
+                         "retries": 0, "findings": [], "refs": [], "log": []}
     q["goals"].append(gid)
     return gid
 
@@ -2518,7 +2589,7 @@ def workshop_brief(b, gid):
     if g["status"] not in ("待機", "要手直し", "冒険中"):
         raise GuildError(f"工房で作れるのは、待機・要手直し（と作業中）の達成条件だけです（いま：{g['status']}）")
     q = b.quest(g["quest"])
-    L = [f"# 工房の前置き：{g['title']}", "", f"- クエスト：{q['title']}", "- done_when：", *[f"  - {d}" for d in g["done_when"]],
+    L = [f"# 工房の前置き：{g['title']}", "", f"- クエスト：{q['title']}", "- done_when：", *[f"  - {d}" for d in g["done_when"]], *criteria_lines(g),
          f"- 納品物の場所：{q['dir']}/output/（途中の版は output/.work/<名前>.v1.md の形）", f"- 手直し：{g.get('retries', 0)} 回"]
     log = [e["text"] for e in g.get("log", []) if e.get("text")][-5:]
     if log:
@@ -2695,12 +2766,13 @@ def build_parser():
     add("version")
     add("init-board", ("--vault-path", {"default": ""}), ("--python", {"default": ""}))
     add("get", ("--summary", {"action": "store_true"}), ("--quest",), ("--goal",), ("--question",))
-    add("add-quest", ("--title", {"required": True}), ("--detail", {"default": ""}), ("--due",), ("--priority", {"default": "通常"}), ("--form", {"default": ""}))
+    add("add-quest", ("--title", {"required": True}), ("--detail", {"default": ""}), ("--due",), ("--priority", {"default": "通常"}), ("--form", {"default": ""}), ("--request",))
     add("add-goal", ("--quest", {"required": True}), ("--title", {"required": True}),
         ("--done-when", {"action": "append", "required": True}), ("--effort", {"default": "中"}), ("--deadline",),
         ("--estimate-min", {"type": int, "default": 0}), ("--depends-on", {"default": ""}), ("--form", {"default": "おまかせ"}),
         ("--template",), ("--output-path", {"action": "append"}), ("--needs-execute", {"action": "store_true"}),
-        ("--notes-touched", {"default": ""}))
+        ("--notes-touched", {"default": ""}), ("--criteria", {"default": "[]"}), ("--preview", {"default": ""}),
+        ("--client-task", {"action": "append"}), ("--out-of-scope", {"action": "append"}))
     add("add-question", ("--quest", {"required": True}), ("--goal",), ("--kind", {"default": "choice"}),
         ("--scope", {"default": "none"}), ("--text", {"required": True}), ("--options", {"default": "[]"}),
         ("--default",), ("--due",), ("--diagram",), ("--no-block", {"action": "store_true"}))
@@ -2826,11 +2898,16 @@ def dispatch(b, a, paths):
         raise GuildError("--summary／--quest／--goal／--question のどれかを指定してください")
     if c == "add-quest":
         qid = add_quest(b, a.title, a.detail, a.due, a.priority, a.form)
+        if a.request:
+            f = b.p.requests / Path(a.request).name
+            if f.is_file():
+                move_request(b.p, f)  # クエストにした依頼は 済/ へ（画面の「受付待ち」から消える）
         render_quest(b, qid)
         return qid
     if c == "add-goal":
         gid = add_goal(b, a.quest, a.title, a.done_when, a.effort, a.deadline, a.estimate_min, split(a.depends_on),
-                       a.form, a.template, a.output_path, a.needs_execute, split(a.notes_touched))
+                       a.form, a.template, a.output_path, a.needs_execute, split(a.notes_touched),
+                       json.loads(a.criteria), a.preview, a.client_task, a.out_of_scope)
         render_quest(b, a.quest)
         return gid
     if c == "add-question":

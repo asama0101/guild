@@ -1012,6 +1012,22 @@ function dueText(q) {
   if (q.default) return `${d}期限が来たときは、おすすめの答え「${q.default}」で進みます。`;
   return `${d}おすすめの答えがないため、期限が来ても進みません。`;
 }
+function renderPlan(q) {
+  const quest = questOf(q.quest);
+  const gs = quest ? goalsOfQuest(quest).filter(g => g.status !== '中止') : [];
+  if (!gs.length) return null;
+  const list = (title, items) => items && items.length
+    ? h('div', {}, h('b', { text: title }), h('ul', { class: 'note' }, items.map(t => h('li', { text: t })))) : null;
+  return h('div', {}, h('span', { class: 'note', text: '達成条件ごとの計画（開くと、中身が見えます）' }),
+    gs.map((g, i) => {
+      const cr = (g.criteria || []).map((c, k) => `基準${k + 1}：${c.viewpoint}／合格ライン＝${c.line}／確かめ方＝${c.method}`);
+      return h('details', { style: 'margin:4px 0' }, h('summary', {}, h('strong', { text: `${i + 1}. ${g.title}` })),
+        g.preview ? h('div', {}, h('b', { text: '完成像' }), h('p', { class: 'note', text: g.preview })) : null,
+        list('合格基準', cr),
+        list('あなたにお願いすること', g.client_tasks),
+        list('Claude Code ではできないこと・省くこと', g.out_of_scope));
+    }));
+}
 function renderCovered(q, scope) {
   const ids = (q.covers && q.covers.length ? q.covers : [q.goal]).filter(id => id && goalOf(id));
   if (!ids.length) return null;
@@ -1054,6 +1070,7 @@ function qCard(q, st) {
     card.add(d);
     fillDiagram(d, q.diagram || `diagrams/route-${q.quest}.svg`, `diagrams/route-${q.quest}.txt`);
   }
+  if (scope === 'route') card.add(renderPlan(q));
   if (scope === 'output' || scope === 'execute') card.add(renderCovered(q, scope));
   if (scope === 'execute') card.add(h('p', { class: 'warn', text: '元に戻せない操作です。内容を確かめてから、答えてください。' }));
   const err = h('p', { class: 'err', role: 'alert' });
