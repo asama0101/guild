@@ -469,6 +469,18 @@ function radio(name, key, value, label, desc, warn, checkedDefault) {
   bindKey(inp, key);
   return h('label', { class: 'opt' }, inp, h('span', null, h('b', null, label), desc ? h('span', { class: 'd' }, desc) : null, warn ? h('span', { class: 'warnline' }, warn) : null));
 }
+function check(key, value, label, checkedList) {
+  const cur = S.form[key] !== undefined ? S.form[key] : checkedList;
+  const inp = h('input', { type: 'checkbox', value, checked: cur.includes(value) });
+  bindKey(inp, key);
+  return h('label', { class: 'opt' }, inp, h('span', null, h('b', null, label)));
+}
+const asList = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+function answerOf(x, form, k, i) {
+  const key = `${k}:q${i}`, note = (form[`${k}:n${i}`] || '').trim();
+  if (x.multi) { const a = form[key] !== undefined ? form[key] : asList(x.recommended); return { q: x.text, choice: a.join('、'), choices: a, note }; }
+  return { q: x.text, choice: form[key] !== undefined ? form[key] : (x.recommended || ''), note };
+}
 function seal(ch, cls) { return h('div', { class: `seal ${cls || ''}`, 'aria-hidden': 'true' }, ch); }
 
 function letterFor(qd, a) {
@@ -482,10 +494,11 @@ function letterFor(qd, a) {
       h('p', null, '答えると、地図師が計画を描きます。選べるものは選び、ほかにあれば書いてください。'),
       a.qs.map((x, i) => h('div', { class: 'qa' },
         h('span', { class: 'lbl' }, `${i + 1}. ${x.text}`),
-        (x.options || []).map((o) => radio(`${k}:q${i}r`, `${k}:q${i}`, o, o + (x.recommended === o ? '（おすすめ）' : ''), '', '', x.recommended || '')),
+        x.multi ? h('p', { class: 'fine', style: 'margin:0 0 4px' }, 'あてはまるものを、いくつでも選べます。') : null,
+        (x.options || []).map((o) => x.multi ? check(`${k}:q${i}`, o, o + (asList(x.recommended).includes(o) ? '（おすすめ）' : ''), asList(x.recommended)) : radio(`${k}:q${i}r`, `${k}:q${i}`, o, o + (x.recommended === o ? '（おすすめ）' : ''), '', '', x.recommended || '')),
         x.reason ? h('p', { class: 'fine' }, 'おすすめの理由：' + x.reason) : null,
         h('label', { class: 'fine', for: `${k}:n${i}` }, 'ほかにあれば'), textarea(`${k}:n${i}`, { id: `${k}:n${i}`, rows: '2' }))),
-      h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'answers', answers: a.qs.map((x, i) => ({ q: x.text, choice: S.form[`${k}:q${i}`] !== undefined ? S.form[`${k}:q${i}`] : (x.recommended || ''), note: (S.form[`${k}:n${i}`] || '').trim() })) }, k) }, '答えを送る')),
+      h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'answers', answers: a.qs.map((x, i) => answerOf(x, S.form, k, i)) }, k) }, '答えを送る')),
       sentNote(k));
   }
   if (a.kind === 'approve') {
@@ -506,7 +519,8 @@ function letterFor(qd, a) {
     const fnames = (S.files[k] || []).map((f) => f.name);
     return h('section', { class: 'letter', 'aria-label': 'あなたの実行' }, seal('君'),
       h('div', { class: 'kick' }, `あなたの番：${t.id}`), h('h3', null, t.title),
-      h('p', null, '合格ライン：' + ((t.criteria && t.criteria.pass_line) || '')),
+      t.instruction ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, 'お願いしたいこと'), h('p', { style: 'white-space:pre-wrap;margin:0' }, t.instruction)) : null,
+      h('p', null, (t.instruction ? 'できたと言える状態：' : '合格ライン：') + ((t.criteria && t.criteria.pass_line) || '')),
       h('span', { class: 'lbl' }, '結果を教えてください'),
       radio(k + 'r', ok, 'yes', 'できた', '', '', 'yes'), radio(k + 'r', ok, 'no', 'できなかった', '', '', 'yes'),
       h('label', { class: 'lbl', for: k + 'memo' }, '一言メモ（任意）'), textarea(memo, { id: k + 'memo' }),
@@ -557,6 +571,7 @@ function todoTags(qd) {
     h('div', { class: 'row' }, h('span', { class: 'tid' }, t.id), h('span', { class: 'ttl' }, t.title), stampEl(t.stamp, t.cls)),
     h('div', { class: 'kind' }, (t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動で実行（実行前に確認）' : '自動で実行') + '　前提：' + ((t.deps || []).join('・') || 'なし')),
     t.confirm ? h('div', { class: 'lock' }, '実行の直前に、もう一度お聞きします') : null,
+    t.instruction && t.kind === 'human' ? h('p', { class: 'fine', style: 'white-space:pre-wrap;margin:6px 0' }, t.instruction) : null,
     (() => { const c = t.criteria || {}; const d = h('details', { open: !!S.open['c:' + qd.id + t.id] }, h('summary', null, '合格基準を見る'),
       h('dl', { class: 'c' }, h('dt', null, '観点'), h('dd', null, c.viewpoint || ''), h('dt', null, '合格ライン'), h('dd', null, c.pass_line || ''), h('dt', null, '確かめ方'), h('dd', null, c.check || '')));
       d.addEventListener('toggle', () => { S.open['c:' + qd.id + t.id] = d.open; }); return d; })()));
@@ -894,11 +909,12 @@ async function start() {
   const params = new URLSearchParams(location.search);
   document.addEventListener('input', (e) => {
     const k = e.target.dataset && e.target.dataset.key;
-    if (k && e.target.type !== 'radio') S.form[k] = e.target.value;
+    if (k && e.target.type !== 'radio' && e.target.type !== 'checkbox') S.form[k] = e.target.value;
   });
   document.addEventListener('change', (e) => {
     const t = e.target, k = t.dataset && t.dataset.key;
     if (k && t.type === 'radio') S.form[k] = t.value;
+    if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
     if (k && t.type === 'date') S.form[k] = t.value;
     if (t.dataset && t.dataset.fileKey) { S.files[t.dataset.fileKey] = Array.from(t.files || []); render(); }
   });
