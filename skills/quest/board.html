@@ -144,7 +144,7 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .err{color:var(--ng);font-size:13.5px;font-weight:700;margin:8px 0 0}
 .linkbtn{font:inherit;font-size:13.5px;min-height:34px;border:0;background:transparent;color:var(--gold);text-decoration:underline;cursor:pointer;padding:0 6px}
 .reader{position:fixed;inset:0;background:rgba(20,10,10,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
-.rbox{background:var(--paper2);border:2px solid var(--brass);border-radius:6px;max-width:820px;width:100%;max-height:86vh;overflow:auto;padding:16px 20px}
+.rbox{overscroll-behavior:contain;background:var(--paper2);border:2px solid var(--brass);border-radius:6px;max-width:820px;width:100%;max-height:86vh;overflow:auto;padding:16px 20px}
 .flist{list-style:none;margin:0 0 10px;padding:0;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
 .flist li{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--grid)}
 .flist li:last-child{border-bottom:0}
@@ -1023,12 +1023,14 @@ function render() {
   const ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.key : null, ss = ae && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
+  const oldBox = document.querySelector('.rbox'), boxTop = oldBox ? oldBox.scrollTop : 0;
   const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', 'ノウハウ'], ['talk', '記録'], ['flow', 'しくみ'], ['help', 'ヘルプ']];
   const body = { board: boardTab, deliv: delivTab, know: knowTab, talk: talkTab, flow: flowTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox()].filter(Boolean));
   window.scrollTo(0, sy);
+  const newBox = document.querySelector('.rbox'); if (newBox && boxTop) newBox.scrollTop = boxTop;
   if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus({ preventScroll: true }); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
   window.scrollTo(0, sy);
 }
@@ -1099,7 +1101,8 @@ async function refresh(force) {
   try {
     const raw = await loadAll(); const key = JSON.stringify(raw);
     // 入力中（変換中を含む）は画面を作り直さない。作り直すと、変換が確定せず、位置も動く。入力が止まった次の更新で反映する
-    if (!force && key !== S.dataKey && isEditing()) return;
+    // 資料を開いている間も作り直さない（読んでいる位置が上に戻ってしまう）。閉じたあとの次の更新で反映する
+    if (!force && key !== S.dataKey && (isEditing() || S.reader || S.fallback)) return;
     if (force || key !== S.dataKey) {
       S.dataKey = key; S.model = buildModel(raw);
       const ids = S.model.quests.map((x) => x.id);
