@@ -15,7 +15,11 @@ body{margin:0;background:var(--bg)}
 .plaque .sub2{font-size:13px;color:var(--banner-sub)}
 .conn{margin-left:auto;font-size:13px;color:var(--banner-sub);display:flex;gap:8px;align-items:center}
 .conn i{width:8px;height:8px;border-radius:50%;background:var(--dot);display:inline-block}
-.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:14px;border-bottom:2px solid var(--brass)}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:14px;border-bottom:2px solid var(--brass);position:sticky;top:0;z-index:20;background:var(--bg);padding-top:8px}
+.tabs .tools{margin-left:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-bottom:4px}
+.tabs .tools button{margin-bottom:0;min-height:38px;padding:4px 14px;border:1px solid var(--brass);border-radius:6px;background:var(--surface);color:var(--ink)}
+.tabs .tools button.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+.lr,.quick{scroll-margin-top:70px}
 .tabs button{font:inherit;font-weight:700;min-height:44px;padding:6px 22px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--banner);color:var(--banner-ink);cursor:pointer;margin-bottom:-2px}
 .tabs button.on{background:var(--paper);color:var(--ink);border-color:var(--line)}
 .panel{background:var(--paper);border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;padding:22px 26px 30px}
@@ -308,7 +312,10 @@ async function loadAll() {
     const output = await listFilesDeep(`${q}/output`, 2);
     const inbox = [];
     for (const f of await S.fs.list(`${q}/inbox`)) {
-      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null }); }
+      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null, qs: null }); }
+    }
+    if (!plan) for (const f of await S.fs.list(`${q}/inbox/done`)) {
+      if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', todo: null, choice: null, qs: j.answers.map((a) => a.q) }); }
     }
     const knowledge = (await S.fs.list('knowledge')).some((x) => x.name === `${q}.md`);
     quests.push({ id: q, plan, request, draft, reports, output, inbox, knowledge });
@@ -338,7 +345,7 @@ function derive(q) {
   if (!p) {
     const qs = q.draft && Array.isArray(q.draft.questions) ? q.draft.questions : [];
     if (qs.length) {
-      d.asks.push({ kind: 'questions', key: `${q.id}:questions`, label: '質問', qs, sent: inboxHas('answers') });
+      d.asks.push({ kind: 'questions', key: `${q.id}:questions`, label: '質問', qs, sent: q.inbox.some((x) => x.type === 'answers' && (!x.qs || x.qs.join('|') === qs.map((y) => y.text).join('|'))) });
       d.label = d.asks[0].sent ? '分解中' : '質問あり'; d.cls = d.asks[0].sent ? 'sd-run' : 'sd-turn'; d.me = d.asks[0].sent ? '—' : '質問';
       return d;
     }
@@ -601,7 +608,7 @@ function connectBox() {
 }
 
 function composer() {
-  const key = 'new:text', ta = textarea(key, { id: 'qreq', rows: '2', placeholder: '困りごとや、やってほしいことを書いて、「出す」を押してください（Ctrl + Enter でも送れます）' });
+  const key = 'new:text', ta = textarea(key, { id: 'qreq', rows: '2', placeholder: '困りごとや、やってほしいことを書いて、「依頼する」を押してください（Ctrl + Enter でも送れます）' });
   ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendRequest(); } });
   const fl = h('input', { type: 'file', multiple: true, 'aria-label': '素材ファイル' }); fl.dataset.fileKey = 'new';
   const due = h('input', { type: 'date', 'aria-label': '期限' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
@@ -610,8 +617,8 @@ function composer() {
   more.addEventListener('toggle', () => { S.open.qmore = more.open; });
   const fnames = (S.files.new || []).map((f) => f.name);
   return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
-    h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼を出す'),
-    h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '出す')),
+    h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼'),
+    h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '依頼する')),
     more, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
     S.newSaved ? h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。下の一覧に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`) : null);
@@ -624,11 +631,11 @@ function ledger(m) {
     h('span', null, r.text.split('\n')[0].slice(0, 80), h('span', { class: 'sub', style: 'display:block' }, '/guild:quest が動いていれば受け付けます。動いていなければ、チャットで /guild:quest と送ってください。')),
     h('span', null, stampEl('受付待ち', 'sd-wait')), h('span', null, '—'), h('span', null, '—')));
   for (const qd of m.quests) {
-    rows.push(h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', onclick: () => { S.openQ[qd.id] = !S.openQ[qd.id]; S.sel = qd.id; S.tq = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
+    rows.push(h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', 'data-q': qd.id, onclick: () => { S.openQ[qd.id] = !S.openQ[qd.id]; S.sel = qd.id; S.tq = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
       h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me)));
     if (S.openQ[qd.id]) rows.push(questDetail(qd));
   }
-  if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「出す」を押してください。')));
+  if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「依頼する」を押してください。')));
   return h('div', { class: 'ledger', role: 'table', 'aria-label': '依頼の一覧' }, rows);
 }
 
@@ -692,7 +699,7 @@ function helpTab() {
   const faq = (q, ...a) => h('details', null, h('summary', null, q), h('p', null, ...a));
   return h('div', { class: 'grid2' },
     sec('使い方', h('ol', null,
-      h('li', null, h('b', null, '依頼を書く。'), '「掲示板」の上の欄に内容を書いて、「出す」を押します。'),
+      h('li', null, h('b', null, '依頼を書く。'), '「掲示板」の上の欄に内容を書いて、「依頼する」を押します。'),
       h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります（動いている間は、新しい依頼を自動で受け付けます）。足りないことは、この画面の「質問」の手紙で聞かれます。'),
       h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられて、「道のり」が出ます。承認はこの1回だけです。'),
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
@@ -728,6 +735,22 @@ function fallbackBox() {
     S.toast ? h('p', { class: 'saved' }, S.toast) : null));
 }
 
+function stickyTools() {
+  const n = S.model ? S.model.needs.length : 0;
+  return h('div', { class: 'tools' },
+    n ? h('button', { type: 'button', class: 'tool warn', onclick: goNeed }, `あなたの番 ${n}件`) : null,
+    h('button', { type: 'button', class: 'tool', onclick: goCompose }, '＋ 新しい依頼'));
+}
+function goNeed() {
+  const n = S.model && S.model.needs[0]; if (!n) return;
+  S.tab = 'board'; S.openQ[n.q] = true; S.sel = n.q; S.tq = n.q; render();
+  const el = document.querySelector(`[data-q="${n.q}"]`); if (el) el.scrollIntoView({ block: 'start' });
+}
+function goCompose() {
+  S.tab = 'board'; render();
+  const ta = document.getElementById('qreq'); if (ta) { ta.scrollIntoView({ block: 'center' }); ta.focus(); }
+}
+
 function render() {
   const app = document.getElementById('app');
   const ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.key : null, ss = ae && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
@@ -735,7 +758,7 @@ function render() {
   const tabs = [['board', '掲示板'], ['talk', '記録'], ['help', 'ヘルプ']];
   const body = S.tab === 'board' ? boardTab() : S.tab === 'talk' ? talkTab() : helpTab();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
-    h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l))),
+    h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox()].filter(Boolean));
   window.scrollTo(0, sy);
   if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus(); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
