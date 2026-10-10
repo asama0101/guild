@@ -246,7 +246,7 @@ class AdoptTest(unittest.TestCase):
         self.draft(self.good())
         r = guild.adopt(self.path, TR)
         p = json.loads(self.path.read_text(encoding="utf-8"))
-        self.assertEqual(r, {"adopted": 2, "replaced": False})
+        self.assertEqual(r, {"adopted": 2, "replaced": False, "carried": []})
         self.assertFalse(p["approved"])
         self.assertEqual(states(p), {"T1": "pending", "T2": "pending"})
         self.assertEqual((p["todos"][0]["retries"], p["todos"][0]["output"]), (0, None))
@@ -462,7 +462,19 @@ class WaitTest(unittest.TestCase):
         got = guild.take_answers(self.q["dir"])
         self.assertEqual(got[0]["answers"][0]["choice"], "A")
         self.assertTrue((Path(self.q["dir"]) / "inbox" / "done" / "a.json").exists())
-        self.assertTrue((Path(self.q["dir"]) / "inbox" / "b.json").exists())
+        # 計画がないときの approve は、受け付けられない入力。残すと wait が待たずに返り続けるので rejected/ へ
+        self.assertTrue((Path(self.q["dir"]) / "inbox" / "rejected" / "b.json").exists())
+        self.assertFalse((Path(self.q["dir"]) / "inbox" / "b.json").exists())
+
+    def test_take_answers_rejects_broken_files(self):
+        (Path(self.q["dir"]) / "inbox" / "c.json").write_text("{壊れた", encoding="utf-8")
+        self.assertEqual(guild.take_answers(self.q["dir"]), [])
+        self.assertTrue((Path(self.q["dir"]) / "inbox" / "rejected" / "c.json").exists())
+        self.assertEqual(guild.arrivals(self.root), [])
+
+    def test_arrivals_ignores_unreadable_requests(self):
+        (self.root / "guild" / "requests" / "R20261010-9.json").write_text("{壊れた", encoding="utf-8")
+        self.assertEqual(guild.arrivals(self.root), [])
 
     def test_cli_wait_and_answers(self):
         run = lambda *a: subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), *a], capture_output=True, text=True, encoding="utf-8")
@@ -470,6 +482,94 @@ class WaitTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0)
         self.assertTrue(json.loads(r.stdout)["timeout"])
         self.assertEqual(json.loads(run("answers", self.q["dir"]).stdout), [])
+
+
+class FixesTest(unittest.TestCase):
+    """実際の通しで、プラグイン自身が見つけた不具合の修正。"""
+
+    def ingest_one(self, p, data, d):
+        (Path(d) / "inbox").mkdir(exist_ok=True)
+        (Path(d) / "inbox" / "20261010120000-x.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        return guild.ingest(Path(d) / "plan.json", p, TR)
+
+    def test_approve_cannot_reopen_aborted_or_replan(self):
+        for status in ("aborted", "replan"):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as d:
+                p = plan(todo("T1"), approved=False)
+                p["status"] = status
+                r = self.ingest_one(p, {"type": "approve"}, d)
+                self.assertEqual(len(r["rejected"]), 1)
+                self.assertFalse(p["approved"])
+                self.assertEqual(p["status"], status)
+
+    def test_aborted_rejects_everything_and_replan_still_allows_abort(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = plan(todo("T1", state="awaiting_confirm", confirm=True))
+            p["status"] = "aborted"
+            self.assertEqual(len(self.ingest_one(p, {"type": "confirm", "todo": "T1", "ok": True}, d)["rejected"]), 1)
+            self.assertEqual(p["todos"][0]["state"], "awaiting_confirm")
+        with tempfile.TemporaryDirectory() as d:
+            p = plan(todo("T1"))
+            p["status"] = "replan"
+            self.assertEqual(self.ingest_one(p, {"type": "decision", "choice": "abort"}, d)["rejected"], [])
+            self.assertEqual(p["status"], "aborted")
+
+    def test_approve_twice_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = plan(todo("T1"))  # すでに承認済み
+            self.assertEqual(len(self.ingest_one(p, {"type": "approve"}, d)["rejected"]), 1)
+
+    def test_human_result_becomes_a_report_for_the_appraiser(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = plan(todo("T2", kind="human", state="waiting_user"))
+            self.ingest_one(p, {"type": "result", "todo": "T2", "ok": False, "note": "取れなかった", "files": ["inbox/files/T2-m.txt"]}, d)
+            body = (Path(d) / "reports" / "T2-user.md").read_text(encoding="utf-8")
+            for needle in ("## 結果\nできなかった", "取れなかった", "- inbox/files/T2-m.txt"):
+                self.assertIn(needle, body)
+
+    def test_rejected_input_writes_no_report(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = plan(todo("T2", kind="human", state="pending"))
+            self.ingest_one(p, {"type": "result", "todo": "T2", "ok": True}, d)
+            self.assertFalse((Path(d) / "reports" / "T2-user.md").exists())
+
+    def test_next_reports_status_and_approved(self):
+        p = plan(todo("T1"), approved=False)
+        p["status"] = "replan"
+        v = guild.next_view(p)
+        self.assertEqual((v["status"], v["approved"], v["runnable"]), ("replan", False, False))
+
+    def test_replan_carries_over_done_todos_and_history(self):
+        with tempfile.TemporaryDirectory() as d:
+            q = Path(d)
+            (q / "reports").mkdir()
+            (q / "output" / "T1").mkdir(parents=True)
+            (q / "output" / "T2").mkdir(parents=True)
+            (q / "output" / "T1" / "a.md").write_text("T1の成果物", encoding="utf-8")
+            (q / "output" / "T2" / "b.md").write_text("T2の古い成果物", encoding="utf-8")
+            (q / "reports" / "T1-adventurer.md").write_text("T1の報告", encoding="utf-8")
+            (q / "reports" / "T2-adventurer.md").write_text("T2の報告", encoding="utf-8")
+            old = plan(todo("T1", state="done", retries=1, output={"note": "x"}), todo("T2", state="failed", deps=["T1"]))
+            old["status"] = "replan"
+            old["history"] = [{"t": "2026-10-10T10:00:00+09:00", "event": "adopted"}]
+            (q / "plan.json").write_text(json.dumps(old), encoding="utf-8")
+            new_t1 = todo("T1")                       # 題名・合格基準が同じ → 引き継ぐ
+            new_t2 = todo("T2", title="別の作業", deps=["T1"])  # 題名が変わった → 引き継がない
+            (q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q1", "title": "t", "todos": [new_t1, new_t2]}), encoding="utf-8")
+            r = guild.adopt(q / "plan.json", TR)
+            self.assertEqual(r["carried"], ["T1"])
+            p = json.loads((q / "plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(states(p), {"T1": "done", "T2": "pending"})
+            self.assertEqual((p["todos"][0]["retries"], p["todos"][0]["output"]), (1, {"note": "x"}))
+            self.assertFalse(p["approved"])
+            self.assertEqual([e["event"] for e in p["history"]], ["adopted", "replanned"])
+            # 引き継いだ T1 の成果物はそのまま。引き継がない T2 の古い成果物と報告は prev/ へ
+            self.assertTrue((q / "output" / "T1" / "a.md").exists())
+            self.assertTrue((q / "reports" / "T1-adventurer.md").exists())
+            self.assertFalse((q / "output" / "T2").exists())
+            self.assertFalse((q / "reports" / "T2-adventurer.md").exists())
+            moved = list((q / "prev").rglob("*"))
+            self.assertTrue(any(m.name == "b.md" for m in moved) and any(m.name == "T2-adventurer.md" for m in moved))
 
 
 class BoardContractTest(unittest.TestCase):

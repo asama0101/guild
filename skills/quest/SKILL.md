@@ -51,7 +51,7 @@ disable-model-invocation: true
    - `questions` が空でなければ、そこで止める。ボードが `plan-draft.json` を読んで、質問の手紙を出す。あなたは何もしない（手順4で、回答の到着を待つ）。
    - `questions` が空なら、`guild.py adopt <dir>/plan.json` を実行する。検査に落ちたら、エラーを添えて地図師に差し戻す（2回まで）。直らなければ、状況を短くチャットで伝えて、その依頼は止める。
 3. 質問への回答が届いたら（`guild.py answers <dir>` で取り出す）、その内容を添えて地図師をもう一度呼ぶ（手順1へ）。
-4. 「計画を直す」が届いたら（計画の `status` が `replan`）、`plan.json` の `history` の最後の `decision`（`choice` が `replan`）の `comment` を、これまでの計画とあわせて地図師に渡し、呼び直す（手順1へ。`adopt` は、`replan` のときだけ上書きできる）。
+4. 「計画を直す」が届いたら（計画の `status` が `replan`）、`plan.json` の `history` の最後の `decision`（`choice` が `replan`）の `comment` を、これまでの計画とあわせて地図師に渡し、呼び直す（手順1へ。`adopt` は、`replan` のときだけ上書きできる）。メッセージには、「完了済み（`done`）の Todo は、`id`・種別・題名・合格基準を変えずにそのまま残す。直すのは、できなかった部分と、足す部分だけ」と必ず書く。そうすると、`adopt` が完了済みの Todo を引き継ぎ、経緯（`history`）も残る。引き継がなかった Todo の古い成果物と報告は、`<dir>/prev/` へ退避される。
 
 ## 3. 承認（1回だけ）
 
@@ -72,15 +72,17 @@ disable-model-invocation: true
    | グループ | 対応 |
    |---|---|
    | `ready` | 冒険者を呼ぶ（`guild:adventurer`）。互いに独立なものは同時に呼んでよい。メッセージに、依頼のフォルダ、Todo の `id`、`criteria`、やり直しなら鑑定士の指摘の場所を書く。返ってきたら `guild.py advance <plan> <id> submitted` |
-   | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、冒険者の報告と成果物の場所を書く。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected` |
+   | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の Todo なら冒険者の `reports/<id>-adventurer.md`、「あなたの実行」の Todo なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる。やり直しの回数を使い切ると `failed` になり、依頼主の判断になる） |
    | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画 | **あなたは何もしない**。ボードの手紙で、依頼主が答える |
 
    冒険者が成果物を書き込めず、全文を返り値で返してきたときは、その全文を**手を加えずに**、指定されたファイル名で `<dir>/output/<id>/` に保存してから `submitted` を送る。保存したことを、鑑定士へのメッセージにも書く。
 
    `rejected` で `running` に戻った Todo は、次の周回の `ready` に出る。やり直しの回数の上限は `guild.py` が決める。
+
+   冒険者が「できなかった」と返したり、報告ファイルがなかったりしても、`submitted` を送って鑑定に進める（鑑定士が `rejected` にして、やり直しになる。回数を使い切ると `failed` になり、依頼主の判断になる）。ギルドマスターが成否を判断して分岐しない。
 3. **何か進めたら**、手順1に戻る。
 4. **何も進められないとき**：
-   - すべての依頼が `finished`、または中止なら、手順5・6へ進んで終える。
+   - すべての依頼が `finished`、または `status` が `aborted`（`next` の出力に `status` と `approved` がある）なら、手順5・6へ進んで終える。`replan` のものは、手順2の4で地図師を呼んでいる最中なので、終わりにしない。
    - そうでなければ（依頼主の答えを待っている）、`guild.py wait <root> 540` を実行する（Bash のタイムアウトは 600000 を指定する）。届いたら手順1へ。`timeout` なら、もう一度待つ。**6回続けて `timeout`** になったら、「ボードで答えたら、`/guild:quest` をもう一度実行してください」と伝えて終える。
 
 守ること：

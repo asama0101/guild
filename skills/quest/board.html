@@ -396,6 +396,7 @@ function messagesOf(q) {
     const id = e.id;
     if (e.event === 'adopted') add(e, 'cart', `${p.todos.length}つの Todo に分けました。`, 'reports/plan-draft.json');
     else if (e.event === 'approved') add(e, 'me', '計画を承認しました。');
+    else if (e.event === 'replanned') add(e, 'cart', `計画を作り直しました（引き継いだ Todo：${(e.carried || []).join('、') || 'なし'}）。`, 'reports/plan-draft.json');
     else if (e.event === 'decision') add(e, 'me', e.choice === 'abort' ? '依頼を中止しました。' : '計画を直すよう頼みました。' + (e.comment ? `（${e.comment}）` : ''));
     else if (e.event === 'deps_done') {
       if (e.to === 'waiting_user') add(e, 'gm', `${id} をあなたに渡しました。「掲示板」の手紙に、答える欄があります。`);
@@ -406,8 +407,8 @@ function messagesOf(q) {
     else if (e.event === 'unblock') add(e, 'gm', `${id} の止まりが解けました。`);
     else if (e.event === 'confirmed') add(e, 'me', `${id}：実行する、を選びました。`);
     else if (e.event === 'declined') add(e, 'me', `${id}：実行しない、を選びました。`);
-    else if (e.event === 'submitted') { if (kindOf[id] === 'human') add(e, 'me', `${id}：できた（結果を送りました）。`); else add(e, 'adv', `${id}：作業を終えました。`, `reports/${id}-adventurer.md`); }
-    else if (e.event === 'reported_failed') add(e, 'me', `${id}：できなかった。`);
+    else if (e.event === 'submitted') { if (kindOf[id] === 'human') add(e, 'me', `${id}：できた（結果を送りました）。`, `reports/${id}-user.md`); else add(e, 'adv', `${id}：作業を終えました。`, `reports/${id}-adventurer.md`); }
+    else if (e.event === 'reported_failed') add(e, 'me', `${id}：できなかった。`, `reports/${id}-user.md`);
     else if (e.event === 'passed') add(e, 'app', `${id}：合格。`, `reports/${id}-appraiser.md`);
     else if (e.event === 'rejected') add(e, 'app', `${id}：不合格です。${e.to === 'failed' ? 'やり直しの回数を超えました。' : 'やり直します。'}`, `reports/${id}-appraiser.md`, true);
     else if (e.event === 'skip') add(e, 'me', `${id}：やめました。`);

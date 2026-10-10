@@ -163,6 +163,8 @@ def next_view(plan):
               "review": "review", "blocked": "blocked", "failed": "failed"}
     out = {k: [t["id"] for t in plan["todos"] if t["state"] == s] for k, s in groups.items()}
     out["runnable"] = runnable(plan)
+    out["status"] = plan.get("status", "active")
+    out["approved"] = bool(plan.get("approved"))
     out["finished"] = all(t["state"] in SATISFIED for t in plan["todos"])
     return out
 
@@ -174,7 +176,9 @@ def ingest(plan_path, plan, tr):
         return report
     for f in sorted(inbox.glob("*.json")):
         try:
-            apply_input(plan, load_json(f), tr)
+            data = load_json(f)
+            apply_input(plan, data, tr)
+            write_user_report(Path(plan_path).parent, data)
             dest, key, item = inbox / "done", "applied", f.name
         except (GuildError, KeyError, TypeError, AttributeError) as e:
             dest, key, item = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}
@@ -184,10 +188,30 @@ def ingest(plan_path, plan, tr):
     return report
 
 
+def write_user_report(qdir, data):
+    """依頼主の結果（type が result）を、鑑定士が読める報告 reports/<Todo>-user.md にする。"""
+    if data.get("type") != "result":
+        return
+    rep = Path(qdir) / "reports"
+    rep.mkdir(exist_ok=True)
+    files = "\n".join(f"- {x}" for x in data.get("files", [])) or "なし"
+    result = "できた" if data.get("ok") else "できなかった"
+    body = f"## 結果\n{result}\n## メモ\n{data.get('note') or 'なし'}\n## 添付\n{files}\n"
+    (rep / f"{data['todo']}-user.md").write_text(body, encoding="utf-8")
+
+
 def apply_input(plan, data, tr):
     kind = data.get("type")
     tm = todo_map(plan)
+    status = plan.get("status", "active")
+    # 中止された依頼は、終わったもの。見直し中は、中止以外の入力を受け付けない
+    if status == "aborted":
+        raise GuildError("中止された依頼には、入力を受け付けません")
+    if status == "replan" and not (kind == "decision" and data.get("choice") == "abort"):
+        raise GuildError("計画を直し中です。新しい計画ができるまで、入力を受け付けません")
     if kind == "approve":
+        if plan.get("approved"):
+            raise GuildError("すでに承認されています")
         plan["approved"], plan["status"] = True, "active"
         note(plan, event="approved")
         return
@@ -250,10 +274,38 @@ def adopt(plan_path, tr):
     errs = validate(plan, tr)
     if errs:
         raise GuildError("plan-draft.json の検査に失敗しました: " + " / ".join(errs))
+    carried = []
     if old is not None:
         shutil.copy2(plan_path, plan_path.with_name("plan.prev.json"))
+        carried = carry_over(plan, old, plan_path.parent)
     save_plan(plan_path, plan)
-    return {"adopted": len(plan["todos"]), "replaced": old is not None}
+    return {"adopted": len(plan["todos"]), "replaced": old is not None, "carried": carried}
+
+
+def carry_over(plan, old, qdir):
+    """計画の作り直し。番号・種別・題名・合格基準が同じで、完了済みの Todo は、状態を引き継ぐ。
+    経緯（history）は旧計画のものに追記する。引き継がない Todo の成果物と報告は、prev/ へ退避する。"""
+    same = lambda a, b: all(a.get(k) == b.get(k) for k in ("kind", "title", "criteria"))
+    new_by = {t["id"]: t for t in plan["todos"]}
+    carried = []
+    for o in old.get("todos", []):
+        n = new_by.get(o["id"])
+        if n is not None and o.get("state") == "done" and same(o, n):
+            n["state"], n["retries"], n["output"] = "done", o.get("retries", 0), o.get("output")
+            carried.append(o["id"])
+    plan["history"] = list(old.get("history", [])) + [{"t": now(), "event": "replanned", "carried": carried}]
+    arch = Path(qdir) / "prev" / datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    for o in old.get("todos", []):
+        if o["id"] in carried:
+            continue
+        out = Path(qdir) / "output" / o["id"]
+        if out.is_dir():
+            (arch / "output").mkdir(parents=True, exist_ok=True)
+            shutil.move(str(out), str(arch / "output" / o["id"]))
+        for f in sorted((Path(qdir) / "reports").glob(f"{o['id']}-*")):
+            (arch / "reports").mkdir(parents=True, exist_ok=True)
+            shutil.move(str(f), str(arch / "reports" / f.name))
+    return carried
 
 
 def init_guild(root):
@@ -331,6 +383,10 @@ def arrivals(root):
         req = gdir / "requests"
         if req.is_dir():
             for f in sorted(req.glob("R*.json")):
+                try:
+                    load_json(f)
+                except GuildError:
+                    continue  # 読めない依頼は数えない（list_requests と同じ）
                 out.append({"kind": "request", "id": f.stem})
     return out
 
@@ -354,11 +410,17 @@ def take_answers(qdir):
     got = []
     if inbox.is_dir():
         for f in sorted(inbox.glob("*.json")):
-            d = load_json(f)
-            if d.get("type") == "answers":
+            try:
+                d = load_json(f)
+                ok = isinstance(d, dict) and d.get("type") == "answers"
+            except GuildError:
+                ok = False  # 壊れたファイル
+            # 取り出せなかったものは rejected/ へ。残すと wait が待たずに返り続ける
+            dest = inbox / ("done" if ok else "rejected")
+            dest.mkdir(exist_ok=True)
+            shutil.move(str(f), str(dest / f.name))
+            if ok:
                 got.append(d)
-                (inbox / "done").mkdir(exist_ok=True)
-                shutil.move(str(f), str(inbox / "done" / f.name))
     return got
 
 

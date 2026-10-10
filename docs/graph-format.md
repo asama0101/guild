@@ -1,4 +1,4 @@
-# グラフ定義の形式（案）
+# グラフ定義の形式
 
 `docs/spec.md` の「進め方をグラフ定義のデータで持つ」を具体化する。決定済み: 実行主体は Python スクリプト、形式は JSON、遷移定義は「全 Todo 共通の1つ＋種別ごとの差分」。
 
@@ -14,7 +14,7 @@
 ```json
 {
   "initial": "pending",
-  "terminal": ["done", "failed"],
+  "terminal": ["done", "skipped"],
   "transitions": [
     {"from": "pending",      "event": "deps_done", "to": "running"},
     {"from": "running",      "event": "submitted", "to": "review"},
@@ -28,9 +28,6 @@
       "override": [
         {"from": "pending", "event": "deps_done", "to": "waiting_user"},
         {"from": "waiting_user", "event": "submitted", "to": "review"}
-      ],
-      "remove": [
-        {"from": "running", "event": "submitted"}
       ]
     }
   },
@@ -88,10 +85,13 @@
 | コマンド | 動き |
 |---|---|
 | `validate <plan.json>` | `deps` の参照切れ、循環、`kind`・`criteria` の欠け、未知の `state` を検出する |
-| `next <plan.json>` | `approved` で、前提がすべて `done` の `pending` Todo を一覧する（並列に進められるもの） |
+| `sync <plan.json>` | 前提の結果に応じて `deps_done`・`dep_failed`・`unblock` を、動かなくなるまで適用する（承認前・中止・見直し中は何もしない） |
+| `next <plan.json>` | 状態を変えず、`ready`・`confirm`・`waiting_user`・`review`・`blocked`・`failed` に分けて返す。`runnable`・`finished`・`status`・`approved` も返す |
 | `advance <plan.json> <ID> <event>` | `transitions.json` を引いて状態を1つ進める。定義にない遷移はエラー |
 
-イベント: `deps_done`（`next` が返した Todo に対して Claude が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。
+イベント: `deps_done`（`sync` が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。ほかに `dep_failed`・`unblock`・`confirmed`・`declined`・`reported_failed`・`skip`。
+
+（このほか、`adopt`・`ingest`・`init`・`new`・`requests`・`arrivals`・`wait`・`answers` がある。一覧は `docs/plan-guild-py.md`。）
 
 ## 決定（未決だった3点）
 
@@ -109,4 +109,4 @@
 
 ## 未決
 
-- `transitions.json` に `blocked`（後続を止めた状態）と `confirm` 待ちを足す具体形。
+- （解決済み）`blocked` と `confirm` 待ちは `transitions.json` に入っている。`failed` は終端ではなく、`skip` で `skipped` になる。
