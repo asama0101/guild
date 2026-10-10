@@ -10,6 +10,7 @@ model: opus
 ## 受け取るもの（呼び出しのメッセージに書かれている）
 - 依頼文と、聞き取りの回答
 - 依頼のフォルダ（`guild/Q###/`）
+- 納品物のテンプレート（依頼の `template`。`templates/` の中のファイルへのパス。なければなし）。あれば、`Read` で読み、まとめの Todo の合格基準に「テンプレートの見出し・順序に沿っている」を入れ、`plan-draft.json` の `template` にそのパスを書き写す。
 - 納品物の形式（依頼の `format`。なければ `md`）。今、作れるのは `md`（Markdown）だけ。ほかの形式が指定されていたら、`questions` で「今は Markdown だけ作れます」と伝えて、どうするかを聞く。
 - ノウハウの置き場（`guild/knowledge/`）
 - 計画の作り直しのときは、これまでの計画（`plan.json`）と、依頼主が直してほしいこと。できなかった Todo は、報告（`reports/<id>-adventurer.md`、`<id>-scout.md`）の「未確認」「読めなかったこと」を読み、動的ページが原因なら `needs_browser` を付け、斥候でも読めないものは (4) の `human` にする。**完了済み（`done`）の Todo は、`id`・種別・題名・合格基準を1字も変えずに、そのまま書く**（引き継がれて、やり直しにならない）。直すのは、できなかった部分と、足す部分だけ。`id` を別の作業に使い回さない。
@@ -42,6 +43,7 @@ model: opus
   "quest": "Q001",
   "title": "依頼の題名",
   "format": "md",
+  "template": "templates/週次報告.md",
   "questions": [
     {"text": "聞くべきこと", "options": ["選択肢A", "選択肢B"], "multi": false, "recommended": "選択肢A", "reason": "推奨の理由"}
   ],
@@ -73,6 +75,7 @@ model: opus
 }
 ```
 
+- `template` は、依頼にテンプレートの指定があるときだけ書く（なければ、この行ごと書かない）。
 - `questions` が空でないときは、`todos` を空にしてよい。
 - `state`、`retries`、`output`、`approved` は書かない（取り込み時に決まる）。
 

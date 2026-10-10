@@ -280,8 +280,15 @@ def adopt(plan_path, tr):
     todos = draft.get("todos")
     if not isinstance(todos, list):
         raise GuildError("plan-draft.json に todos がありません")
+    template = draft.get("template")
+    if template:
+        # テンプレートは guild/templates/ の中のファイルだけ（外を指せない）
+        parts = str(template).replace("\\", "/").split("/")
+        tpl = plan_path.parent.parent / str(template)
+        if len(parts) != 2 or parts[0] != "templates" or parts[1] in ("", ".", "..") or not tpl.is_file():
+            raise GuildError(f"template が不正か、見つかりません: {template}")
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
-            "status": "active", "format": draft.get("format", "md"), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
+            "status": "active", "format": draft.get("format", "md"), **({"template": template} if template else {}), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
     for t in todos:
         if not isinstance(t, dict):
             raise GuildError("todos の要素が不正です")
@@ -355,7 +362,7 @@ def list_requests(root):
                 d = load_json(f)
             except GuildError:
                 continue
-            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "format": d.get("format", "md"), "files": d.get("files", [])})
+            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "format": d.get("format", "md"), "template": d.get("template"), "files": d.get("files", [])})
     return out
 
 

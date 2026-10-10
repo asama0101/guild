@@ -46,7 +46,7 @@ disable-model-invocation: true
    - 依頼文（`<dir>/request.json`）、素材（`<dir>/inputs/`）
    - 依頼のフォルダ、ノウハウの置き場（`guild/knowledge/`）
    - 出力先：`<dir>/reports/plan-draft.json`
-   - 納品物の形式（`<dir>/request.json` の `format`。なければ `md`）
+   - 納品物の形式（`<dir>/request.json` の `format`。なければ `md`）と、テンプレート（`template`。あれば `guild/` からのパスを、そのまま渡す）
    - 質問への回答があるとき、またはやり直しのときは、その内容（下の3・4）
 2. `plan-draft.json` を読む。
    - `questions` が空でなければ、そこで止める。ボードが `plan-draft.json` を読んで、質問の手紙を出す。あなたは何もしない（手順4で、回答の到着を待つ）。

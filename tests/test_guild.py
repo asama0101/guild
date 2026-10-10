@@ -643,6 +643,35 @@ class FormatTest(unittest.TestCase):
         self.assertTrue(saved["todos"][0]["deliverable"])
 
 
+class TemplateTest(unittest.TestCase):
+    """納品物のテンプレート。guild/templates/ の中だけを指せる。"""
+
+    def make(self, d, template):
+        q = Path(d) / "guild" / "Q001"
+        (q / "reports").mkdir(parents=True)
+        (Path(d) / "guild" / "templates").mkdir()
+        (Path(d) / "guild" / "templates" / "週次.md").write_text("# 週次", encoding="utf-8")
+        draft = {"quest": "Q001", "title": "t", "template": template, "todos": [
+            {"id": "T1", "title": "x", "kind": "auto", "deps": [], "deliverable": True,
+             "criteria": {"viewpoint": "a", "pass_line": "b", "check": "c"}}]}
+        (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+        return q
+
+    def test_adopt_keeps_existing_template(self):
+        with tempfile.TemporaryDirectory() as d:
+            q = self.make(d, "templates/週次.md")
+            guild.adopt(q / "plan.json", TR)
+            saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved["template"], "templates/週次.md")
+
+    def test_adopt_rejects_missing_or_outside_template(self):
+        for bad in ("templates/ない.md", "../config.json", "templates/../config.json", "/etc/passwd", "board.html"):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
+                q = self.make(d, bad)
+                with self.assertRaises(guild.GuildError):
+                    guild.adopt(q / "plan.json", TR)
+
+
 class BoardContractTest(unittest.TestCase):
     """ボード（board.html）が inbox に書く JSON を、guild.py がそのまま受け取れる。
     形は、ボードを実際に動かして書き出させたもの（承認・直す・中止・確認・結果・失敗の判断4種）。"""
