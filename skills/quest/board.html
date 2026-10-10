@@ -145,6 +145,8 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .connbox{margin-bottom:16px}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.qa{margin:16px 0 4px;padding-top:6px;border-top:1px dashed var(--line)}
+.qa:first-of-type{border-top:0}
 
 </style>
 </head>
@@ -263,6 +265,8 @@ const DB = {
   async put(v) { const db = await DB.open(); return new Promise((res, rej) => { const tx = db.transaction('h', 'readwrite'); tx.objectStore('h').put(v, 'dir'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
 };
 
+const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。';
+
 // ============================================================ 状態
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
@@ -298,6 +302,7 @@ async function loadAll() {
     const q = e.name;
     const plan = await readJSON(`${q}/plan.json`);
     const request = await readJSON(`${q}/request.json`);
+    const draft = plan ? null : await readJSON(`${q}/reports/plan-draft.json`);
     const reports = (await S.fs.list(`${q}/reports`)).filter((x) => x.kind === 'file').map((x) => x.name);
     const output = await listFilesDeep(`${q}/output`, 2);
     const inbox = [];
@@ -305,7 +310,7 @@ async function loadAll() {
       if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null }); }
     }
     const knowledge = (await S.fs.list('knowledge')).some((x) => x.name === `${q}.md`);
-    quests.push({ id: q, plan, request, reports, output, inbox, knowledge });
+    quests.push({ id: q, plan, request, draft, reports, output, inbox, knowledge });
   }
   quests.sort((a, b) => b.id.localeCompare(a.id));
   return { requests, quests };
@@ -329,7 +334,15 @@ function derive(q) {
   const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 80)) || q.id;
   const d = { id: q.id, title, asks: [], info: null, todos: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q };
   const inboxHas = (type, todo, choice) => q.inbox.some((x) => x.type === type && (todo == null || x.todo === todo) && (choice == null || x.choice === choice));
-  if (!p) { d.label = '分解中'; d.cls = 'sd-run'; d.info = 'decomposing'; return d; }
+  if (!p) {
+    const qs = q.draft && Array.isArray(q.draft.questions) ? q.draft.questions : [];
+    if (qs.length) {
+      d.asks.push({ kind: 'questions', key: `${q.id}:questions`, label: '質問', qs, sent: inboxHas('answers') });
+      d.label = d.asks[0].sent ? '分解中' : '質問あり'; d.cls = d.asks[0].sent ? 'sd-run' : 'sd-turn'; d.me = d.asks[0].sent ? '—' : '質問';
+      return d;
+    }
+    d.label = '分解中'; d.cls = 'sd-run'; d.info = 'decomposing'; return d;
+  }
   d.todos = p.todos.map((t) => {
     const st = TSTATE[t.state] || [t.state, 'sd-wait'];
     const draft = !p.approved && t.state === 'pending';
@@ -365,6 +378,7 @@ function buildModel(raw) {
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
+  if (a.kind === 'questions') return '依頼についての質問';
   if (a.kind === 'confirm') return `${a.todo.id}「${a.todo.title}」の実行前の確認`;
   if (a.kind === 'result') return `${a.todo.id}「${a.todo.title}」`;
   return `${a.todo.id} ができなかったため、進め方の判断`;
@@ -436,7 +450,7 @@ function ganttOf(q) {
 function stampEl(label, cls) { return h('span', { class: `stamp ${cls}` }, label); }
 
 function sentNote(key) {
-  return S.sent[key] ? h('p', { class: 'saved', role: 'status' }, '送りました。チャットで「完了」と伝えてください。') : null;
+  return S.sent[key] ? h('p', { class: 'saved', role: 'status' }, HANDOFF) : null;
 }
 function bindKey(el, key) { el.dataset.key = key; return el; }
 function textarea(key, attrs) { const e = h('textarea', attrs); e.value = S.form[key] || ''; return bindKey(e, key); }
@@ -452,7 +466,19 @@ function letterFor(qd, a) {
   const k = a.key;
   if (a.sent) return h('section', { class: 'letter sentbox' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '送信済み'),
     h('h3', null, `${a.kind === 'approve' ? '計画の承認' : askText(qd, a)}を送りました`),
-    h('p', null, 'チャットで「完了」と伝えると、読み取って進みます。'));
+    h('p', null, '/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。'));
+  if (a.kind === 'questions') {
+    return h('section', { class: 'letter', 'aria-label': '質問' }, seal('問'),
+      h('div', { class: 'kick' }, '聞きたいことがあります'), h('h3', null, '依頼の内容で、確かめたいことがあります'),
+      h('p', null, '答えると、地図師が計画を描きます。選べるものは選び、ほかにあれば書いてください。'),
+      a.qs.map((x, i) => h('div', { class: 'qa' },
+        h('span', { class: 'lbl' }, `${i + 1}. ${x.text}`),
+        (x.options || []).map((o) => radio(`${k}:q${i}r`, `${k}:q${i}`, o, o + (x.recommended === o ? '（おすすめ）' : ''), '', '', x.recommended || '')),
+        x.reason ? h('p', { class: 'fine' }, 'おすすめの理由：' + x.reason) : null,
+        h('label', { class: 'fine', for: `${k}:n${i}` }, 'ほかにあれば'), textarea(`${k}:n${i}`, { id: `${k}:n${i}`, rows: '2' }))),
+      h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'answers', answers: a.qs.map((x, i) => ({ q: x.text, choice: S.form[`${k}:q${i}`] !== undefined ? S.form[`${k}:q${i}`] : (x.recommended || ''), note: (S.form[`${k}:n${i}`] || '').trim() })) }, k) }, '答えを送る')),
+      sentNote(k));
+  }
   if (a.kind === 'approve') {
     return h('section', { class: 'letter', 'aria-label': '計画の承認' }, seal('印'),
       h('div', { class: 'kick' }, 'お願い：承認'), h('h3', null, 'この計画で進めてよいですか'),
@@ -477,7 +503,7 @@ function letterFor(qd, a) {
       h('label', { class: 'lbl', for: k + 'memo' }, '一言メモ（任意）'), textarea(memo, { id: k + 'memo' }),
       h('span', { class: 'lbl' }, '記録の添付（任意）'), fl, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
       h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendResult(qd.id, t, k) }, '結果を送る')),
-      h('p', { class: 'fine', style: 'margin:10px 0 0' }, '送ると ', code(`${qd.id}/inbox/`), ' に保存されます。そのあと、チャットで「完了」と伝えてください。'), sentNote(k));
+      h('p', { class: 'fine', style: 'margin:10px 0 0' }, '送ると ', code(`${qd.id}/inbox/`), ' に保存されます。/guild:quest が動いていれば、すぐ進みます。'), sentNote(k));
   }
   if (a.kind === 'confirm') {
     const t = a.todo;
@@ -507,7 +533,7 @@ function letterFor(qd, a) {
 
 function infoLetter(qd) {
   if (qd.info === 'decomposing') return h('section', { class: 'letter' }, seal('分'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '分解中'), h('h3', null, '依頼を受け付けました'), h('p', null, '地図師が道のりを描いています。まだ計画はありません。進まないときは、チャットで ', code('/guild:quest'), ' と送ってください。'));
-  if (qd.info === 'replan') return h('section', { class: 'letter' }, seal('直'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '計画を直しています'), h('h3', null, '計画の作り直しを待っています'), h('p', null, 'チャットで ', code('/guild:quest'), ' と送ると、地図師が計画を作り直します。'));
+  if (qd.info === 'replan') return h('section', { class: 'letter' }, seal('直'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '計画を直しています'), h('h3', null, '計画の作り直しを待っています'), h('p', null, '/guild:quest が動いていれば、地図師がすぐ作り直します。動いていなければ、チャットで ', code('/guild:quest'), ' と送ってください。'));
   if (qd.info === 'aborted') return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '中止'), h('h3', null, 'この依頼は中止されました'), h('p', null, 'できていた成果物は ', code(`${qd.id}/output/`), ' に残っています。'));
   if (qd.info === 'finished') {
     return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
@@ -586,14 +612,14 @@ function composer() {
     h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '出す')),
     more, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
-    S.newSaved ? h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。下の一覧に「受付待ち」で入っています。チャットで /guild:quest と送ると、受け付けます。`) : null);
+    S.newSaved ? h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。下の一覧に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`) : null);
 }
 
 function ledger(m) {
   const sel = S.sel;
   const rows = [h('div', { class: 'lh', role: 'row' }, h('span', null, 'ID'), h('span', null, '依頼'), h('span', null, '状態'), h('span', null, '進み'), h('span', null, 'あなたの番'))];
   for (const r of m.requests) rows.push(h('div', { class: 'lr plain', role: 'row' }, h('span', { class: 'id' }, r.id),
-    h('span', null, r.text.split('\n')[0].slice(0, 80), h('span', { class: 'sub', style: 'display:block' }, 'チャットで /guild:quest と送ると、受け付けます。')),
+    h('span', null, r.text.split('\n')[0].slice(0, 80), h('span', { class: 'sub', style: 'display:block' }, '/guild:quest が動いていれば受け付けます。動いていなければ、チャットで /guild:quest と送ってください。')),
     h('span', null, stampEl('受付待ち', 'sd-wait')), h('span', null, '—'), h('span', null, '—')));
   for (const qd of m.quests) {
     rows.push(h('button', { type: 'button', class: 'lr' + (qd.id === sel ? ' sel' : ''), role: 'row', onclick: () => { S.sel = qd.id; S.tq = qd.id; render(); } },
@@ -662,14 +688,14 @@ function helpTab() {
   return h('div', { class: 'grid2' },
     sec('使い方', h('ol', null,
       h('li', null, h('b', null, '依頼を書く。'), '「掲示板」の上の欄に内容を書いて、「出す」を押します。'),
-      h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります。足りないことは、選択式で聞かれます。'),
+      h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります（動いている間は、新しい依頼を自動で受け付けます）。足りないことは、この画面の「質問」の手紙で聞かれます。'),
       h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられて、「道のり」が出ます。承認はこの1回だけです。'),
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
       h('li', null, h('b', null, '受け取る。'), '完了すると、納品物の場所が出ます。'))),
     sec('印の見方', h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
     sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['道のり', 'Todo の順序。前提が済んだものから進みます。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['やめる', '失敗した Todo を計画から外すこと。続く Todo もやめるか、進めるかを選べます。'], ['ノウハウ', '完了した依頼から、成功・失敗・業務知識を記録したもの。次の依頼で使われます。']])),
     sec('困ったとき', h('div', { class: 'faq' },
-      faq('結果を送ったのに、進まない', 'チャットで「完了」と伝えてください。送った内容は ', code('guild/'), ' の中に保存されていて、チャットで伝えると読み取って進みます。'),
+      faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
       faq('保存できないとき', '送る内容が画面に出て、「コピー」で複写できます。チャットに貼ってください。'),
       faq('間違えて承認した', 'チャットで「計画を直したい」と伝えてください。実行が始まる前なら、計画を作り直せます。'),
@@ -799,6 +825,9 @@ function demoTree(scene) {
     failed: [['done'], ['failed'], ['blocked']], done: [['done'], ['done'], ['done']]
   }[scene] || [['done'], ['waiting_user'], ['pending']];
   const approved = scene !== 'plan';
+  if (scene === 'questions') {
+    return { config: J({ python: 'python' }), requests: {}, Q001: { 'request.json': J({ text: '社内の議事録テンプレートを見直したい' }), reports: { 'plan-draft.json': J({ quest: 'Q001', title: '議事録テンプレートの見直し', todos: [], questions: [{ text: '見直す対象は、どのテンプレートですか', options: ['週次定例の議事録', '全社会議の議事録', '両方'], recommended: '両方', reason: '依頼文からは、どちらか分からないため、まず両方を見るのが安全です。' }, { text: '納品物は、どの形がよいですか', options: ['比較表だけ', '新しいテンプレート案まで'], recommended: '新しいテンプレート案まで', reason: '「見直す」には、案を出すことまで含まれると考えられます。' }] }) }, output: {}, inbox: {} } };
+  }
   const h1 = [{ t: at(70), event: 'adopted' }];
   if (approved) h1.push({ t: at(69), event: 'approved' }, { t: at(69), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(68), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(67), id: 'T1', event: 'passed', from: 'review', to: 'done' });
   if (scene === 'human') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' });

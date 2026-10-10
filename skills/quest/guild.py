@@ -7,6 +7,9 @@ adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を�
 guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
 guild.py new ROOT [R…]: ROOT/guild/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む。
 guild.py requests ROOT: 受付待ちの依頼を一覧する。
+guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
+guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
+guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
 エラーは終了コード 1。
 """
 import datetime
@@ -15,6 +18,7 @@ import os
 import re
 import shutil
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -314,12 +318,65 @@ def new_quest(root, request_id=None):
     return out
 
 
+def arrivals(root):
+    """依頼主がボードから送ったが、まだ取り込んでいないものを返す（inbox の JSON と、受付待ちの依頼）。"""
+    gdir = Path(root) / "guild"
+    out = []
+    if gdir.is_dir():
+        for q in sorted(gdir.glob("Q[0-9]*")):
+            inbox = q / "inbox"
+            if inbox.is_dir():
+                for f in sorted(inbox.glob("*.json")):
+                    out.append({"kind": "inbox", "quest": q.name, "file": f.name})
+        req = gdir / "requests"
+        if req.is_dir():
+            for f in sorted(req.glob("R*.json")):
+                out.append({"kind": "request", "id": f.stem})
+    return out
+
+
+def wait_for(root, seconds, interval=1.0):
+    """依頼主の入力（または新しい依頼）が届くまで待つ。すでに届いていれば、すぐ返す。"""
+    start = time.monotonic()
+    while True:
+        a = arrivals(root)
+        waited = round(time.monotonic() - start, 1)
+        if a:
+            return {"arrived": a, "waited": waited, "timeout": False}
+        if waited >= seconds:
+            return {"arrived": [], "waited": waited, "timeout": True}
+        time.sleep(interval)
+
+
+def take_answers(qdir):
+    """計画がまだない依頼の inbox から、質問への回答（type が answers）を取り出して done/ に移す。"""
+    inbox = Path(qdir) / "inbox"
+    got = []
+    if inbox.is_dir():
+        for f in sorted(inbox.glob("*.json")):
+            d = load_json(f)
+            if d.get("type") == "answers":
+                got.append(d)
+                (inbox / "done").mkdir(exist_ok=True)
+                shutil.move(str(f), str(inbox / "done" / f.name))
+    return got
+
+
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "wait", "arrivals", "answers"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
     try:
+        if cmd in ("wait", "arrivals", "answers"):
+            if cmd == "wait":
+                result = wait_for(path, float(argv[3]) if len(argv) > 3 else 540)
+            elif cmd == "arrivals":
+                result = arrivals(path)
+            else:
+                result = take_answers(path)
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
         if cmd in ("init", "new", "requests"):
             if cmd == "init":
                 result = init_guild(path)

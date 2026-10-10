@@ -413,6 +413,65 @@ class InitAndNewTest(unittest.TestCase):
         self.assertEqual(json.loads(r.stdout)["quest"], "Q001")
 
 
+class WaitTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.q = guild.new_quest(self.root)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def put_inbox(self, name, data):
+        (Path(self.q["dir"]) / "inbox" / name).write_text(json.dumps(data), encoding="utf-8")
+
+    def test_arrivals_lists_inbox_and_requests(self):
+        self.assertEqual(guild.arrivals(self.root), [])
+        self.put_inbox("a.json", {"type": "approve"})
+        (self.root / "guild" / "requests" / "R20261010-1.json").write_text("{}", encoding="utf-8")
+        a = guild.arrivals(self.root)
+        self.assertEqual(a, [{"kind": "inbox", "quest": "Q001", "file": "a.json"}, {"kind": "request", "id": "R20261010-1"}])
+
+    def test_done_and_rejected_are_not_arrivals(self):
+        (Path(self.q["dir"]) / "inbox" / "done").mkdir()
+        (Path(self.q["dir"]) / "inbox" / "done" / "x.json").write_text("{}", encoding="utf-8")
+        self.assertEqual(guild.arrivals(self.root), [])
+
+    def test_wait_times_out(self):
+        r = guild.wait_for(self.root, 0.3, interval=0.1)
+        self.assertTrue(r["timeout"])
+        self.assertEqual(r["arrived"], [])
+
+    def test_wait_returns_at_once_when_something_is_there(self):
+        self.put_inbox("a.json", {"type": "approve"})
+        r = guild.wait_for(self.root, 5, interval=0.1)
+        self.assertFalse(r["timeout"])
+        self.assertLess(r["waited"], 1)
+
+    def test_wait_notices_a_file_that_arrives_later(self):
+        import threading
+        threading.Timer(0.3, lambda: self.put_inbox("b.json", {"type": "approve"})).start()
+        r = guild.wait_for(self.root, 5, interval=0.1)
+        self.assertFalse(r["timeout"])
+        self.assertEqual(r["arrived"][0]["file"], "b.json")
+
+    def test_take_answers_moves_only_answers(self):
+        self.put_inbox("a.json", {"type": "answers", "answers": [{"q": "どれ", "choice": "A", "note": ""}]})
+        self.put_inbox("b.json", {"type": "approve"})
+        got = guild.take_answers(self.q["dir"])
+        self.assertEqual(got[0]["answers"][0]["choice"], "A")
+        self.assertTrue((Path(self.q["dir"]) / "inbox" / "done" / "a.json").exists())
+        self.assertTrue((Path(self.q["dir"]) / "inbox" / "b.json").exists())
+
+    def test_cli_wait_and_answers(self):
+        run = lambda *a: subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), *a], capture_output=True, text=True, encoding="utf-8")
+        r = run("wait", str(self.root), "0.5")
+        self.assertEqual(r.returncode, 0)
+        self.assertTrue(json.loads(r.stdout)["timeout"])
+        self.assertEqual(json.loads(run("answers", self.q["dir"]).stdout), [])
+
+
 class BoardContractTest(unittest.TestCase):
     """ボード（board.html）が inbox に書く JSON を、guild.py がそのまま受け取れる。
     形は、ボードを実際に動かして書き出させたもの（承認・直す・中止・確認・結果・失敗の判断4種）。"""
