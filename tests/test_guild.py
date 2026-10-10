@@ -618,6 +618,31 @@ class AcceptTest(unittest.TestCase):
         self.assertFalse(p.get("accepted"))
 
 
+class FormatTest(unittest.TestCase):
+    """納品物の形式。未対応の形式は検査で落ちる。"""
+
+    def test_default_is_md_and_unknown_is_rejected(self):
+        self.assertEqual(guild.validate(plan(todo("T1")), TR), [])
+        p = plan(todo("T1"))
+        p["format"] = "pptx"
+        self.assertTrue(any("format" in e for e in guild.validate(p, TR)))
+        p["format"] = "md"
+        self.assertEqual(guild.validate(p, TR), [])
+
+    def test_adopt_carries_format(self):
+        with tempfile.TemporaryDirectory() as d:
+            q = Path(d) / "Q001"
+            (q / "reports").mkdir(parents=True)
+            draft = {"quest": "Q001", "title": "t", "format": "md", "todos": [
+                {"id": "T1", "title": "x", "kind": "auto", "deps": [], "deliverable": True,
+                 "criteria": {"viewpoint": "a", "pass_line": "b", "check": "c"}}]}
+            (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+            guild.adopt(q / "plan.json", TR)
+            saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved["format"], "md")
+        self.assertTrue(saved["todos"][0]["deliverable"])
+
+
 class BoardContractTest(unittest.TestCase):
     """ボード（board.html）が inbox に書く JSON を、guild.py がそのまま受け取れる。
     形は、ボードを実際に動かして書き出させたもの（承認・直す・中止・確認・結果・失敗の判断4種）。"""

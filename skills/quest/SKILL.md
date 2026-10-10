@@ -46,6 +46,7 @@ disable-model-invocation: true
    - 依頼文（`<dir>/request.json`）、素材（`<dir>/inputs/`）
    - 依頼のフォルダ、ノウハウの置き場（`guild/knowledge/`）
    - 出力先：`<dir>/reports/plan-draft.json`
+   - 納品物の形式（`<dir>/request.json` の `format`。なければ `md`）
    - 質問への回答があるとき、またはやり直しのときは、その内容（下の3・4）
 2. `plan-draft.json` を読む。
    - `questions` が空でなければ、そこで止める。ボードが `plan-draft.json` を読んで、質問の手紙を出す。あなたは何もしない（手順4で、回答の到着を待つ）。
@@ -91,7 +92,7 @@ disable-model-invocation: true
 
 ## 5. 納品
 
-依頼が `complete`（依頼主が受け取った）になったら、納品物の一覧（`<dir>/output/` の場所と、各 Todo の報告の場所）をチャットで短く伝える。ボードの「完了」の手紙にも出る。納品物は Obsidian の Markdown 記法で書かれている。依頼にファイルの置き場の指定があれば、このとき `output/` から指定の場所へコピーする（コピーしたことを伝える）。成果物の置き場は、実行中はいつも `output/<id>/`。
+依頼が `complete`（依頼主が受け取った）になったら、納品物（`deliverable: true` の Todo の成果物。1つにまとめた資料）の場所をチャットで短く伝える。途中の Todo の成果物は材料であり、納品物ではない。ボードの「完了」の手紙にも出る。納品物は Obsidian の Markdown 記法で書かれている。依頼にファイルの置き場の指定があれば、このとき `output/` から指定の場所へコピーする（コピーしたことを伝える）。成果物の置き場は、実行中はいつも `output/<id>/`。
 
 ## 6. 記録
 

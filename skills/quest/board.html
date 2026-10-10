@@ -142,9 +142,9 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .h2{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN',serif;font-size:20px;margin:0 0 2px}
 .err{color:var(--ng);font-size:13.5px;font-weight:700;margin:8px 0 0}
 .linkbtn{font:inherit;font-size:13.5px;min-height:34px;border:0;background:transparent;color:var(--gold);text-decoration:underline;cursor:pointer;padding:0 6px}
-.reader{position:fixed;inset:0;background:rgba(20,10,10,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+.reader{position:fixed;inset:0;background:rgba(20,10,10,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
 .rbox{background:var(--paper2);border:2px solid var(--brass);border-radius:6px;max-width:820px;width:100%;max-height:86vh;overflow:auto;padding:16px 20px}
-.files{margin:0 0 10px;padding-left:20px}.files li{margin:3px 0}
+.files{margin:0 0 10px;padding-left:20px}.files li{margin:5px 0}.files .pcopy{margin-left:10px;font:inherit;font-size:12px;padding:1px 8px;border:1px solid var(--brass);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}
 .rhead{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
 .rbox pre{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0 0 8px}
 input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
@@ -270,13 +270,20 @@ const DB = {
   async put(v) { const db = await DB.open(); return new Promise((res, rej) => { const tx = db.transaction('h', 'readwrite'); tx.objectStore('h').put(v, 'dir'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
 };
 
+// 納品物の形式。available が false のものは、まだ作れない（選べない）
+const FORMATS = [
+  { key: 'md', label: 'Markdown', ext: '.md', available: true },
+  { key: 'docx', label: 'Word', ext: '.docx', available: false },
+  { key: 'xlsx', label: 'Excel', ext: '.xlsx', available: false },
+  { key: 'pptx', label: 'PowerPoint', ext: '.pptx', available: false }
+];
 const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。';
 
 // ============================================================ 状態
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0,
-  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, view: 'talk', role: 'all',
+  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all',
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -487,6 +494,25 @@ function answerOf(x, form, k, i) {
   if (x.multi) { const a = form[key] !== undefined ? form[key] : asList(x.recommended); return { q: x.text, choice: a.join('、'), choices: a, note }; }
   return { q: x.text, choice: form[key] !== undefined ? form[key] : (x.recommended || ''), note };
 }
+// 納品物は、依頼主に渡す資料（地図師が deliverable の印を付けた Todo の成果物）。途中の成果物は材料
+function deliverables(qd) {
+  const p = qd.q.plan, all = qd.q.output;
+  const ids = p ? p.todos.filter((t) => t.deliverable).map((t) => t.id) : [];
+  if (!ids.length) return { main: all, rest: [] };
+  const mine = (f) => ids.some((i) => f.startsWith(`${qd.id}/output/${i}/`));
+  return { main: all.filter(mine), rest: all.filter((f) => !mine(f)) };
+}
+function fileRow(f) {
+  return h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, f.replace(/^Q\d+\/output\//, '')),
+    h('button', { type: 'button', class: 'pcopy', 'aria-label': `${f} のパスをコピー`, onclick: () => copyText('guild/' + f, 'パス') }, 'パスをコピー'));
+}
+function deliverableBlock(qd) {
+  const d = deliverables(qd), fmt = FORMATS.find((x) => x.key === ((qd.q.plan && qd.q.plan.format) || 'md'));
+  return [
+    d.main.length ? h('ul', { class: 'files' }, d.main.map(fileRow)) : h('p', null, '納品物のファイルはありません（報告だけです）。'),
+    fmt ? h('p', { class: 'fine', style: 'margin:0 0 8px' }, `形式：${fmt.label}（${fmt.ext}）　パスは、プロジェクトのフォルダからの位置です。`) : null,
+    d.rest.length ? h('details', null, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'files' }, d.rest.map(fileRow))) : null];
+}
 function seal(ch, cls) { return h('div', { class: `seal ${cls || ''}`, 'aria-hidden': 'true' }, ch); }
 
 function letterFor(qd, a) {
@@ -508,11 +534,11 @@ function letterFor(qd, a) {
       sentNote(k));
   }
   if (a.kind === 'accept') {
-    const files = qd.q.output, ck = k + ':fix';
+    const ck = k + ':fix';
     return h('section', { class: 'letter', 'aria-label': '受け取りの確認' }, seal('検'),
       h('div', { class: 'kick' }, 'お願い：受け取りの確認'), h('h3', null, '納品物を確かめて、受け取ってください'),
-      h('p', null, 'すべての Todo が合格基準を満たしました。ただし、依頼主が受け取るまでは、完了になりません。ファイル名を押すと中身が開き、コピーもできます。'),
-      files.length ? h('ul', { class: 'files' }, files.map((f) => h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, f.replace(/^Q\d+\/output\//, ''))))) : h('p', null, '納品物のファイルはありません（報告だけです）。'),
+      h('p', null, 'すべての Todo が合格基準を満たしました。ただし、依頼主が受け取るまでは、完了になりません。納品物（まとめた資料）を、ファイル名を押して開いて確かめてください。'),
+      deliverableBlock(qd),
       h('label', { class: 'lbl', for: ck }, '直してほしいこと（直す場合だけ）'),
       textarea(ck, { id: ck, placeholder: '例：T2 の比較表に、価格の列を足してほしい' }),
       h('div', { class: 'btns' },
@@ -579,7 +605,7 @@ function infoLetter(qd) {
   if (qd.info === 'aborted') return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '中止'), h('h3', null, 'この依頼は中止されました'), h('p', null, 'できていた成果物は ', code(`${qd.id}/output/`), ' に残っています。'));
   if (qd.info === 'finished') {
     return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
-      qd.q.output.length ? h('ul', { class: 'files' }, qd.q.output.map((f) => h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, f.replace(/^Q\d+\/output\//, ''))))) : h('p', null, '納品物のファイルはありません。'),
+      deliverableBlock(qd),
       qd.q.knowledge ? h('p', { class: 'fine', style: 'margin:0' }, '成功したこと、失敗したこと、業務知識を ', code(`knowledge/${qd.id}.md`), ' に記録しました。次の依頼で役に立てます。') : null);
   }
   return null;
@@ -605,7 +631,8 @@ function questDetail(qd) {
     letters, info,
     qd.todos.length ? [h('h3', { class: 'sec' }, '道のり'),
       h('div', { class: 'way', 'aria-label': 'Todo の順序' }, qd.todos.flatMap((t, i) => [i ? h('span', { 'aria-hidden': 'true' }, '→') : null, h('span', { class: 'n' + (t.kind === 'human' ? ' h' : '') }, `${t.id} ${t.title.length > 12 ? t.title.slice(0, 12) + '…' : t.title}`)])),
-      todoTags(qd)] : null);
+      todoTags(qd),
+      h('h3', { class: 'sec' }, 'タイムライン'), ganttBlock(qd)] : null);
 }
 
 // ============================================================ 描画（画面）
@@ -646,8 +673,10 @@ function composer() {
   ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendRequest(); } });
   const fl = h('input', { type: 'file', multiple: true, 'aria-label': '素材ファイル' }); fl.dataset.fileKey = 'new';
   const due = h('input', { type: 'date', 'aria-label': '期限' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
-  const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・期限をつける（任意）'),
-    h('div', { class: 'qopts' }, fl, h('label', { class: 'sub' }, '期限　', due)));
+  const fmt = h('select', { 'aria-label': '納品物の形式' }, FORMATS.map((f) => { const o = h('option', { value: f.key }, f.available ? `${f.label}（${f.ext}）` : `${f.label}（${f.ext}）：対応予定`); if (!f.available) o.disabled = true; return o; }));
+  fmt.value = S.form['new:format'] || 'md'; bindKey(fmt, 'new:format');
+  const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・期限・納品物の形式を選ぶ（任意）'),
+    h('div', { class: 'qopts' }, fl, h('label', { class: 'sub' }, '期限　', due), h('label', { class: 'sub' }, '納品物の形式　', fmt)));
   more.addEventListener('toggle', () => { S.open.qmore = more.open; });
   const fnames = (S.files.new || []).map((f) => f.name);
   return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
@@ -685,17 +714,30 @@ function boardTab() {
   return out;
 }
 
+function ganttBlock(x) {
+  const g = ganttOf(x);
+  if (!g) return h('p', { class: 'sub' }, '記録がまだありません（計画ができて、動き出すと表示されます）。');
+  const pc = (v) => ((v - g.lo) / (g.hi - g.lo) * 100).toFixed(2) + '%';
+  const lab = (ms) => { const d = new Date(ms); return (g.long ? `${d.getMonth() + 1}/${d.getDate()} ` : '') + `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  return h('section', { class: 'gantt', 'aria-label': `${x.id} のタイムライン` },
+    h('div', { class: 'legend2', 'aria-label': '凡例' }, [['adv', '冒険者が作業中'], ['app', '鑑定中'], ['me', 'あなたの番（待ち）'], ['conf', '実行前の確認待ち'], ['ng', 'できず'], ['blk', '止まっている']].map(([k, l]) => h('span', null, h('i', { class: `sw s-${k}` }), l))),
+    h('div', { class: 'gx' }, h('div', { class: 'glab' }), h('div', { class: 'gtrack axis' }, g.ticks.map((v) => h('span', { class: 'tick', style: `left:${pc(v)}` }, lab(v))))),
+    g.rows.map((r) => h('div', { class: 'gx' }, h('div', { class: 'glab' }, h('b', null, r.label), h('span', { class: 'sub' }, r.sub)),
+      h('div', { class: 'gtrack' }, r.bars.map((b) => { const w = (b.b - b.a) / (g.hi - g.lo) * 100;
+        return h('span', { class: `bar2 s-${b.kind}`, style: `left:${pc(b.a)};width:${Math.max(w, 0.6).toFixed(2)}%`, title: `${b.text}　${lab(b.a)}〜${lab(b.b)}` }, w >= 9 ? b.text : ''); }),
+        g.now != null ? h('span', { class: 'nowline', style: `left:${pc(g.now)}` }) : null))),
+    g.now != null ? h('p', { class: 'sub', style: 'margin:6px 0 0;padding-left:150px' }, '赤い線が「いま」です。') : null);
+}
+
 function talkTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
   const scopeIds = S.tq === 'all' ? m.quests.map((x) => x.id) : [S.tq || (m.quests[0] && m.quests[0].id)].filter(Boolean);
   const chips = h('div', { class: 'filters', 'aria-label': '依頼の選択' }, h('span', { class: 'sub', style: 'align-self:center' }, '依頼：'),
     m.quests.map((x) => h('button', { type: 'button', class: S.tq === x.id ? 'on' : '', onclick: () => { S.tq = x.id; render(); } }, `${x.id} ${x.title.slice(0, 14)}`, x.asks.some((a) => !a.sent) ? ' ●あなたの番' : '')),
     h('button', { type: 'button', class: S.tq === 'all' ? 'on' : '', onclick: () => { S.tq = 'all'; render(); } }, 'すべての依頼'));
-  const views = h('div', { class: 'filters', 'aria-label': '表示' }, h('span', { class: 'sub', style: 'align-self:center' }, '表示：'),
-    [['talk', '会話の流れ'], ['gantt', 'タイムライン']].map(([k, l]) => h('button', { type: 'button', class: S.view === k ? 'on' : '', onclick: () => { S.view = k; render(); } }, l)));
-  const out = [h('h2', { class: 'h2' }, '記録'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、会話の流れと、時間の帯（タイムライン）で見られます。'), chips, views];
+  const out = [h('h2', { class: 'h2' }, '記録'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、新しい順に見られます。時間の帯（タイムライン）は、「掲示板」の依頼の「道のり」の下にあります。'), chips];
   const sel = scopeIds.map((id) => m.quests.find((x) => x.id === id)).filter(Boolean);
-  if (S.view === 'talk') {
+  {
     const roles = [['all', 'すべて'], ['cart', '地図師'], ['adv', '冒険者'], ['app', '鑑定士'], ['me', 'あなた'], ['note', '指摘だけ']];
     out.push(h('div', { class: 'filters', 'aria-label': '役の絞り込み' }, h('span', { class: 'sub', style: 'align-self:center' }, '役：'),
       roles.map(([k, l]) => h('button', { type: 'button', class: S.role === k ? 'on' : '', onclick: () => { S.role = k; render(); } }, l))));
@@ -706,22 +748,6 @@ function talkTab() {
       out.push(h('div', { class: 'msg' }, h('div', { class: 'who' }, h('span', { class: `av ${r[2]}` }, r[0]), r[1]),
         h('div', { class: 'bub' }, h('time', null, fmtTime(x.t)), h('p', null, S.tq === 'all' ? h('span', { class: 'qtag' }, x.q) : null, x.text),
           x.report ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(x.q, x.report); } }, '報告を読む：' + x.report) : null))); }
-  } else {
-    out.push(h('div', { class: 'legend2', 'aria-label': '凡例' }, [['adv', '冒険者が作業中'], ['app', '鑑定中'], ['me', 'あなたの番（待ち）'], ['conf', '実行前の確認待ち'], ['ng', 'できず'], ['blk', '止まっている']].map(([k, l]) => h('span', null, h('i', { class: `sw s-${k}` }), l))));
-    let any = false;
-    for (const x of sel) {
-      const g = ganttOf(x); if (!g) continue; any = true;
-      const pc = (v) => ((v - g.lo) / (g.hi - g.lo) * 100).toFixed(2) + '%';
-      const lab = (ms) => { const d = new Date(ms); return (g.long ? `${d.getMonth() + 1}/${d.getDate()} ` : '') + `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-      out.push(h('section', { class: 'gantt', 'aria-label': x.id }, h('h3', null, `${x.id}　${x.title.slice(0, 40)}`),
-        h('div', { class: 'gx' }, h('div', { class: 'glab' }), h('div', { class: 'gtrack axis' }, g.ticks.map((v) => h('span', { class: 'tick', style: `left:${pc(v)}` }, lab(v))))),
-        g.rows.map((r) => h('div', { class: 'gx' }, h('div', { class: 'glab' }, h('b', null, r.label), h('span', { class: 'sub' }, r.sub)),
-          h('div', { class: 'gtrack' }, r.bars.map((b) => { const w = (b.b - b.a) / (g.hi - g.lo) * 100;
-            return h('span', { class: `bar2 s-${b.kind}`, style: `left:${pc(b.a)};width:${Math.max(w, 0.6).toFixed(2)}%`, title: `${b.text}　${lab(b.a)}〜${lab(b.b)}` }, w >= 9 ? b.text : ''); }),
-            g.now != null ? h('span', { class: 'nowline', style: `left:${pc(g.now)}` }) : null))),
-        g.now != null ? h('p', { class: 'sub', style: 'margin:6px 0 0;padding-left:150px' }, '赤い線が「いま」です。') : null));
-    }
-    if (!any) out.push(h('p', { class: 'sub' }, '記録がまだありません（計画ができて、動き出すと表示されます）。'));
   }
   out.push(h('p', { class: 'fine', style: 'margin-top:14px' }, '答える用件は、「掲示板」の手紙に出ます。', h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px;margin-left:8px', onclick: () => { S.tab = 'board'; render(); } }, '掲示板へ')));
   return out;
@@ -752,7 +778,7 @@ function helpTab() {
 function reader() {
   if (!S.reader) return null;
   return h('div', { class: 'reader', role: 'dialog', 'aria-label': '報告' }, h('div', { class: 'rbox' },
-    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text) }, 'コピー'), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
+    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '中身') }, '中身をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyText('guild/' + S.reader.path, 'パス') }, 'パスをコピー'), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
     S.toast ? h('p', { class: 'saved', role: 'status' }, S.toast) : null,
     h('pre', null, S.reader.text)));
 }
@@ -826,7 +852,7 @@ async function sendRequest() {
   const id = 'R' + stamp14(new Date()).replace(/^(\d{8})/, '$1-'), files = S.files.new || [], names = [];
   try {
     for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
-    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, due: S.form['new:due'] || null, files: names, created: new Date().toISOString() }, null, 2));
+    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, due: S.form['new:due'] || null, format: S.form['new:format'] || 'md', files: names, created: new Date().toISOString() }, null, 2));
   } catch (e) { S.newError = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); return; }
   S.form['new:text'] = ''; S.form['new:due'] = ''; S.files.new = []; S.newSaved = id;
   await refresh(true);
@@ -835,8 +861,8 @@ async function openFile(full) {
   const t = await S.fs.readText(full);
   S.toast = ''; S.reader = { path: full, text: t == null ? '(読めませんでした)' : t }; render();
 }
-async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); S.toast = 'コピーしました。'; } catch (e) { S.toast = 'コピーできませんでした。選択してコピーしてください。'; }
+async function copyText(text, what) {
+  try { await navigator.clipboard.writeText(text); S.toast = `${what || '中身'}をコピーしました。`; } catch (e) { S.toast = 'コピーできませんでした。選択してコピーしてください。'; }
   render();
 }
 async function openReport(q, path) {
@@ -923,12 +949,13 @@ function demoTree(scene) {
       { t: at(day + 98), id: 'T2', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 80), id: 'T2', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 79), id: 'T2', event: 'passed', from: 'review', to: 'done' },
       { t: at(day + 79), id: 'T3', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 60), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 58), id: 'T3', event: 'passed', from: 'review', to: 'done' }],
     todos: [mk('T1', 'テンプレートを3種類集める', 'auto', [], 'done', t1c), mk('T2', '観点表をつくって比べる', 'auto', ['T1'], 'done', t1c), mk('T3', '比較表にまとめる', 'auto', ['T2'], 'done', t1c)] };
+  p1.todos[2].deliverable = true; p2.todos[2].deliverable = true;
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   return {
     config: J({ python: 'python' }), knowledge: { 'Q002.md': T('## 成功したこと\n- 見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
-    Q001: { 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') } }, inbox: {} },
+    Q001: { 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }
   };
 }

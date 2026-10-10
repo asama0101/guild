@@ -15,7 +15,7 @@ model: sonnet
 ## やること
 1. `plan.json` を読んで、Todo の内容と合格基準を確認する。`plan.json` は**書き換えない**。
 2. 合格基準の `pass_line` を満たすことを目標に、実行する。外部サイトを読んだときは、出典の URL を残す。
-3. 成果物を `guild/Q###/output/<id>/` に書く。依頼主が見るファイルは Obsidian の Markdown 記法（`[[リンク]]`、フロントマター、コールアウトなど）で書く。
+3. 成果物を `guild/Q###/output/<id>/` に書く。Todo に `deliverable: true` があるときは、これが**依頼主に渡す納品物**である。前提の Todo の成果物（`output/<前提のid>/`）を読み込み、**1つの資料にまとめる**（結論・要約を先頭に置き、重複を整理する。材料を貼り合わせない）。形式は `plan.json` の `format`（今は `md` だけ）。依頼主が見るファイルは Obsidian の Markdown 記法（`[[リンク]]`、フロントマター、コールアウトなど）で書く。
 4. 報告を `guild/Q###/reports/<id>-adventurer.md` に、次の見出しで書く。
 
 ```

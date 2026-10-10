@@ -22,6 +22,8 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# 納品物の形式（拡張子）。作れるようになったものから足す
+FORMATS = {"md": ".md"}
 SATISFIED = ("done", "skipped")
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
 
@@ -93,6 +95,8 @@ def validate(plan, tr):
     todos = plan.get("todos")
     if not isinstance(todos, list) or not todos:
         return ["todos がありません"]
+    if plan.get("format", "md") not in FORMATS:
+        errs.append(f"format が未対応です: {plan.get('format')}（対応: {', '.join(FORMATS)}）")
     ids = [t.get("id") for t in todos]
     if len(set(ids)) != len(ids) or None in ids:
         errs.append("id が重複しているか、欠けています")
@@ -277,7 +281,7 @@ def adopt(plan_path, tr):
     if not isinstance(todos, list):
         raise GuildError("plan-draft.json に todos がありません")
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
-            "status": "active", "todos": [], "history": [{"t": now(), "event": "adopted"}]}
+            "status": "active", "format": draft.get("format", "md"), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
     for t in todos:
         if not isinstance(t, dict):
             raise GuildError("todos の要素が不正です")
@@ -351,7 +355,7 @@ def list_requests(root):
                 d = load_json(f)
             except GuildError:
                 continue
-            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "files": d.get("files", [])})
+            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "format": d.get("format", "md"), "files": d.get("files", [])})
     return out
 
 
