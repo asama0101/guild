@@ -41,7 +41,8 @@ body{margin:0;background:var(--bg)}
 .qrow{display:flex;gap:10px;align-items:stretch}
 .qrow textarea{flex:1 1 auto;min-height:60px;margin:0}
 .qgo{flex:0 0 96px;min-height:60px;font-size:16px}
-.qmore{margin-top:6px}
+.qmore{margin-top:10px}
+.qmain{grid-template-columns:repeat(auto-fit,minmax(220px,max-content));margin:12px 0 0}
 .qopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 20px;align-items:start;margin-top:10px}
 .saved{margin:8px 0 0;font-size:13.5px;color:var(--ok);font-weight:700}
 .legend2{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--sub);margin:0 0 12px}
@@ -744,17 +745,16 @@ function composer() {
   fmt.value = S.form['new:format'] || 'md'; bindKey(fmt, 'new:format');
   const tplSel = h('select', { 'aria-label': '納品物のテンプレート' }, h('option', { value: '' }, 'なし'), ((S.model && S.model.templates) || []).map((n) => { const o = h('option', { value: 'templates/' + n }, tplReadable(n) ? n : `${n}（今は使えません）`); if (!tplReadable(n)) o.disabled = true; return o; }));
   tplSel.value = S.form['new:template'] || ''; bindKey(tplSel, 'new:template');
-  const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・期限・納品物の形式とテンプレートを選ぶ（任意）'),
+  const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・テンプレートをつける（任意）'),
     h('div', { class: 'qopts' },
       fld('素材ファイル', fileField('new', '素材ファイル', true)),
-      fld('期限', due),
-      fld('納品物の形式', fmt),
       h('div', { class: 'fld wide' }, h('span', { class: 'cap' }, '納品物のテンプレート'), h('div', { class: 'trow' }, tplSel, h('span', { class: 'fine' }, 'または、新しく追加：'), fileField('newtpl', 'テンプレートを追加', false)),
         h('span', { class: 'fine' }, (S.files.newtpl || []).length && !tplReadable(S.files.newtpl[0].name) ? '今は読めない形式です。保存だけして、この依頼では使いません。' : 'Word・Excel・PowerPoint なども追加できます（今は文字のファイルだけ使えます）。'))));
   more.addEventListener('toggle', () => { S.open.qmore = more.open; });
   return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
     h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼'),
     h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '依頼')),
+    h('div', { class: 'qopts qmain' }, fld('期限', due), fld('納品物の形式', fmt)),
     more,
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
     S.newNote ? h('p', { class: 'saved', role: 'status' }, S.newNote) : null,
