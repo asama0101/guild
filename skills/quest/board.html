@@ -275,6 +275,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 // ============================================================ 状態
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
+  composing: false, lastInput: 0,
   tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, view: 'talk', role: 'all',
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
@@ -776,7 +777,8 @@ function render() {
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox()].filter(Boolean));
   window.scrollTo(0, sy);
-  if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus(); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
+  if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus({ preventScroll: true }); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
+  window.scrollTo(0, sy);
 }
 
 // ============================================================ 書き込み
@@ -824,11 +826,19 @@ async function openReport(q, path) {
 }
 
 // ============================================================ つなぐ・更新
+function isEditing() {
+  if (S.composing) return true;
+  const ae = document.activeElement;
+  const field = ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && ae.type !== 'radio' && ae.type !== 'checkbox' && ae.type !== 'file'));
+  return !!field && Date.now() - S.lastInput < 10000;
+}
 async function refresh(force) {
   if (S.conn !== 'ok' || S.busy) return;
   S.busy = true;
   try {
     const raw = await loadAll(); const key = JSON.stringify(raw);
+    // 入力中（変換中を含む）は画面を作り直さない。作り直すと、変換が確定せず、位置も動く。入力が止まった次の更新で反映する
+    if (!force && key !== S.dataKey && isEditing()) return;
     if (force || key !== S.dataKey) {
       S.dataKey = key; S.model = buildModel(raw);
       const ids = S.model.quests.map((x) => x.id);
@@ -907,7 +917,10 @@ function demoTree(scene) {
 // ============================================================ 起動
 async function start() {
   const params = new URLSearchParams(location.search);
+  document.addEventListener('compositionstart', () => { S.composing = true; });
+  document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); });
   document.addEventListener('input', (e) => {
+    S.lastInput = Date.now();
     const k = e.target.dataset && e.target.dataset.key;
     if (k && e.target.type !== 'radio' && e.target.type !== 'checkbox') S.form[k] = e.target.value;
   });
