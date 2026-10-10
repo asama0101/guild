@@ -1,15 +1,15 @@
 # 実装計画：transitions.json と guild.py
 
-（最初の段階の計画。現状は、`skills/quest/SKILL.md` と `guild.py` を正とする。のちに `adopt`・`init`・`new`・`requests`・`arrivals`・`wait`・`answers` を足し、状態の移り変わりを `plan.json` の `history` に記録するようにした。）
+（最初の段階の計画。現在のコマンドの一覧は `docs/graph-format.md`、動きは `skills/quest/SKILL.md` と `guild.py` を正とする。）
 
-`docs/graph-format.md` の形式を実装する最初の段階。プラグインの外枠（skills / agents / commands）は含めない。標準ライブラリだけで書く。
+`docs/graph-format.md` の形式を実装する最初の段階。プラグインの外枠（skills / agents）は含めない。標準ライブラリだけで書く。
 
 ## 作るもの
 
 | ファイル | 内容 |
 |---|---|
 | `skills/quest/transitions.json` | 状態遷移グラフ（共通1つ＋`human` の差分） |
-| `skills/quest/guild.py` | `validate`・`sync`・`next`・`advance`・`ingest`（のちに `adopt`・`init`・`new`・`requests`・`arrivals`・`wait`・`answers`） |
+| `skills/quest/guild.py` | `validate`・`sync`・`next`・`advance`・`ingest` |
 | `tests/test_guild.py` | unittest（標準ライブラリ） |
 
 ## 状態とイベント
