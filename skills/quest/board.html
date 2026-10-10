@@ -650,7 +650,7 @@ function talkTab() {
     h('button', { type: 'button', class: S.tq === 'all' ? 'on' : '', onclick: () => { S.tq = 'all'; render(); } }, 'すべての依頼'));
   const views = h('div', { class: 'filters', 'aria-label': '表示' }, h('span', { class: 'sub', style: 'align-self:center' }, '表示：'),
     [['talk', '会話の流れ'], ['gantt', 'タイムライン']].map(([k, l]) => h('button', { type: 'button', class: S.view === k ? 'on' : '', onclick: () => { S.view = k; render(); } }, l)));
-  const out = [h('h2', { class: 'h2' }, 'やりとり'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、会話の流れと、時間の帯（タイムライン）で見られます。'), chips, views];
+  const out = [h('h2', { class: 'h2' }, '記録'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、会話の流れと、時間の帯（タイムライン）で見られます。'), chips, views];
   const sel = scopeIds.map((id) => m.quests.find((x) => x.id === id)).filter(Boolean);
   if (S.view === 'talk') {
     const roles = [['all', 'すべて'], ['cart', '地図師'], ['adv', '冒険者'], ['app', '鑑定士'], ['me', 'あなた'], ['note', '指摘だけ']];
@@ -730,7 +730,7 @@ function render() {
   const app = document.getElementById('app');
   const ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.key : null, ss = ae && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
   const sy = window.scrollY;
-  const tabs = [['board', '掲示板'], ['talk', 'やりとり'], ['help', 'ヘルプ']];
+  const tabs = [['board', '掲示板'], ['talk', '記録'], ['help', 'ヘルプ']];
   const body = S.tab === 'board' ? boardTab() : S.tab === 'talk' ? talkTab() : helpTab();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l))),
