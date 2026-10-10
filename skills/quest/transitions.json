@@ -1,0 +1,31 @@
+{
+  "states": ["pending", "blocked", "awaiting_confirm", "running", "waiting_user", "review", "done", "failed", "skipped"],
+  "initial": "pending",
+  "terminal": ["done", "skipped"],
+  "max_retries": 2,
+  "transitions": [
+    {"from": "pending", "event": "deps_done", "to": "awaiting_confirm", "guard": "confirm"},
+    {"from": "pending", "event": "deps_done", "to": "running", "guard": "no_confirm"},
+    {"from": "pending", "event": "dep_failed", "to": "blocked"},
+    {"from": "blocked", "event": "unblock", "to": "pending"},
+    {"from": "awaiting_confirm", "event": "confirmed", "to": "running"},
+    {"from": "awaiting_confirm", "event": "declined", "to": "failed"},
+    {"from": "running", "event": "submitted", "to": "review"},
+    {"from": "review", "event": "passed", "to": "done"},
+    {"from": "review", "event": "rejected", "to": "running", "guard": "retries_left"},
+    {"from": "review", "event": "rejected", "to": "failed", "guard": "no_retries_left"},
+    {"from": "failed", "event": "skip", "to": "skipped"}
+  ],
+  "kinds": {
+    "auto": {"override": []},
+    "human": {
+      "override": [
+        {"from": "pending", "event": "deps_done", "to": "waiting_user"},
+        {"from": "waiting_user", "event": "submitted", "to": "review"},
+        {"from": "waiting_user", "event": "reported_failed", "to": "failed"},
+        {"from": "review", "event": "rejected", "to": "waiting_user", "guard": "retries_left"},
+        {"from": "review", "event": "rejected", "to": "failed", "guard": "no_retries_left"}
+      ]
+    }
+  }
+}
