@@ -283,6 +283,9 @@ const FORMATS = [
   { key: 'xlsx', label: 'Excel', ext: '.xlsx', available: false },
   { key: 'pptx', label: 'PowerPoint', ext: '.pptx', available: false }
 ];
+// テンプレートは、どんな形式でも追加できる。今、中身を読んで使えるのは、文字のファイルだけ
+const TEMPLATE_READABLE = ['.md', '.markdown', '.txt', '.csv'];
+const tplReadable = (n) => TEMPLATE_READABLE.some((e) => String(n).toLowerCase().endsWith(e));
 const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。';
 
 // ============================================================ 状態
@@ -699,14 +702,13 @@ function composer() {
   const due = h('input', { type: 'date', 'aria-label': '期限' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
   const fmt = h('select', { 'aria-label': '納品物の形式' }, FORMATS.map((f) => { const o = h('option', { value: f.key }, f.available ? `${f.label}（${f.ext}）` : `${f.label}（${f.ext}）：対応予定`); if (!f.available) o.disabled = true; return o; }));
   fmt.value = S.form['new:format'] || 'md'; bindKey(fmt, 'new:format');
-  const curFmt = FORMATS.find((f) => f.key === (S.form['new:format'] || 'md')) || FORMATS[0];
-  const tplSel = h('select', { 'aria-label': '納品物のテンプレート' }, h('option', { value: '' }, 'なし'), ((S.model && S.model.templates) || []).map((n) => h('option', { value: 'templates/' + n }, n)));
+  const tplSel = h('select', { 'aria-label': '納品物のテンプレート' }, h('option', { value: '' }, 'なし'), ((S.model && S.model.templates) || []).map((n) => { const o = h('option', { value: 'templates/' + n }, tplReadable(n) ? n : `${n}（今は使えません）`); if (!tplReadable(n)) o.disabled = true; return o; }));
   tplSel.value = S.form['new:template'] || ''; bindKey(tplSel, 'new:template');
-  const tplFile = h('input', { type: 'file', accept: curFmt.ext, 'aria-label': 'テンプレートを追加' }); tplFile.dataset.fileKey = 'newtpl';
+  const tplFile = h('input', { type: 'file', 'aria-label': 'テンプレートを追加' }); tplFile.dataset.fileKey = 'newtpl';
   const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・期限・納品物の形式とテンプレートを選ぶ（任意）'),
     h('div', { class: 'qopts' }, fl, h('label', { class: 'sub' }, '期限　', due), h('label', { class: 'sub' }, '納品物の形式　', fmt),
-      h('label', { class: 'sub' }, '納品物のテンプレート　', tplSel), h('label', { class: 'sub' }, `または、新しく追加（${curFmt.ext}）　`, tplFile),
-      (S.files.newtpl || []).length ? h('span', { class: 'fine' }, '追加するファイル：' + S.files.newtpl[0].name) : null));
+      h('label', { class: 'sub' }, '納品物のテンプレート　', tplSel), h('label', { class: 'sub' }, 'または、新しく追加（Word・Excel・PowerPoint なども追加できます）　', tplFile),
+      (S.files.newtpl || []).length ? h('span', { class: 'fine' }, '追加するファイル：' + S.files.newtpl[0].name + (tplReadable(S.files.newtpl[0].name) ? '' : '（今は読めない形式です。保存だけして、この依頼では使いません）')) : null));
   more.addEventListener('toggle', () => { S.open.qmore = more.open; });
   const fnames = (S.files.new || []).map((f) => f.name);
   return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
@@ -714,6 +716,7 @@ function composer() {
     h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '依頼')),
     more, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
+    S.newNote ? h('p', { class: 'saved', role: 'status' }, S.newNote) : null,
     S.newSaved ? h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。下の一覧に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`) : null);
 }
 
@@ -817,7 +820,7 @@ function delivTab() {
   }
   out.push(h('h3', { class: 'sec' }, 'テンプレート'), h('p', { class: 'sub', style: 'margin:0 0 8px' }, '納品物の型です。新しい依頼で選ぶと、納品物はこの型に沿ってまとめられます。追加は、「掲示板」の「新しい依頼」からできます。'));
   const tpls = (m.templates || []).filter((n) => hit(q, n));
-  out.push(tpls.length ? h('ul', { class: 'files' }, tpls.map((n) => fileRow('templates/' + n, n))) : h('p', { class: 'sub' }, 'テンプレートはまだありません。'));
+  out.push(tpls.length ? h('ul', { class: 'files' }, tpls.map((n) => [fileRow('templates/' + n, n + (tplReadable(n) ? '' : '（今は使えません）'))])) : h('p', { class: 'sub' }, 'テンプレートはまだありません。'));
   return out;
 }
 
@@ -1005,19 +1008,19 @@ async function sendResult(qid, t, key) {
 }
 async function sendRequest() {
   const text = (S.form['new:text'] || '').trim();
-  S.newError = ''; S.newSaved = '';
+  S.newError = ''; S.newSaved = ''; S.newNote = '';
   if (!text) { S.newError = '依頼の内容を書いてください。'; render(); return; }
   if (S.conn !== 'ok') { S.newError = '保存先につながっていません。上の「フォルダを選ぶ」から選んでください。'; render(); return; }
   const id = 'R' + stamp14(new Date()).replace(/^(\d{8})/, '$1-'), files = S.files.new || [], names = [];
-  const fmtKey = S.form['new:format'] || 'md', fmtInfo = FORMATS.find((f) => f.key === fmtKey) || FORMATS[0];
+  const fmtKey = S.form['new:format'] || 'md';
   const tfile = (S.files.newtpl || [])[0];
   let template = S.form['new:template'] || null;
-  if (tfile && !tfile.name.toLowerCase().endsWith(fmtInfo.ext)) { S.newError = `テンプレートは、納品物の形式（${fmtInfo.label}、${fmtInfo.ext}）のファイルを選んでください。`; render(); return; }
   try {
     if (tfile) {
       const have = (S.model && S.model.templates) || [];
       let tn = tfile.name; if (have.includes(tn)) tn = tn.replace(/(\.[^.]*)?$/, `-${stamp14(new Date())}$1`);
-      await S.fs.writeBlob(`templates/${tn}`, tfile); template = `templates/${tn}`;
+      await S.fs.writeBlob(`templates/${tn}`, tfile); template = tplReadable(tn) ? `templates/${tn}` : null;
+      if (!template) S.newNote = `テンプレート ${tn} を保存しました。形式が今は読めないため、この依頼では使いません。`;
     }
     for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
     await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, due: S.form['new:due'] || null, format: fmtKey, template, files: names, created: new Date().toISOString() }, null, 2));

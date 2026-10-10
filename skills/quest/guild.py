@@ -24,6 +24,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 # 納品物の形式（拡張子）。作れるようになったものから足す
 FORMATS = {"md": ".md"}
+# 納品物のテンプレートとして、中身を読んで使える形式（文字のファイル）
+TEMPLATE_READABLE = (".md", ".markdown", ".txt", ".csv")
 SATISFIED = ("done", "skipped")
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
 
@@ -287,6 +289,8 @@ def adopt(plan_path, tr):
         tpl = plan_path.parent.parent / str(template)
         if len(parts) != 2 or parts[0] != "templates" or parts[1] in ("", ".", "..") or not tpl.is_file():
             raise GuildError(f"template が不正か、見つかりません: {template}")
+        if not str(template).lower().endswith(TEMPLATE_READABLE):
+            raise GuildError(f"template の形式は、今は読めません: {template}（読める形式: {', '.join(TEMPLATE_READABLE)}）")
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
             "status": "active", "format": draft.get("format", "md"), **({"template": template} if template else {}), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
     for t in todos:

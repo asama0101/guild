@@ -664,6 +664,13 @@ class TemplateTest(unittest.TestCase):
             saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
         self.assertEqual(saved["template"], "templates/週次.md")
 
+    def test_adopt_rejects_unreadable_template_format(self):
+        with tempfile.TemporaryDirectory() as d:
+            q = self.make(d, "templates/週次.docx")
+            (Path(d) / "guild" / "templates" / "週次.docx").write_bytes(b"PK")
+            with self.assertRaises(guild.GuildError):
+                guild.adopt(q / "plan.json", TR)
+
     def test_adopt_rejects_missing_or_outside_template(self):
         for bad in ("templates/ない.md", "../config.json", "templates/../config.json", "/etc/passwd", "board.html"):
             with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
