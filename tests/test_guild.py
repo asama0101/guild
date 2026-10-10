@@ -191,6 +191,21 @@ class IngestTest(unittest.TestCase):
         self.run_ingest(p)
         self.assertEqual(p["status"], "aborted")
 
+    def test_drop_skips_failed_and_all_dependents(self):
+        p = plan(todo("T1", state="done"), todo("T2", state="failed", deps=["T1"]),
+                 todo("T3", state="blocked", deps=["T2"]), todo("T4", state="blocked", deps=["T3"]),
+                 todo("T5", deps=["T1"]))
+        self.put("a.json", {"type": "decision", "todo": "T2", "choice": "drop"})
+        self.run_ingest(p)
+        self.assertEqual(states(p), {"T1": "done", "T2": "skipped", "T3": "skipped", "T4": "skipped", "T5": "pending"})
+        guild.sync(p, TR)
+        self.assertEqual(states(p)["T5"], "running")  # 無関係な系統は進む
+
+    def test_drop_requires_failed_todo(self):
+        p = plan(todo("T1", state="blocked"))
+        self.put("a.json", {"type": "decision", "todo": "T1", "choice": "drop"})
+        self.assertEqual(len(self.run_ingest(p)["rejected"]), 1)
+
     def test_invalid_input_goes_to_rejected(self):
         p = plan(todo("T1"))
         before = copy.deepcopy(p)

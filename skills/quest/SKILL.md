@@ -62,7 +62,7 @@ disable-model-invocation: true
    | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、冒険者の報告と成果物の場所を書く。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected` |
    | `confirm` | 実行前の確認。Todo の内容と、なぜ確認が要るか（不可逆・外部公開）を見せ、`AskUserQuestion` で「実行する／しない」を聞く。`inbox/` に `{"type": "confirm", "todo": "<id>", "ok": true/false}` を書き、`ingest` |
    | `waiting_user` | 依頼主の実行が要る Todo。何をしてほしいか、合格基準、結果の返し方（できた／できなかった、記録は任意）を伝え、返事を待つ。返事を `inbox/` に `{"type": "result", "todo": "<id>", "ok": true/false, "note": "…", "files": []}` と書き、`ingest` |
-   | `blocked` / `failed` | 失敗の判断。何が失敗し、何が止まっているかを伝え、`AskUserQuestion` で「その Todo を除いて続行／計画を直す／中止」を聞く。除いて続行：`{"type": "decision", "todo": "<id>", "choice": "skip"}`。直す：`{"type": "decision", "choice": "replan"}` のあと、手順2から。中止：`{"type": "decision", "choice": "abort"}` |
+   | `blocked` / `failed` | 失敗の判断。何が失敗し、何が止まっているか、各選択でどうなるかを伝え、`AskUserQuestion` で選んでもらう。①失敗した Todo だけを除く（後続は前提を満たしたとみなして進む。その Todo が後続の前提条件〔了承など〕なら、後続は条件なしで進むので注意を添える）：`{"type": "decision", "todo": "<id>", "choice": "skip"}`。②失敗した Todo と、それに依存する後続もやめる（後続は実行しない）：`{"type": "decision", "todo": "<id>", "choice": "drop"}`。③計画を直す：`{"type": "decision", "choice": "replan"}` のあと、手順2から。④中止：`{"type": "decision", "choice": "abort"}` |
 
    冒険者が成果物を書き込めず、全文を返り値で返してきたときは、その全文を**手を加えずに**、指定されたファイル名で `<dir>/output/<id>/` に保存してから `submitted` を送る。保存したことを、鑑定士へのメッセージにも書く。
 
@@ -90,6 +90,7 @@ disable-model-invocation: true
 ノウハウは、次の依頼で地図師が読む。書式は、溜まってから見直す（今は固めない）。依頼主の好みや確かめていない推測は、事実として書かない。
 
 ## 守ること
+- 確認（`confirm`）・依頼主の実行結果（`result`）・失敗の判断（`decision`）は、依頼主が実際に答えた内容だけを `inbox/` に書く。答えを推測して書かない。答えが要るのに得られないときは、聞いて待つ。
 - 依頼主への確認は、不可逆・外部公開の操作と、失敗の判断だけ。それ以外は進める。
 - 秘密情報（トークン、キー）を報告やノウハウに書かない。
 - 状況を伝えるときは、何をしたか・次に何をするか・依頼主にしてほしいことを短く書く。

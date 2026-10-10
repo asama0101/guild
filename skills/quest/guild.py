@@ -186,6 +186,19 @@ def apply_input(plan, data, tr):
         t["output"] = {"note": data.get("note", ""), "files": data.get("files", [])}
     elif kind == "decision" and data.get("choice") == "skip":
         apply_event(t, "skip", tr)
+    elif kind == "decision" and data.get("choice") == "drop":
+        # 失敗した Todo と、それに(間接にでも)依存する後続をやめる。後続は実行しない
+        apply_event(t, "skip", tr)
+        dropped, grew = {t["id"]}, True
+        while grew:
+            grew = False
+            for u in plan["todos"]:
+                if u["id"] not in dropped and any(d in dropped for d in u.get("deps", [])):
+                    dropped.add(u["id"])
+                    grew = True
+        for u in plan["todos"]:
+            if u["id"] in dropped and u["state"] in ("pending", "blocked"):
+                u["state"] = "skipped"
     else:
         raise GuildError(f"入力が不正です: {kind} {data.get('choice', '')}")
 
