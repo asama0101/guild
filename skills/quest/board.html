@@ -624,7 +624,7 @@ function connectBox() {
 }
 
 function composer() {
-  const key = 'new:text', ta = textarea(key, { id: 'qreq', rows: '2', placeholder: '困りごとや、やってほしいことを書いて、「依頼する」を押してください（Ctrl + Enter でも送れます）' });
+  const key = 'new:text', ta = textarea(key, { id: 'qreq', rows: '2', placeholder: '困りごとや、やってほしいことを書いて、「依頼」を押してください（Ctrl + Enter でも送れます）' });
   ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendRequest(); } });
   const fl = h('input', { type: 'file', multiple: true, 'aria-label': '素材ファイル' }); fl.dataset.fileKey = 'new';
   const due = h('input', { type: 'date', 'aria-label': '期限' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
@@ -634,7 +634,7 @@ function composer() {
   const fnames = (S.files.new || []).map((f) => f.name);
   return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
     h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼'),
-    h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '依頼する')),
+    h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '依頼')),
     more, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
     S.newSaved ? h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。下の一覧に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`) : null);
@@ -651,7 +651,7 @@ function ledger(m) {
       h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me)));
     if (S.openQ[qd.id]) rows.push(questDetail(qd));
   }
-  if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「依頼する」を押してください。')));
+  if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「依頼」を押してください。')));
   return h('div', { class: 'ledger', role: 'table', 'aria-label': '依頼の一覧' }, rows);
 }
 
@@ -715,7 +715,7 @@ function helpTab() {
   const faq = (q, ...a) => h('details', null, h('summary', null, q), h('p', null, ...a));
   return h('div', { class: 'grid2' },
     sec('使い方', h('ol', null,
-      h('li', null, h('b', null, '依頼を書く。'), '「掲示板」の上の欄に内容を書いて、「依頼する」を押します。'),
+      h('li', null, h('b', null, '依頼を書く。'), '「掲示板」の上の欄に内容を書いて、「依頼」を押します。'),
       h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります（動いている間は、新しい依頼を自動で受け付けます）。足りないことは、この画面の「質問」の手紙で聞かれます。'),
       h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられて、「道のり」が出ます。承認はこの1回だけです。'),
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
