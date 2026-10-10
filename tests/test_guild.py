@@ -208,6 +208,78 @@ class IngestTest(unittest.TestCase):
         self.assertEqual(self.run_ingest(plan(todo("T1"))), {"applied": [], "rejected": []})
 
 
+class AdoptTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.path = self.dir / "plan.json"
+        (self.dir / "reports").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def draft(self, data):
+        (self.dir / "reports" / "plan-draft.json").write_text(json.dumps(data), encoding="utf-8")
+
+    def good(self):
+        # 状態や承認を勝手に書いてきても、取り込み時に初期化される
+        t1 = todo("T1", state="done", retries=5, output={"x": 1})
+        t2 = todo("T2", kind="human", deps=["T1"])
+        return {"quest": "Q1", "title": "題", "approved": True, "todos": [t1, t2]}
+
+    def test_adopt_resets_state(self):
+        self.draft(self.good())
+        r = guild.adopt(self.path, TR)
+        p = json.loads(self.path.read_text(encoding="utf-8"))
+        self.assertEqual(r, {"adopted": 2, "replaced": False})
+        self.assertFalse(p["approved"])
+        self.assertEqual(states(p), {"T1": "pending", "T2": "pending"})
+        self.assertEqual((p["todos"][0]["retries"], p["todos"][0]["output"]), (0, None))
+
+    def test_adopt_fills_missing_deps(self):
+        d = self.good()
+        del d["todos"][0]["deps"]
+        self.draft(d)
+        guild.adopt(self.path, TR)
+        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["todos"][0]["deps"], [])
+
+    def test_adopt_rejects_invalid_draft_and_writes_nothing(self):
+        d = self.good()
+        d["todos"][1]["deps"] = ["T9"]
+        self.draft(d)
+        with self.assertRaises(guild.GuildError):
+            guild.adopt(self.path, TR)
+        self.assertFalse(self.path.exists())
+
+    def test_adopt_missing_draft(self):
+        with self.assertRaises(guild.GuildError):
+            guild.adopt(self.path, TR)
+
+    def test_adopt_does_not_overwrite_active_plan(self):
+        self.draft(self.good())
+        self.path.write_text(json.dumps(plan(todo("T1"))), encoding="utf-8")
+        with self.assertRaises(guild.GuildError):
+            guild.adopt(self.path, TR)
+
+    def test_adopt_replan_keeps_previous(self):
+        self.draft(self.good())
+        old = plan(todo("T1", state="done"))
+        old["status"] = "replan"
+        self.path.write_text(json.dumps(old), encoding="utf-8")
+        r = guild.adopt(self.path, TR)
+        self.assertTrue(r["replaced"])
+        prev = json.loads((self.dir / "plan.prev.json").read_text(encoding="utf-8"))
+        self.assertEqual(prev["todos"][0]["state"], "done")
+        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["status"], "active")
+
+    def test_adopt_cli(self):
+        self.draft(self.good())
+        run = lambda: subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), "adopt",
+                                      str(self.path)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(run().returncode, 0)
+        self.assertEqual(run().returncode, 1)  # 2 回目は上書きしない
+
+
 class NextViewTest(unittest.TestCase):
     def test_view(self):
         p = plan(todo("T1", state="running"), todo("T2", state="waiting_user", kind="human"),

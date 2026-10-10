@@ -2,7 +2,8 @@
 """guild の実行エンジン（標準ライブラリだけ）。
 
 plan.json を書けるのはこのファイルだけ。遷移は transitions.json で決め、定義にない遷移はエラー。
-使い方: guild.py {validate|sync|next|ingest} PLAN / guild.py advance PLAN ID EVENT
+使い方: guild.py {adopt|validate|sync|next|ingest} PLAN / guild.py advance PLAN ID EVENT
+adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を作る（承認前の状態で）。
 エラーは終了コード 1。
 """
 import json
@@ -187,12 +188,46 @@ def apply_input(plan, data, tr):
         raise GuildError(f"入力が不正です: {kind} {data.get('choice', '')}")
 
 
+def adopt(plan_path, tr):
+    """reports/plan-draft.json（地図師の分解結果）を検査し、未承認の plan.json にする。"""
+    plan_path = Path(plan_path)
+    draft_path = plan_path.parent / "reports" / "plan-draft.json"
+    if not draft_path.exists():
+        raise GuildError(f"{draft_path} がありません")
+    old = None
+    if plan_path.exists():
+        old = load_json(plan_path)
+        if old.get("status") != "replan":
+            raise GuildError(f"{plan_path} がすでにあります（上書きしません。やり直すには replan の判断が要ります）")
+    draft = load_json(draft_path)
+    todos = draft.get("todos")
+    if not isinstance(todos, list):
+        raise GuildError("plan-draft.json に todos がありません")
+    plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
+            "status": "active", "todos": []}
+    for t in todos:
+        if not isinstance(t, dict):
+            raise GuildError("todos の要素が不正です")
+        item = dict(t, deps=list(t.get("deps", [])), state=tr["initial"], retries=0, output=None)
+        plan["todos"].append(item)
+    errs = validate(plan, tr)
+    if errs:
+        raise GuildError("plan-draft.json の検査に失敗しました: " + " / ".join(errs))
+    if old is not None:
+        shutil.copy2(plan_path, plan_path.with_name("plan.prev.json"))
+    save_plan(plan_path, plan)
+    return {"adopted": len(plan["todos"]), "replaced": old is not None}
+
+
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
     try:
+        if cmd == "adopt":
+            print(json.dumps(adopt(path, load_transitions()), ensure_ascii=False))
+            return 0
         plan, tr = load_json(path), load_transitions()
         if cmd == "validate":
             errs = validate(plan, tr)

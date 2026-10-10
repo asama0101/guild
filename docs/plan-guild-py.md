@@ -26,6 +26,7 @@
 
 ## コマンド
 
+- `adopt`: `reports/plan-draft.json` を検査し、承認前の `plan.json` にする。すでに `plan.json` があれば上書きしない（`status` が `replan` のときだけ、旧版を `plan.prev.json` に残して置き換える）。
 - `validate`: 参照切れ、循環、`criteria` の欠け、未知の `kind`・`state`、`human` の `confirm` を検出する。
 - `sync`: `deps_done` / `dep_failed` / `unblock` を、起きている Todo すべてに適用する（`approved` かつ `status` が `active` のときだけ）。変えた一覧を出す。
 - `next`: 読み取りだけ。`ready`（`running` で着手待ち）・`confirm`・`waiting_user`・`review`・`blocked`・`failed` を分けて返す。
