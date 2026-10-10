@@ -4,6 +4,8 @@
 plan.json を書けるのはこのファイルだけ。遷移は transitions.json で決め、定義にない遷移はエラー。
 使い方: guild.py {adopt|validate|sync|next|ingest} PLAN / guild.py advance PLAN ID EVENT
 adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を作る（承認前の状態で）。
+guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
+guild.py new ROOT: ROOT/guild/ に次の依頼のフォルダ（Q001…）を作る。
 エラーは終了コード 1。
 """
 import json
@@ -219,12 +221,40 @@ def adopt(plan_path, tr):
     return {"adopted": len(plan["todos"]), "replaced": old is not None}
 
 
+def init_guild(root):
+    """ROOT/guild/ を作り、この Python のパスを config.json に記録する。何度実行しても、既存の依頼は消さない。"""
+    gdir = Path(root) / "guild"
+    gdir.mkdir(parents=True, exist_ok=True)
+    (gdir / "knowledge").mkdir(exist_ok=True)
+    cfg_path = gdir / "config.json"
+    cfg = load_json(cfg_path) if cfg_path.exists() else {}
+    cfg["python"] = sys.executable
+    cfg["python_version"] = ".".join(map(str, sys.version_info[:3]))
+    save_plan(cfg_path, cfg)
+    return {"guild": str(gdir), "python": cfg["python"], "python_version": cfg["python_version"]}
+
+
+def new_quest(root):
+    """ROOT/guild/ に次の依頼のフォルダ（Q001, Q002, …）を作る。"""
+    gdir = Path(root) / "guild"
+    if not (gdir / "config.json").exists():
+        raise GuildError(f"{gdir} がありません（/guild:init を先に実行してください）")
+    nums = [int(p.name[1:]) for p in gdir.iterdir() if p.is_dir() and p.name[:1] == "Q" and p.name[1:].isdigit()]
+    qdir = gdir / f"Q{max(nums, default=0) + 1:03d}"
+    for sub in ("reports", "output", "inbox"):
+        (qdir / sub).mkdir(parents=True)
+    return {"quest": qdir.name, "dir": str(qdir), "plan": str(qdir / "plan.json")}
+
+
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
     try:
+        if cmd in ("init", "new"):
+            print(json.dumps((init_guild if cmd == "init" else new_quest)(path), ensure_ascii=False))
+            return 0
         if cmd == "adopt":
             print(json.dumps(adopt(path, load_transitions()), ensure_ascii=False))
             return 0

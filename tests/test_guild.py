@@ -280,6 +280,45 @@ class AdoptTest(unittest.TestCase):
         self.assertEqual(run().returncode, 1)  # 2 回目は上書きしない
 
 
+class InitAndNewTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_init_records_python_and_is_idempotent(self):
+        r = guild.init_guild(self.root)
+        cfg = json.loads((self.root / "guild" / "config.json").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["python"], sys.executable)
+        self.assertEqual(r["python"], sys.executable)
+        self.assertTrue((self.root / "guild" / "knowledge").is_dir())
+        q = guild.new_quest(self.root)
+        guild.init_guild(self.root)  # 再実行しても依頼は消えない
+        self.assertTrue(Path(q["dir"]).is_dir())
+
+    def test_new_requires_init(self):
+        with self.assertRaises(guild.GuildError):
+            guild.new_quest(self.root)
+
+    def test_new_numbers_quests_in_order(self):
+        guild.init_guild(self.root)
+        a, b = guild.new_quest(self.root), guild.new_quest(self.root)
+        self.assertEqual((a["quest"], b["quest"]), ("Q001", "Q002"))
+        for sub in ("reports", "output", "inbox"):
+            self.assertTrue((Path(b["dir"]) / sub).is_dir())
+        self.assertEqual(Path(b["plan"]), Path(b["dir"]) / "plan.json")
+
+    def test_cli(self):
+        run = lambda *a: subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), *a],
+                                        capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(run("new", str(self.root)).returncode, 1)
+        self.assertEqual(run("init", str(self.root)).returncode, 0)
+        r = run("new", str(self.root))
+        self.assertEqual(json.loads(r.stdout)["quest"], "Q001")
+
+
 class NextViewTest(unittest.TestCase):
     def test_view(self):
         p = plan(todo("T1", state="running"), todo("T2", state="waiting_user", kind="human"),
