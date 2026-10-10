@@ -155,11 +155,12 @@ select{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass)
 .fld{display:flex;flex-direction:column;gap:6px;min-width:0}
 .fld>.cap{font-weight:700;font-size:13px}
 .filebtn{position:relative;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer}
-.dz{display:flex;width:100%;justify-content:center;text-align:center;border:2px dashed #A9A9A9;border-radius:6px;background:#F2F2F2;padding:18px 14px;min-height:72px;box-sizing:border-box;transition:background .15s,border-color .15s}
-.dz:hover{background:#EAEAEA}
+.dz{display:flex;width:100%;justify-content:center;text-align:center;border:2px dashed var(--brass);border-radius:6px;background:var(--surface2);padding:18px 14px;min-height:72px;box-sizing:border-box;transition:background .15s,border-color .15s}
+.dz:hover{background:var(--head)}
 .dz.over{border-color:var(--ok);background:var(--sel-bg)}
-.dzmsg{font-size:13.5px;color:#555}
-.dz .btn{background:#fff;border-color:#9A9A9A;color:#333}
+.dzmsg{font-size:14px;color:var(--sub)}
+.dzlink{font-size:14px;font-weight:700;color:var(--gold);text-decoration:underline}
+.filebtn:focus-within .dzlink{outline:3px solid var(--brass);outline-offset:2px}
 .trow .ff{flex:1 1 300px}
 .ff{display:flex;flex-direction:column;gap:6px;min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -559,7 +560,7 @@ function fileField(key, label, multiple) {
   const cur = S.files[key] || [];
   const zone = h('label', { class: 'filebtn dz' },
     h('span', { class: 'dzmsg' }, cur.length ? 'ここにドロップして、追加・差し替え' : 'ここにファイルをドラッグ＆ドロップ、または'),
-    h('span', { class: 'btn ghost sm' }, cur.length ? '選び直す' : 'ファイルを選ぶ'), inp);
+    h('span', { class: 'dzlink' }, cur.length ? '選び直す' : 'ファイルを選ぶ'), inp);
   zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('over'); });
   zone.addEventListener('dragleave', () => zone.classList.remove('over'));
   zone.addEventListener('drop', (e) => {
