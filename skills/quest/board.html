@@ -154,6 +154,13 @@ select{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass)
 .fld{display:flex;flex-direction:column;gap:6px;min-width:0}
 .fld>.cap{font-weight:700;font-size:13px}
 .filebtn{position:relative;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer}
+.dz{display:flex;border:2px dashed var(--brass);border-radius:6px;background:var(--surface);padding:10px 14px;min-height:46px;box-sizing:border-box}
+.dz.over{border-color:var(--ok);background:var(--sel-bg)}
+.dzmsg{font-size:13px;color:var(--sub)}
+.ff{display:flex;flex-direction:column;gap:6px;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chipx{margin-left:6px;border:0;background:transparent;color:var(--sub);font:inherit;cursor:pointer;padding:0 2px}
+.chipx:hover{color:var(--ng)}
 .filebtn input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .filebtn .btn{display:inline-flex;align-items:center;box-sizing:border-box;min-height:34px;line-height:1.2}
 .fld.wide{grid-column:1/-1}.trow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}.trow select{min-width:240px}
@@ -545,9 +552,21 @@ function deliverableBlock(qd) {
 function fileField(key, label, multiple) {
   const inp = h('input', { type: 'file', 'aria-label': label }); if (multiple) inp.multiple = true;
   inp.dataset.fileKey = key;
-  const names = (S.files[key] || []).map((f) => f.name);
-  return h('label', { class: 'filebtn' }, h('span', { class: 'btn ghost sm' }, names.length ? '選び直す' : 'ファイルを選ぶ'), inp,
-    names.length ? names.map((n) => h('span', { class: 'chip' }, n)) : h('span', { class: 'fine' }, '選ばれていません'));
+  const cur = S.files[key] || [];
+  const zone = h('label', { class: 'filebtn dz' },
+    h('span', { class: 'dzmsg' }, cur.length ? 'ここにドロップして、追加・差し替え' : 'ここにファイルをドラッグ＆ドロップ、または'),
+    h('span', { class: 'btn ghost sm' }, cur.length ? '選び直す' : 'ファイルを選ぶ'), inp);
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault(); zone.classList.remove('over');
+    const got = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+    if (!got.length) return;
+    S.files[key] = multiple ? [...(S.files[key] || []), ...got] : got.slice(0, 1);
+    render();
+  });
+  const chips = cur.map((f, i) => h('span', { class: 'chip' }, f.name, h('button', { type: 'button', class: 'chipx', 'aria-label': `${f.name} を外す`, onclick: () => { S.files[key] = (S.files[key] || []).filter((_, n) => n !== i); render(); } }, '×')));
+  return h('div', { class: 'ff' }, zone, chips.length ? h('div', { class: 'chips' }, chips) : null);
 }
 const fld = (cap, ...ctrl) => h('div', { class: 'fld' }, h('span', { class: 'cap' }, cap), ...ctrl);
 function seal(ch, cls) { return h('div', { class: `seal ${cls || ''}`, 'aria-hidden': 'true' }, ch); }
@@ -1157,6 +1176,7 @@ function demoTree(scene) {
 async function start() {
   try { history.scrollRestoration = 'manual'; } catch (e) { /* 使えなくても続ける */ }
   const params = new URLSearchParams(location.search);
+  for (const ev of ['dragover', 'drop']) document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest('.dz')) e.preventDefault(); });
   document.addEventListener('compositionstart', () => { S.composing = true; });
   document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); const k = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key; if (k && k.startsWith('f:')) { S.form[k] = document.activeElement.value; render(); } });
   document.addEventListener('input', (e) => {
