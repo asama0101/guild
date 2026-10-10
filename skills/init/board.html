@@ -195,6 +195,8 @@ details.tk .inner { padding: 0 18px 14px; }
 .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
 .flow span { border: 1px solid var(--line); border-radius: 3px; padding: 2px 10px; background: var(--soft); }
 .flow span.me { border: 2px solid var(--ask); font-weight: bold; color: var(--ask); }
+.places { display: flex; flex-wrap: wrap; gap: 6px 24px; list-style: none; margin: 4px 0; padding: 0; }
+.roles td:first-child { white-space: nowrap; font-weight: bold; }
 .terms { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
 .terms div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
@@ -864,17 +866,6 @@ function scheduleBlock(gs) {
   box.add(grid, h('p', { class: 'note', text: `締切のある達成条件は ${rows.length} 件。間に合わないおそれのあるものは ${late} 件。` }));
   return box;
 }
-function recordBlock(gs) {
-  const box = h('div', {}, h('h3', {}, '記録'));
-  if (!gs.length) { box.add(h('p', { class: 'note', text: 'まだ記録は、ありません。' })); return box; }
-  gs.forEach((g, i) => {
-    const lines = (g.log || []).filter(e => e && e.text);
-    box.add(h('p', { style: 'margin:8px 0 2px;font-weight:bold', text: `${i + 1}. ${g.title}` }),
-      lines.length ? h('ul', { class: 'tl' }, lines.map(e => h('li', {}, h('time', { text: jpStamp(e.time) }), h('span', { text: e.text }))))
-        : h('p', { class: 'note', text: '（まだ記録は、ありません）' }));
-  });
-  return box;
-}
 function goalTable(q, gs) {
   if (!gs.length) return h('p', { class: 'muted', text: '達成条件は、まだありません。計画ができると、ここに出ます。' });
   const body = h('tbody');
@@ -945,7 +936,7 @@ function opsBlock(q, gs) {
     box.add(h('p', { class: 'note', text: 'このクエストは終わっています。操作はありません。' }));
   }
   box.add(h('h3', {}, '場所'),
-    h('ul', {}, [['納品物', 'output'], ['素材', 'input'], ['冒険日誌', 'adventure log']].map(([name, sub]) => h('li', {}, pathItem(name, `${q.dir}/${sub}`))),
+    h('ul', { class: 'places' }, [['納品物', 'output'], ['素材', 'input'], ['冒険日誌', 'adventure log']].map(([name, sub]) => h('li', {}, pathItem(name, `${q.dir}/${sub}`))),
       h('li', {}, pathItem('クエスト票', `${q.dir}/quest.md`))));
   box.add(renderUpload(q));
   return box;
@@ -990,7 +981,7 @@ function tkDetails(q) {
   const diag = h('div');
   inner.add(h('h3', {}, '目的'), h('p', { text: q.detail || q.title }),
     q.blocked_on === 'client' ? h('p', { class: 'warn', text: 'あなたの返事を待っています。「あなたがすること」を見てください。' }) : null,
-    h('h3', {}, '達成条件'), goalTable(q, gs), diag, scheduleBlock(gs), recordBlock(gs), todoBlock(q, gs), opsBlock(q, gs));
+    h('h3', {}, '達成条件'), goalTable(q, gs), diag, scheduleBlock(gs), todoBlock(q, gs), opsBlock(q, gs));
   det.add(inner);
   fillDiagram(diag, `diagrams/route-${q.id}.svg`, `diagrams/route-${q.id}.txt`);
   return det;
@@ -1339,6 +1330,16 @@ function renderSettings() {
     msg,
     ok ? h('div', { class: 'row' }, h('span', { class: 'note', text: `フォルダ：${S.root ? S.root.name : ''}` }), h('button', { type: 'button', class: 'ghost sm', onclick: pickFolder }, 'フォルダを選び直す')) : null);
 }
+const ROLES = [
+  ['受付嬢', '依頼を読み、目的・納品物の形・期限・素材の足りなさを、選択式で聞く（受付）'],
+  ['占い師', '依頼を達成条件に分け、合格基準・完成像・あなたにお願いすることを決める（分解）'],
+  ['冒険者', '素材を読み、事実だけを調べて持ち帰る（冒険）'],
+  ['錬金術師', '事実をもとに、納品物の中身（文章・分析・推論）を書く（冒険）'],
+  ['鍛冶師', '中身を Word・Excel・PowerPoint・PDF の器にする（必要なときだけ）'],
+  ['鑑定士', '合格基準で納品物の合否を決める（鑑定）'],
+  ['魔法使い', 'クエストが達成したあと、用語と取り決めを魔導書に覚える'],
+  ['吟遊詩人', 'クエストが達成したあと、bad の理由を教訓にし、あなたの好みを人物伝にまとめる'],
+];
 function renderGuide() {
   const terms = (states, labels) => h('div', { class: 'terms' }, states.map(s => h('div', {}, badge(s), h('span', { text: labels[s] }))));
   return h('div', { class: 'guide' }, renderSettings(),
@@ -1356,6 +1357,10 @@ function renderGuide() {
         h('tr', {}, h('td', { text: '質問' }), h('td', { text: '答える質問を全部表示。クエストと種類で絞れます' })),
         h('tr', {}, h('td', { text: '資料室・設計図・魔導書' }), h('td', { text: '共有の素材、会社のひな形（設計図）、覚えた用語と取り決め' })))),
       h('p', { class: 'note', text: '帯の下の「あなたの番」は、どのタブでも見えます。あなたが動く必要のあることを、ここに出します。' })),
+    h('div', { class: 'panel' }, h('h2', {}, 'ギルドの役'),
+      h('div', { class: 'scroll' }, h('table', { class: 'roles' }, h('tr', {}, h('th', { text: '役' }), h('th', { text: 'することと、いつ呼ばれるか' })),
+        ROLES.map(([n, t]) => h('tr', {}, h('td', { text: n }), h('td', { text: t }))))),
+      h('p', { class: 'note', text: 'あなたが話すのは、画面と /guild:quest だけです。役への指示と受け渡しは、ギルドマスター（/guild:quest）が行います。' })),
     h('div', { class: 'panel' }, h('h2', {}, '状態の言い方'),
       h('div', { class: 'row2' }, h('div', {}, h('b', { text: '達成条件' }), terms(GOAL_STATES, GOAL_LABELS)),
         h('div', {}, h('b', { text: 'クエスト' }), terms(QUEST_STATES, QUEST_LABELS))),
