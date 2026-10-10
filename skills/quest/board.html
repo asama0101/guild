@@ -770,7 +770,8 @@ function goCompose() {
 function render() {
   const app = document.getElementById('app');
   const ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.key : null, ss = ae && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
-  const sy = window.scrollY;
+  // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
+  const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const tabs = [['board', '掲示板'], ['talk', '記録'], ['help', 'ヘルプ']];
   const body = S.tab === 'board' ? boardTab() : S.tab === 'talk' ? talkTab() : helpTab();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
@@ -916,6 +917,7 @@ function demoTree(scene) {
 
 // ============================================================ 起動
 async function start() {
+  try { history.scrollRestoration = 'manual'; } catch (e) { /* 使えなくても続ける */ }
   const params = new URLSearchParams(location.search);
   document.addEventListener('compositionstart', () => { S.composing = true; });
   document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); });
