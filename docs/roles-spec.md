@@ -13,6 +13,7 @@
 | ギルドマスター | スキル本体（`/guild:quest`。サブエージェントではない） | 依頼の受け付け、`guild.py` の呼び出し、役の呼び出し、入力の到着の待機（質問・承認・確認・結果・判断はボードの手紙。チャットでは聞かない）、ノウハウの記録 | 全部 | 利用者のモデル |
 | 地図師（`cartographer`） | サブエージェント | 依頼を Todo に分解する。前提関係（`deps`）・種別（`auto`/`human`）・確認の印（`confirm`）・合格基準を決め、過去のノウハウを引く。曖昧な点は『聞くべきこと』として返す | `Read, Glob, Grep, Write` | `opus` |
 | 冒険者（`adventurer`） | サブエージェント | `auto` の Todo を実行する（調べる・書く）。報告を `reports/` に、成果物を `output/` に書く | `Read, Glob, Grep, WebSearch, WebFetch, Write, Edit` | `sonnet` |
+| 斥候（`scout`） | サブエージェント | 動的ページ（JavaScript で中身が出るページ）をブラウザで読み、文字を取って成果物にする。読むだけ（クリック・入力・ログインはしない）。地図師が `needs_browser: true` を付けた `auto` の Todo のときだけ、ギルドマスターが冒険者の代わりに呼ぶ。ブラウザが1つなので同時に1人まで | `Read, Glob, Grep, Write` と、plugin 同梱のブラウザ（`.mcp.json` の Playwright MCP）の読み取り系だけ：`browser_navigate, browser_snapshot, browser_wait_for, browser_press_key, browser_take_screenshot, browser_tabs, browser_close` | `sonnet` |
 | 鑑定士（`appraiser`） | サブエージェント | Todo の成果物を合格基準で判定し、`passed`/`rejected` と指摘を返す。成果物は直さない | `Read, Glob, Grep, Write` | `sonnet` |
 
 - 受付（聞き取り）は専任の役を置かない。地図師が『聞くべきこと』（`questions`）を `plan-draft.json` に書き、ボードが「質問」の手紙にして依頼主に出す。ギルドマスターは質問せず、回答を `guild.py answers` で取り出して地図師に渡す（Q7。のちに、質問はすべてボードで行うと決めた）。
@@ -99,5 +100,6 @@
 | Q9 | 鑑定士は成果物を直さず、判定と指摘だけ返す | 判定の独立性。 |
 | Q10 | 分解役は『地図師』 | 依存グラフを描く役割に合う。『占い師』は使わない。 |
 | Q11 | スキル本体は『ギルドマスター』。『司令塔』は使わない | 責任者にあたる。 |
+| Q13 | ブラウザで読む役『斥候』を別に作る。道具は plugin 同梱の Playwright MCP（`@playwright/mcp` 0.0.83、Apache-2.0、`--headless --isolated`）。許す操作は閲覧・文字取得・スクロール・待機だけ。呼ぶ判断は、地図師が Todo に付ける `needs_browser` | 冒険者の WebFetch は JavaScript を動かさないため、動的ページが読めない。ブラウザ道具は汎用（クリック・入力もできる）なので、冒険者に足さず、別の役に閉じ込めて被害の範囲を狭める。専用の空のプロファイルを使い、普段のログイン済みブラウザには触れない。ブラウザが1つなので並列には使わない。ログイン・CAPTCHA・拒否は回避せず「読めなかった」と報告し、必要なら依頼主に頼む Todo（`human`）にする。 |
 | 名前の方針 | 『受付嬢』は引き継がない。受付の役を作るときは『受付係』 | 『嬢』は性別を前提にした呼び方で、役割の表現に不要。 |
 | Q12 | 役ごとにモデルを固定する。方針は、探索・検索は haiku、ほとんどは sonnet、複雑な設計判断だけ opus | 依頼主の方針。割り当て（地図師 opus、冒険者・鑑定士 sonnet）はこの案の提案。 |

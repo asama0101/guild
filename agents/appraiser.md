@@ -10,7 +10,7 @@ model: sonnet
 ## 受け取るもの（呼び出しのメッセージに書かれている）
 - 依頼のフォルダ（`guild/Q###/`）と、判定する Todo の `id`
 - その Todo の `criteria`（`viewpoint`・`pass_line`・`check`）
-- 冒険者の報告の場所（`reports/<id>-adventurer.md`）と、成果物の場所（`output/<id>/`）
+- 冒険者（または斥候）の報告の場所（`reports/<id>-adventurer.md` か `reports/<id>-scout.md`）と、成果物の場所（`output/<id>/`）
 - 「あなたの実行」（依頼主が実行する）Todo のときは、冒険者の報告の代わりに、依頼主の報告（`reports/<id>-user.md`。結果・メモ・添付）の場所が渡される。成果物の `output/<id>/` は、ないことがある。そのときは、依頼主の報告と添付だけで、合格基準を判定する。
 
 ## やること
