@@ -64,6 +64,8 @@ disable-model-invocation: true
    | `waiting_user` | 依頼主の実行が要る Todo。何をしてほしいか、合格基準、結果の返し方（できた／できなかった、記録は任意）を伝え、返事を待つ。返事を `inbox/` に `{"type": "result", "todo": "<id>", "ok": true/false, "note": "…", "files": []}` と書き、`ingest` |
    | `blocked` / `failed` | 失敗の判断。何が失敗し、何が止まっているかを伝え、`AskUserQuestion` で「その Todo を除いて続行／計画を直す／中止」を聞く。除いて続行：`{"type": "decision", "todo": "<id>", "choice": "skip"}`。直す：`{"type": "decision", "choice": "replan"}` のあと、手順2から。中止：`{"type": "decision", "choice": "abort"}` |
 
+   冒険者が成果物を書き込めず、全文を返り値で返してきたときは、その全文を**手を加えずに**、指定されたファイル名で `<dir>/output/<id>/` に保存してから `submitted` を送る。保存したことを、鑑定士へのメッセージにも書く。
+
 2. `rejected` で `running` に戻った Todo は、次の周回の `ready` に出る。やり直しの回数の上限は `guild.py` が決める。上限を超えると `failed` になる。
 3. 状態を変えたら、`sync` からやり直す。
 
@@ -73,7 +75,7 @@ disable-model-invocation: true
 
 ## 5. 納品
 
-`finished` が `true` になったら、納品物の一覧（`<dir>/output/` の場所と、各 Todo の報告の場所）を依頼主に渡す。納品物は Obsidian の Markdown 記法で書かれている。
+`finished` が `true` になったら、納品物の一覧（`<dir>/output/` の場所と、各 Todo の報告の場所）を依頼主に渡す。納品物は Obsidian の Markdown 記法で書かれている。依頼にファイルの置き場の指定があれば、このとき `output/` から指定の場所へコピーする（コピーしたことを伝える）。成果物の置き場は、実行中はいつも `output/<id>/`。
 
 ## 6. 記録
 
