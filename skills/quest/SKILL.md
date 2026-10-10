@@ -57,7 +57,7 @@ disable-model-invocation: true
 
 計画ができたら（`adopt` のあと）、ボードに「計画の承認」の手紙が出る。あなたは何もしない。依頼主が承認すると `approve` が届くので、`guild.py ingest <plan>` で反映する（手順4）。
 
-承認は計画のこの1回だけ。以降は完了まで承認を取らない（ただし、確認の印がある Todo の前と、失敗の判断は別。どちらもボードの手紙）。
+承認は計画のこの1回だけ。以降は、確認の印がある Todo の前と、失敗の判断、そして**最後の受け取りの確認**（手順4）以外では、承認を取らない（どれもボードの手紙）。
 
 ## 4. 実行ループ
 
@@ -73,7 +73,7 @@ disable-model-invocation: true
    |---|---|
    | `ready` | 冒険者を呼ぶ（`guild:adventurer`）。ただし `plan.json` でその Todo に `needs_browser: true` があれば、斥候（`guild:scout`）を呼ぶ。互いに独立な冒険者は同時に呼んでよい。**斥候は、ブラウザが1つなので、同時に1人まで**（複数あれば1人ずつ）。メッセージに、依頼のフォルダ、Todo の `id`、`criteria`、やり直しなら鑑定士の指摘の場所を書く。返ってきたら `guild.py advance <plan> <id> submitted` |
    | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の Todo なら冒険者の `reports/<id>-adventurer.md`（斥候なら `reports/<id>-scout.md`）、「あなたの実行」の Todo なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる。やり直しの回数を使い切ると `failed` になり、依頼主の判断になる） |
-   | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画 | **あなたは何もしない**。ボードの手紙で、依頼主が答える |
+   | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える |
 
    冒険者（斥候も同じ）が成果物を書き込めず、全文を返り値で返してきたときは、その全文を**手を加えずに**、指定されたファイル名で `<dir>/output/<id>/` に保存してから `submitted` を送る。保存したことを、鑑定士へのメッセージにも書く。
 
@@ -82,7 +82,7 @@ disable-model-invocation: true
    冒険者が「できなかった」と返したり、報告ファイルがなかったりしても、`submitted` を送って鑑定に進める（鑑定士が `rejected` にして、やり直しになる。回数を使い切ると `failed` になり、依頼主の判断になる）。ギルドマスターが成否を判断して分岐しない。
 3. **何か進めたら**、手順1に戻る。
 4. **何も進められないとき**：
-   - すべての依頼が `finished`、または `status` が `aborted`（`next` の出力に `status` と `approved` がある）なら、手順5・6へ進んで終える。`replan` のものは、手順2の4で地図師を呼んでいる最中なので、終わりにしない。
+   - すべての依頼が `complete`（全 Todo が済み、依頼主が受け取った）、または `status` が `aborted`（`next` の出力に `status` と `approved` がある）なら、手順5・6へ進んで終える。**`awaiting_accept`（全 Todo は済んだが、依頼主が受け取っていない）は、終わりにしない。** ボードの「受け取りの確認」の手紙に依頼主が答えるのを待つ。ギルドマスターが勝手に完了にしない。`replan` のものは、手順2の4で地図師を呼んでいる最中なので、終わりにしない。
    - そうでなければ（依頼主の答えを待っている）、`guild.py wait <root> 540` を実行する（Bash のタイムアウトは 600000 を指定する）。届いたら手順1へ。`timeout` なら、もう一度待つ。**6回続けて `timeout`** になったら、「ボードで答えたら、`/guild:quest` をもう一度実行してください」と伝えて終える。
 
 守ること：
@@ -91,7 +91,7 @@ disable-model-invocation: true
 
 ## 5. 納品
 
-依頼が `finished` になったら、納品物の一覧（`<dir>/output/` の場所と、各 Todo の報告の場所）をチャットで短く伝える。ボードの「完了」の手紙にも出る。納品物は Obsidian の Markdown 記法で書かれている。依頼にファイルの置き場の指定があれば、このとき `output/` から指定の場所へコピーする（コピーしたことを伝える）。成果物の置き場は、実行中はいつも `output/<id>/`。
+依頼が `complete`（依頼主が受け取った）になったら、納品物の一覧（`<dir>/output/` の場所と、各 Todo の報告の場所）をチャットで短く伝える。ボードの「完了」の手紙にも出る。納品物は Obsidian の Markdown 記法で書かれている。依頼にファイルの置き場の指定があれば、このとき `output/` から指定の場所へコピーする（コピーしたことを伝える）。成果物の置き場は、実行中はいつも `output/<id>/`。
 
 ## 6. 記録
 

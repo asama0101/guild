@@ -358,7 +358,8 @@ function derive(q) {
     return { ...t, stamp: draft ? '案' : st[0], cls: draft ? 'sd-draft' : st[1] };
   });
   d.total = p.todos.length; d.done = p.todos.filter((t) => closed(t.state)).length;
-  d.finished = d.total > 0 && d.done === d.total;
+  d.allDone = d.total > 0 && d.done === d.total;
+  d.finished = d.allDone && !!p.accepted;
   if (p.status === 'aborted') { d.label = '中止'; d.cls = 'sd-stop'; d.info = 'aborted'; return d; }
   if (p.status === 'replan') { d.label = '計画を直し中'; d.cls = 'sd-run'; d.info = 'replan'; return d; }
   if (!p.approved) {
@@ -370,10 +371,12 @@ function derive(q) {
       if (t.state === 'failed') d.asks.push({ kind: 'decision', todo: t, key: `${q.id}:${t.id}:decision`, label: `${t.id}（判断）`, sent: inboxHas('decision', t.id) || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
     }
   }
+  if (p.approved && d.allDone && !p.accepted) d.asks.push({ kind: 'accept', key: `${q.id}:accept`, label: '受け取り', sent: inboxHas('accept') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
   const waiting = d.asks.filter((a) => !a.sent);
   if (d.finished) { d.label = '完了'; d.cls = 'sd-ok'; }
   else if (waiting.some((a) => a.kind === 'decision')) { d.label = '要判断'; d.cls = 'sd-ng'; }
   else if (!p.approved) { d.label = '承認待ち'; d.cls = 'sd-draft'; }
+  else if (waiting.some((a) => a.kind === 'accept')) { d.label = '受け取り待ち'; d.cls = 'sd-turn'; }
   else if (waiting.length) { d.label = '進行中'; d.cls = 'sd-turn'; }
   else { d.label = '進行中'; d.cls = 'sd-run'; }
   d.me = waiting.length ? waiting.map((a) => a.label).join('・') : '—';
@@ -387,6 +390,7 @@ function buildModel(raw) {
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
+  if (a.kind === 'accept') return '納品物の受け取り確認';
   if (a.kind === 'questions') return '依頼についての質問';
   if (a.kind === 'confirm') return `${a.todo.id}「${a.todo.title}」の実行前の確認`;
   if (a.kind === 'result') return `${a.todo.id}「${a.todo.title}」`;
@@ -405,6 +409,7 @@ function messagesOf(q) {
     const id = e.id;
     if (e.event === 'adopted') add(e, 'cart', `${p.todos.length}つの Todo に分けました。`, 'reports/plan-draft.json');
     else if (e.event === 'approved') add(e, 'me', '計画を承認しました。');
+    else if (e.event === 'accepted') add(e, 'me', '納品物を受け取りました。');
     else if (e.event === 'replanned') add(e, 'cart', `計画を作り直しました（引き継いだ Todo：${(e.carried || []).join('、') || 'なし'}）。`, 'reports/plan-draft.json');
     else if (e.event === 'decision') add(e, 'me', e.choice === 'abort' ? '依頼を中止しました。' : '計画を直すよう頼みました。' + (e.comment ? `（${e.comment}）` : ''));
     else if (e.event === 'deps_done') {
@@ -500,6 +505,19 @@ function letterFor(qd, a) {
         x.reason ? h('p', { class: 'fine' }, 'おすすめの理由：' + x.reason) : null,
         h('label', { class: 'fine', for: `${k}:n${i}` }, 'ほかにあれば'), textarea(`${k}:n${i}`, { id: `${k}:n${i}`, rows: '2' }))),
       h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'answers', answers: a.qs.map((x, i) => answerOf(x, S.form, k, i)) }, k) }, '答えを送る')),
+      sentNote(k));
+  }
+  if (a.kind === 'accept') {
+    const files = qd.q.output, ck = k + ':fix';
+    return h('section', { class: 'letter', 'aria-label': '受け取りの確認' }, seal('検'),
+      h('div', { class: 'kick' }, 'お願い：受け取りの確認'), h('h3', null, '納品物を確かめて、受け取ってください'),
+      h('p', null, 'すべての Todo が合格基準を満たしました。ただし、依頼主が受け取るまでは、完了になりません。ファイル名を押すと中身が開き、コピーもできます。'),
+      files.length ? h('ul', { class: 'files' }, files.map((f) => h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, f.replace(/^Q\d+\/output\//, ''))))) : h('p', null, '納品物のファイルはありません（報告だけです）。'),
+      h('label', { class: 'lbl', for: ck }, '直してほしいこと（直す場合だけ）'),
+      textarea(ck, { id: ck, placeholder: '例：T2 の比較表に、価格の列を足してほしい' }),
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'accept' }, k) }, '受け取る'),
+        h('button', { class: 'btn', type: 'button', onclick: () => send(qd.id, { type: 'decision', choice: 'replan', comment: (S.form[ck] || '').trim() }, k) }, '直してほしい')),
       sentNote(k));
   }
   if (a.kind === 'approve') {
@@ -719,7 +737,7 @@ function helpTab() {
       h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります（動いている間は、新しい依頼を自動で受け付けます）。足りないことは、この画面の「質問」の手紙で聞かれます。'),
       h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられて、「道のり」が出ます。承認はこの1回だけです。'),
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
-      h('li', null, h('b', null, '受け取る。'), '完了すると、納品物の場所が出ます。'))),
+      h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。'))),
     sec('印の見方', h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
     sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['道のり', 'Todo の順序。前提が済んだものから進みます。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['やめる', '失敗した Todo を計画から外すこと。続く Todo もやめるか、進めるかを選べます。'], ['ノウハウ', '完了した依頼から、成功・失敗・業務知識を記録したもの。次の依頼で使われます。']])),
     sec('困ったとき', h('div', { class: 'faq' },
@@ -886,21 +904,21 @@ function demoTree(scene) {
   const mk = (id, title, kind, deps, state, c, extra) => ({ id, title, kind, deps, criteria: c, state, retries: 0, output: null, ...(extra || {}) });
   const S3 = {
     plan: [['pending'], ['pending'], ['pending']], human: [['done'], ['waiting_user'], ['pending']], confirm: [['done'], ['done'], ['awaiting_confirm']],
-    failed: [['done'], ['failed'], ['blocked']], done: [['done'], ['done'], ['done']]
+    failed: [['done'], ['failed'], ['blocked']], done: [['done'], ['done'], ['done']], accept: [['done'], ['done'], ['done']]
   }[scene] || [['done'], ['waiting_user'], ['pending']];
-  const approved = scene !== 'plan';
+  const approved = scene !== 'plan', isDone = scene === 'done' || scene === 'accept';
   if (scene === 'questions') {
     return { config: J({ python: 'python' }), requests: {}, Q001: { 'request.json': J({ text: '社内の議事録テンプレートを見直したい' }), reports: { 'plan-draft.json': J({ quest: 'Q001', title: '議事録テンプレートの見直し', todos: [], questions: [{ text: '見直す対象は、どのテンプレートですか', options: ['週次定例の議事録', '全社会議の議事録', '両方'], recommended: '両方', reason: '依頼文からは、どちらか分からないため、まず両方を見るのが安全です。' }, { text: '納品物は、どの形がよいですか', options: ['比較表だけ', '新しいテンプレート案まで'], recommended: '新しいテンプレート案まで', reason: '「見直す」には、案を出すことまで含まれると考えられます。' }] }) }, output: {}, inbox: {} } };
   }
   const h1 = [{ t: at(70), event: 'adopted' }];
   if (approved) h1.push({ t: at(69), event: 'approved' }, { t: at(69), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(68), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(67), id: 'T1', event: 'passed', from: 'review', to: 'done' });
   if (scene === 'human') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' });
-  if (scene === 'confirm' || scene === 'done') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(59), id: 'T2', event: 'passed', from: 'review', to: 'done' }, { t: at(59), id: 'T3', event: 'deps_done', from: 'pending', to: 'awaiting_confirm' });
-  if (scene === 'done') h1.push({ t: at(55), id: 'T3', event: 'confirmed', from: 'awaiting_confirm', to: 'running' }, { t: at(54), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(53), id: 'T3', event: 'passed', from: 'review', to: 'done' });
+  if (scene === 'confirm' || isDone) h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(59), id: 'T2', event: 'passed', from: 'review', to: 'done' }, { t: at(59), id: 'T3', event: 'deps_done', from: 'pending', to: 'awaiting_confirm' });
+  if (isDone) h1.push({ t: at(55), id: 'T3', event: 'confirmed', from: 'awaiting_confirm', to: 'running' }, { t: at(54), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(53), id: 'T3', event: 'passed', from: 'review', to: 'done' });
   if (scene === 'failed') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'reported_failed', from: 'waiting_user', to: 'failed' }, { t: at(60), id: 'T3', event: 'dep_failed', from: 'pending', to: 'blocked' });
-  const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', approved, status: 'active', history: h1,
+  const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', approved, status: 'active', accepted: scene === 'done', history: h1,
     todos: [mk('T1', 'notes.txt を読み、要点を3行にまとめた digest.md を作る', 'auto', [], S3[0][0], t1c), mk('T2', '上司に口頭で内容を共有し、了承をもらう', 'human', ['T1'], S3[1][0], t2c), mk('T3', 'digest.md を publish フォルダにコピーして公開する', 'auto', ['T2'], S3[2][0], t3c, { confirm: true })] };
-  const day = 24 * 60, p2 = { quest: 'Q002', title: '議事録のテンプレートを3種類比べる', approved: true, status: 'active',
+  const day = 24 * 60, p2 = { quest: 'Q002', title: '議事録のテンプレートを3種類比べる', approved: true, status: 'active', accepted: true,
     history: [{ t: at(day + 120), event: 'adopted' }, { t: at(day + 118), event: 'approved' }, { t: at(day + 118), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 100), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 98), id: 'T1', event: 'passed', from: 'review', to: 'done' },
       { t: at(day + 98), id: 'T2', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 80), id: 'T2', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 79), id: 'T2', event: 'passed', from: 'review', to: 'done' },
       { t: at(day + 79), id: 'T3', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 60), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 58), id: 'T3', event: 'passed', from: 'review', to: 'done' }],

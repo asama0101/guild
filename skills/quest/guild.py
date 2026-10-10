@@ -166,6 +166,10 @@ def next_view(plan):
     out["status"] = plan.get("status", "active")
     out["approved"] = bool(plan.get("approved"))
     out["finished"] = all(t["state"] in SATISFIED for t in plan["todos"])
+    out["accepted"] = bool(plan.get("accepted"))
+    # 全 Todo が済んでも、依頼主が受け取るまでは完了ではない（awaiting_accept は依頼主待ち）
+    out["awaiting_accept"] = out["finished"] and out["approved"] and out["status"] == "active" and not out["accepted"]
+    out["complete"] = out["finished"] and out["accepted"]
     return out
 
 
@@ -214,6 +218,14 @@ def apply_input(plan, data, tr):
             raise GuildError("すでに承認されています")
         plan["approved"], plan["status"] = True, "active"
         note(plan, event="approved")
+        return
+    if kind == "accept":
+        if plan.get("accepted"):
+            raise GuildError("すでに受け取り済みです")
+        if not plan.get("approved") or not all(t["state"] in SATISFIED for t in plan["todos"]):
+            raise GuildError("すべての Todo が済むまで、受け取れません")
+        plan["accepted"] = True
+        note(plan, event="accepted")
         return
     if kind == "decision" and data.get("choice") in ("abort", "replan"):
         plan["status"] = "aborted" if data["choice"] == "abort" else "replan"

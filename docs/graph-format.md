@@ -81,6 +81,7 @@
 - `human` の Todo には `instruction`（依頼主が読んでそのまま動ける、何を・どこで・何を使って・終わったら何を教えるか）を付ける。ボードの「あなたの番」の手紙に出る。
 - `criteria` は合格基準（観点・合格ライン・確かめ方）。空の Todo は検証で弾く。
 - `approved` が `true` になるまで、実行（`next`）は何も返さない。
+- `accepted` は、依頼主が納品物を受け取ったとき（`accept` の入力）に `true` になる。全 Todo が済んでも、`accepted` になるまでは完了ではない。`next` の出力の `awaiting_accept`（受け取り待ち）と `complete`（完了）で見分ける。「直してほしい」は `decision` の `replan`（コメント付き）。
 
 ## guild.py のコマンド（最初の版）
 
@@ -98,7 +99,7 @@
 ## 決定（未決だった3点）
 
 - **入力の戻し方**: 旧版（`feat/guild-0.1`）と同じく、画面は `plan.json` を書かない。画面は File System Access API（`showDirectoryPicker`）で `guild/` 内の `inbox/*.json` に入力だけを書き、`guild.py ingest` が検査して `plan.json` に反映する。`plan.json` を書けるのは `guild.py` だけ。
-  - 入力ファイルの種類: `approve`（計画の承認・修正）、`result`（`human` の結果：できた／できなかった、添付パス）、`decision`（`failed` 時の判断）。
+  - 入力ファイルの種類: `approve`（計画の承認・修正）、`accept`（全 Todo が済んだあとの、納品物の受け取り。済んでいないとき・受け取り済みのときは拒否）、`result`（`human` の結果：できた／できなかった、添付パス）、`decision`（`failed` 時の判断）。
   - 反映の合図は、画面で送信したあとにチャットで「完了」と伝える方式（旧版の `/guild:quest` 再実行に相当）。
 - **入力の契約と書き込み側の方針**: 境界は『`guild/inbox/*.json` に入力が置かれたら `guild.py ingest` が拾う』に固定する。最初の版の書き込み側は File System Access API とし、書けないときは『JSON をコピー』ボタンに落とす。保存の失敗は理由を画面に出す。ローカルサーバー（`guild.py serve`）は最初の版では作らない。自動で進めたくなったら書き込み側だけを差し替える。
 - **確認の印**: Todo に `confirm: true` を持たせる。分解時に付け、計画の承認で見える。`next` は、`confirm: true` の Todo を『確認待ち』として別に返し、確認が済むまで `running` にしない。

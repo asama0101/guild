@@ -572,6 +572,52 @@ class FixesTest(unittest.TestCase):
             self.assertTrue(any(m.name == "b.md" for m in moved) and any(m.name == "T2-adventurer.md" for m in moved))
 
 
+class AcceptTest(unittest.TestCase):
+    """依頼主が受け取るまで、依頼は完了にならない。"""
+
+    def ingest_one(self, p, data, d):
+        (Path(d) / "inbox").mkdir(exist_ok=True)
+        (Path(d) / "inbox" / "20261010120000-accept.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        return guild.ingest(Path(d) / "plan.json", p, TR)
+
+    def test_all_done_is_not_complete_until_accepted(self):
+        p = plan(todo("T1", state="done"), todo("T2", state="skipped"))
+        v = guild.next_view(p)
+        self.assertEqual((v["finished"], v["awaiting_accept"], v["complete"]), (True, True, False))
+        p["accepted"] = True
+        v = guild.next_view(p)
+        self.assertEqual((v["awaiting_accept"], v["complete"]), (False, True))
+
+    def test_accept(self):
+        p = plan(todo("T1", state="done"))
+        with tempfile.TemporaryDirectory() as d:
+            r = self.ingest_one(p, {"type": "accept"}, d)
+        self.assertEqual(len(r["applied"]), 1)
+        self.assertTrue(p["accepted"])
+        self.assertEqual(p["history"][-1]["event"], "accepted")
+
+    def test_accept_rejected_before_all_done_or_twice(self):
+        for pl in (plan(todo("T1", state="done"), todo("T2", state="running")),):
+            if pl is None:
+                continue
+            with tempfile.TemporaryDirectory() as d:
+                r = self.ingest_one(pl, {"type": "accept"}, d)
+            self.assertEqual(len(r["rejected"]), 1)
+            self.assertFalse(pl.get("accepted"))
+        p = plan(todo("T1", state="done"))
+        p["accepted"] = True
+        with tempfile.TemporaryDirectory() as d:
+            r = self.ingest_one(p, {"type": "accept"}, d)
+        self.assertEqual(len(r["rejected"]), 1)
+
+    def test_replan_instead_of_accept(self):
+        p = plan(todo("T1", state="done"))
+        with tempfile.TemporaryDirectory() as d:
+            self.ingest_one(p, {"type": "decision", "choice": "replan", "comment": "価格の列を足して"}, d)
+        self.assertEqual(p["status"], "replan")
+        self.assertFalse(p.get("accepted"))
+
+
 class BoardContractTest(unittest.TestCase):
     """ボード（board.html）が inbox に書く JSON を、guild.py がそのまま受け取れる。
     形は、ボードを実際に動かして書き出させたもの（承認・直す・中止・確認・結果・失敗の判断4種）。"""
