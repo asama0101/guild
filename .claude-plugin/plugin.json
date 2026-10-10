@@ -1,6 +1,6 @@
 {
   "name": "guild",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "author": {"name": "asama0101"},
   "description": "依頼を Todo に分解し、自動実行と依頼主の実行待ちを分けて解決まで進め、ノウハウを溜めるギルド"
 }

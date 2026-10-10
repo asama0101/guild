@@ -42,7 +42,7 @@ body{margin:0;background:var(--bg)}
 .qrow textarea{flex:1 1 auto;min-height:60px;margin:0}
 .qgo{flex:0 0 96px;min-height:60px;font-size:16px}
 .qmore{margin-top:6px}
-.qopts{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:8px}
+.qopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 20px;align-items:start;margin-top:10px}
 .saved{margin:8px 0 0;font-size:13.5px;color:var(--ok);font-weight:700}
 .legend2{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--sub);margin:0 0 12px}
 .legend2 .sw{display:inline-block;width:22px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
@@ -144,7 +144,21 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .linkbtn{font:inherit;font-size:13.5px;min-height:34px;border:0;background:transparent;color:var(--gold);text-decoration:underline;cursor:pointer;padding:0 6px}
 .reader{position:fixed;inset:0;background:rgba(20,10,10,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
 .rbox{background:var(--paper2);border:2px solid var(--brass);border-radius:6px;max-width:820px;width:100%;max-height:86vh;overflow:auto;padding:16px 20px}
-.files{margin:0 0 10px;padding-left:20px}.files li{margin:5px 0}.files .pcopy{margin-left:10px;font:inherit;font-size:12px;padding:1px 8px;border:1px solid var(--brass);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}
+.flist{list-style:none;margin:0 0 10px;padding:0;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.flist li{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--grid)}
+.flist li:last-child{border-bottom:0}
+.flist a{color:var(--ink);font-weight:700;word-break:break-all}
+.flist .acts{display:flex;gap:6px;flex-shrink:0}
+.btn.sm{min-height:34px;padding:3px 14px;font-size:13px;border-width:1px}
+select{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass);border-radius:4px;padding:6px 10px;background:var(--surface);color:var(--ink);max-width:100%}
+.fld{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fld>.cap{font-weight:700;font-size:13px}
+.filebtn{position:relative;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer}
+.filebtn input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.filebtn .btn{display:inline-flex;align-items:center;box-sizing:border-box;min-height:34px;line-height:1.2}
+.fld.wide{grid-column:1/-1}.trow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}.trow select{min-width:240px}
+.filebtn:focus-within .btn{outline:3px solid var(--brass);outline-offset:1px}
+.chip{display:inline-block;padding:2px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);font-size:13px;word-break:break-all}
 .rhead{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
 .rbox pre{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0 0 8px}
 input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
@@ -517,15 +531,25 @@ function deliverables(qd) {
 }
 function fileRow(f, label) {
   return h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, label || f.replace(/^Q\d+\/output\//, '')),
-    h('button', { type: 'button', class: 'pcopy', 'aria-label': `${f} のパスをコピー`, onclick: () => copyText('guild/' + f, 'パス') }, 'パスをコピー'));
+    h('span', { class: 'acts' },
+      h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} を開く`, onclick: () => openFile(f) }, '開く'),
+      h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} のパスをコピー`, onclick: () => copyText('guild/' + f, 'パス') }, 'パスをコピー')));
 }
 function deliverableBlock(qd) {
   const d = deliverables(qd), fmt = FORMATS.find((x) => x.key === ((qd.q.plan && qd.q.plan.format) || 'md'));
   return [
-    d.main.length ? h('ul', { class: 'files' }, d.main.map(fileRow)) : h('p', null, '納品物のファイルはありません（報告だけです）。'),
+    d.main.length ? h('ul', { class: 'flist' }, d.main.map(fileRow)) : h('p', null, '納品物のファイルはありません（報告だけです）。'),
     fmt ? h('p', { class: 'fine', style: 'margin:0 0 8px' }, `形式：${fmt.label}（${fmt.ext}）　パスは、プロジェクトのフォルダからの位置です。`) : null,
-    d.rest.length ? h('details', null, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'files' }, d.rest.map(fileRow))) : null];
+    d.rest.length ? h('details', null, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map(fileRow))) : null];
 }
+function fileField(key, label, multiple) {
+  const inp = h('input', { type: 'file', 'aria-label': label }); if (multiple) inp.multiple = true;
+  inp.dataset.fileKey = key;
+  const names = (S.files[key] || []).map((f) => f.name);
+  return h('label', { class: 'filebtn' }, h('span', { class: 'btn ghost sm' }, names.length ? '選び直す' : 'ファイルを選ぶ'), inp,
+    names.length ? names.map((n) => h('span', { class: 'chip' }, n)) : h('span', { class: 'fine' }, '選ばれていません'));
+}
+const fld = (cap, ...ctrl) => h('div', { class: 'fld' }, h('span', { class: 'cap' }, cap), ...ctrl);
 function seal(ch, cls) { return h('div', { class: `seal ${cls || ''}`, 'aria-hidden': 'true' }, ch); }
 
 function letterFor(qd, a) {
@@ -572,9 +596,7 @@ function letterFor(qd, a) {
       sentNote(k));
   }
   if (a.kind === 'result') {
-    const t = a.todo, ok = k + ':ok', memo = k + ':memo', fl = h('input', { type: 'file', multiple: true, 'aria-label': '記録の添付' });
-    fl.dataset.fileKey = k;
-    const fnames = (S.files[k] || []).map((f) => f.name);
+    const t = a.todo, ok = k + ':ok', memo = k + ':memo';
     return h('section', { class: 'letter', 'aria-label': 'あなたの実行' }, seal('君'),
       h('div', { class: 'kick' }, `あなたの番：${t.id}`), h('h3', null, t.title),
       t.instruction ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, 'お願いしたいこと'), h('p', { style: 'white-space:pre-wrap;margin:0' }, t.instruction)) : null,
@@ -582,7 +604,7 @@ function letterFor(qd, a) {
       h('span', { class: 'lbl' }, '結果を教えてください'),
       radio(k + 'r', ok, 'yes', 'できた', '', '', 'yes'), radio(k + 'r', ok, 'no', 'できなかった', '', '', 'yes'),
       h('label', { class: 'lbl', for: k + 'memo' }, '一言メモ（任意）'), textarea(memo, { id: k + 'memo' }),
-      h('span', { class: 'lbl' }, '記録の添付（任意）'), fl, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
+      h('span', { class: 'lbl' }, '記録の添付（任意）'), fileField(k, '記録の添付', true),
       h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendResult(qd.id, t, k) }, '結果を送る')),
       h('p', { class: 'fine', style: 'margin:10px 0 0' }, '送ると ', code(`${qd.id}/inbox/`), ' に保存されます。/guild:quest が動いていれば、すぐ進みます。'), sentNote(k));
   }
@@ -698,23 +720,23 @@ function connectBox() {
 function composer() {
   const key = 'new:text', ta = textarea(key, { id: 'qreq', rows: '2', placeholder: '困りごとや、やってほしいことを書いて、「依頼」を押してください（Ctrl + Enter でも送れます）' });
   ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendRequest(); } });
-  const fl = h('input', { type: 'file', multiple: true, 'aria-label': '素材ファイル' }); fl.dataset.fileKey = 'new';
   const due = h('input', { type: 'date', 'aria-label': '期限' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
   const fmt = h('select', { 'aria-label': '納品物の形式' }, FORMATS.map((f) => { const o = h('option', { value: f.key }, f.available ? `${f.label}（${f.ext}）` : `${f.label}（${f.ext}）：対応予定`); if (!f.available) o.disabled = true; return o; }));
   fmt.value = S.form['new:format'] || 'md'; bindKey(fmt, 'new:format');
   const tplSel = h('select', { 'aria-label': '納品物のテンプレート' }, h('option', { value: '' }, 'なし'), ((S.model && S.model.templates) || []).map((n) => { const o = h('option', { value: 'templates/' + n }, tplReadable(n) ? n : `${n}（今は使えません）`); if (!tplReadable(n)) o.disabled = true; return o; }));
   tplSel.value = S.form['new:template'] || ''; bindKey(tplSel, 'new:template');
-  const tplFile = h('input', { type: 'file', 'aria-label': 'テンプレートを追加' }); tplFile.dataset.fileKey = 'newtpl';
   const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・期限・納品物の形式とテンプレートを選ぶ（任意）'),
-    h('div', { class: 'qopts' }, fl, h('label', { class: 'sub' }, '期限　', due), h('label', { class: 'sub' }, '納品物の形式　', fmt),
-      h('label', { class: 'sub' }, '納品物のテンプレート　', tplSel), h('label', { class: 'sub' }, 'または、新しく追加（Word・Excel・PowerPoint なども追加できます）　', tplFile),
-      (S.files.newtpl || []).length ? h('span', { class: 'fine' }, '追加するファイル：' + S.files.newtpl[0].name + (tplReadable(S.files.newtpl[0].name) ? '' : '（今は読めない形式です。保存だけして、この依頼では使いません）')) : null));
+    h('div', { class: 'qopts' },
+      fld('素材ファイル', fileField('new', '素材ファイル', true)),
+      fld('期限', due),
+      fld('納品物の形式', fmt),
+      h('div', { class: 'fld wide' }, h('span', { class: 'cap' }, '納品物のテンプレート'), h('div', { class: 'trow' }, tplSel, h('span', { class: 'fine' }, 'または、新しく追加：'), fileField('newtpl', 'テンプレートを追加', false)),
+        h('span', { class: 'fine' }, (S.files.newtpl || []).length && !tplReadable(S.files.newtpl[0].name) ? '今は読めない形式です。保存だけして、この依頼では使いません。' : 'Word・Excel・PowerPoint なども追加できます（今は文字のファイルだけ使えます）。'))));
   more.addEventListener('toggle', () => { S.open.qmore = more.open; });
-  const fnames = (S.files.new || []).map((f) => f.name);
   return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
     h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼'),
     h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '依頼')),
-    more, fnames.length ? h('p', { class: 'fine' }, '選んだファイル：' + fnames.join('、')) : null,
+    more,
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
     S.newNote ? h('p', { class: 'saved', role: 'status' }, S.newNote) : null,
     S.newSaved ? h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。下の一覧に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`) : null);
@@ -722,9 +744,9 @@ function composer() {
 
 function cancelCell(r) {
   const key = r.id + ':cancel';
-  if (!S.confirm[key]) return h('span', null, h('button', { type: 'button', class: 'pcopy', onclick: () => { S.confirm[key] = true; render(); } }, '取り消す'));
-  return h('span', null, h('button', { type: 'button', class: 'pcopy', style: 'color:var(--ng);border-color:var(--ng)', onclick: () => cancelRequest(r.id) }, '本当に取り消す'),
-    h('button', { type: 'button', class: 'pcopy', onclick: () => { S.confirm[key] = false; render(); } }, 'やめる'));
+  if (!S.confirm[key]) return h('span', null, h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.confirm[key] = true; render(); } }, '取り消す'));
+  return h('span', null, h('button', { type: 'button', class: 'btn wax sm', onclick: () => cancelRequest(r.id) }, '本当に取り消す'), ' ',
+    h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.confirm[key] = false; render(); } }, 'やめる'));
 }
 async function cancelRequest(id) {
   try { await S.fs.remove(`requests/${id}.json`); await S.fs.remove(`requests/files/${id}`, true); }
@@ -820,7 +842,7 @@ function delivTab() {
   }
   out.push(h('h3', { class: 'sec' }, 'テンプレート'), h('p', { class: 'sub', style: 'margin:0 0 8px' }, '納品物の型です。新しい依頼で選ぶと、納品物はこの型に沿ってまとめられます。追加は、「掲示板」の「新しい依頼」からできます。'));
   const tpls = (m.templates || []).filter((n) => hit(q, n));
-  out.push(tpls.length ? h('ul', { class: 'files' }, tpls.map((n) => [fileRow('templates/' + n, n + (tplReadable(n) ? '' : '（今は使えません）'))])) : h('p', { class: 'sub' }, 'テンプレートはまだありません。'));
+  out.push(tpls.length ? h('ul', { class: 'flist' }, tpls.map((n) => [fileRow('templates/' + n, n + (tplReadable(n) ? '' : '（今は使えません）'))])) : h('p', { class: 'sub' }, 'テンプレートはまだありません。'));
   return out;
 }
 
