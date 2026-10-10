@@ -637,7 +637,9 @@ function boardTab() {
   if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
     m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.openQ[n.q] = true; S.sel = n.q; S.tq = n.q; render(); } }, n.text))));
   out.push(composer());
-  if (m && m.quests.some((x) => S.openQ[x.id])) out.push(h('div', { class: 'btns', style: 'margin:0 0 8px' }, h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px', onclick: () => { S.openQ = {}; render(); } }, 'すべて閉じる')));
+  if (m && m.quests.length) out.push(h('div', { class: 'btns', style: 'margin:0 0 8px' },
+    h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px', disabled: m.quests.every((x) => S.openQ[x.id]), onclick: () => { for (const x of m.quests) S.openQ[x.id] = true; render(); } }, 'すべて開く'),
+    h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px', disabled: !m.quests.some((x) => S.openQ[x.id]), onclick: () => { S.openQ = {}; render(); } }, 'すべて閉じる')));
   if (m) out.push(ledger(m));
   return out;
 }
