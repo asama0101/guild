@@ -94,6 +94,7 @@ body{margin:0;background:var(--bg)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.ghost{border-color:var(--brass);color:var(--sub)}
 textarea{width:100%;box-sizing:border-box;min-height:66px;border:1px solid var(--brass);border-radius:4px;padding:10px;font:inherit;font-size:14px;background:var(--surface);color:var(--ink);resize:vertical}
+input[type=text]{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass);border-radius:4px;padding:6px 10px;background:var(--surface);color:var(--ink);width:100%;box-sizing:border-box}
 input[type=date]{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass);border-radius:4px;padding:6px 10px;background:var(--surface)}
 .lbl{display:block;font-weight:700;font-size:13px;margin:14px 0 6px}
 .opt{display:flex;gap:12px;align-items:flex-start;padding:10px 14px;border:1px solid var(--line);border-radius:4px;margin-bottom:8px;background:var(--surface);cursor:pointer}
@@ -124,17 +125,7 @@ dl.c dd{margin:0}
 .way .n{border:1px solid var(--brass);border-radius:3px;padding:3px 10px;background:var(--surface)}
 .way .n.h{border-style:dashed}
 code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px}
-.kn-cond{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:10px 0}
 .kn-h{scroll-margin-top:70px}
-.kn-bar{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;padding:10px 14px;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);font-size:13px}
-.seg{display:inline-flex;align-items:center;gap:8px}
-.seg .cap{color:var(--sub)}
-.seg .opts{display:inline-flex;border:1px solid var(--brass);border-radius:3px;overflow:hidden}
-.seg .o{font:inherit;font-size:13px;min-height:32px;padding:2px 12px;border:0;border-right:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-.seg .o:last-child{border-right:0}
-.seg .o.on{background:var(--paper);font-weight:700;box-shadow:inset 0 -3px 0 var(--seal)}
-.seg .o input{accent-color:var(--seal);margin:0}
-.seg .o:focus-within,.seg .o:focus-visible{outline:2px solid var(--seal);outline-offset:-2px}
 .tree{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border:1px solid var(--line);border-left:4px solid var(--brass);border-radius:3px;padding:12px 14px;font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12.5px;line-height:1.7;margin:6px 0}
 .filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
 .bwrap{display:grid;grid-template-columns:190px minmax(0,1fr);gap:0 20px;align-items:start}
@@ -376,7 +367,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {}, talk: {} }, kn: { cur: null, cond: false, conf: {}, st: 'active', sort: 'name' }, limit: { board: 20, talk: 20, msg: 50 }, msgKey: '',
+  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {}, talk: {} }, kn: { cur: null }, limit: { board: 20, talk: 20, msg: 50 }, msgKey: '',
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -1067,33 +1058,34 @@ function sendArchive(obj, key) {
   return writeOrFallback(`archive/inbox/${nowName(obj.type, String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true); });
 }
 function archiveForm() {
-  const edit = S.form['a:edit'] || '';
+  const edit = S.form['a:edit'] || '', key = 'a:form';
   const sel = h('select', { id: 'a:type', 'aria-label': '種類', disabled: !!edit }, ARCH_TYPES.filter((x) => x[0] !== 'lesson').map(([t, , l]) => h('option', { value: t }, l)));
   sel.value = S.form['a:type'] || 'term'; bindKey(sel, 'a:type');
-  const inp = (key, ph, id) => { const e = h('input', { type: 'text', id, placeholder: ph, style: 'width:100%;min-height:40px;padding:6px 12px;font:inherit;border:1px solid var(--brass);border-radius:4px;background:var(--surface)' }); e.value = S.form[key] || ''; return bindKey(e, key); };
-  const key = 'a:form';
-  const d = h('details', { class: 'card', style: 'margin-bottom:14px', open: !!S.open['a:form'] }, h('summary', { style: 'cursor:pointer;font-weight:700' }, edit ? `項目を編集する（${edit}）` : '自分で項目を登録する'),
-    h('p', { class: 'fine', style: 'margin:8px 0' }, '社内の用語・業務フロー・業務情報・個人（文体の好みなど）、調べても出てこない知識を入れられます。登録した項目は「確認済み」になります。'),
-    h('div', { class: 'trow' }, h('label', { class: 'fine', for: 'a:type' }, '種類'), sel),
-    h('label', { class: 'lbl', for: 'a:name' }, '名前（用語名・フロー名・情報の題）'), inp('a:name', '例：経費精算', 'a:name'),
-    h('label', { class: 'lbl', for: 'a:aliases' }, '別名・略称（任意。読点「、」かカンマで区切る）'), inp('a:aliases', '例：精算、経費申請', 'a:aliases'),
-    h('label', { class: 'lbl', for: 'a:summary' }, '一言の説明（1行）'), inp('a:summary', '例：経費を申請して承認されるまでの流れ', 'a:summary'),
-    h('label', { class: 'lbl', for: 'a:body' }, '本文（任意。手順・意味・数値など）'), textarea('a:body', { id: 'a:body', rows: '5' }),
-    h('label', { class: 'lbl', for: 'a:source' }, '出典・根拠（任意。例：経理部の○○さんに確認）'), inp('a:source', '', 'a:source'),
-    h('div', { class: 'btns' },
-      h('button', { class: 'btn go', type: 'button', disabled: S.conn !== 'ok', onclick: async () => {
-        const name = (S.form['a:name'] || '').trim(), summary = (S.form['a:summary'] || '').trim();
-        if (!name || !summary) { S.archiveError = '名前と一言の説明は、必ず書いてください。'; render(); return; }
-        S.archiveError = '';
-        const entry = { type: S.form['a:type'] || 'term', name, aliases: (S.form['a:aliases'] || '').split(/[、,，]/).map((x) => x.trim()).filter(Boolean), summary, body: (S.form['a:body'] || '').trim(), source: (S.form['a:source'] || '').trim() };
-        await sendArchive(edit ? { type: 'entry', update_of: edit, entry } : { type: 'entry', entry }, key);
-        if (S.sent[key]) for (const f of ['a:edit', 'a:name', 'a:aliases', 'a:summary', 'a:body', 'a:source']) S.form[f] = '';
-        render();
-      } }, edit ? '編集を送る' : '登録を送る'),
-      edit ? h('button', { class: 'btn', type: 'button', onclick: () => { for (const f of ['a:edit', 'a:name', 'a:aliases', 'a:summary', 'a:body', 'a:source']) S.form[f] = ''; render(); } }, '編集をやめる') : null),
+  const inp = (k, ph, id) => { const e = h('input', { type: 'text', id, placeholder: ph }); e.value = S.form[k] || ''; return bindKey(e, k); };
+  const reset = () => { for (const f of ['a:edit', 'a:name', 'a:aliases', 'a:summary', 'a:body', 'a:source']) S.form[f] = ''; };
+  const send1 = async () => {
+    const name = (S.form['a:name'] || '').trim(), summary = (S.form['a:summary'] || '').trim();
+    if (!name || !summary) { S.archiveError = '名前と一言の説明は、必ず書いてください。'; render(); return; }
+    S.archiveError = '';
+    const entry = { type: S.form['a:type'] || 'term', name, aliases: (S.form['a:aliases'] || '').split(/[、,，]/).map((x) => x.trim()).filter(Boolean), summary, body: (S.form['a:body'] || '').trim(), source: (S.form['a:source'] || '').trim() };
+    await sendArchive(edit ? { type: 'entry', update_of: edit, entry } : { type: 'entry', entry }, key);
+    if (S.sent[key]) reset();
+    render();
+  };
+  const ta = textarea('a:body', { id: 'a:body', rows: '2', placeholder: '本文（任意）。手順・意味・数値など' });
+  ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); send1(); } });
+  const more = h('details', { class: 'qmore', open: !!S.open['a:more'] }, h('summary', null, '別名・出典をつける（任意）'),
+    h('div', { class: 'qopts' },
+      fld('別名・略称（読点「、」かカンマで区切る）', inp('a:aliases', '例：精算、経費申請', 'a:aliases')),
+      fld('出典・根拠', inp('a:source', '例：経理部の○○さんに確認', 'a:source'))));
+  more.addEventListener('toggle', () => { S.open['a:more'] = more.open; });
+  return h('section', { class: 'quick', 'aria-label': '項目の登録' },
+    h('label', { class: 'lbl', for: 'a:name', style: 'margin:0 0 6px' }, edit ? `項目を編集する（${edit}）` : '自分で項目を登録する'),
+    h('div', { class: 'qopts', style: 'margin:0 0 12px' }, fld('種類', sel), fld('名前（用語名・フロー名・情報の題）', inp('a:name', '例：経費精算', 'a:name')), fld('一言の説明（1行）', inp('a:summary', '例：経費を申請して承認されるまでの流れ', 'a:summary'))),
+    h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: send1, disabled: S.conn !== 'ok' }, edit ? '更新' : '登録')),
+    more,
+    edit ? h('div', { class: 'btns', style: 'margin-top:8px' }, h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { reset(); render(); } }, '編集をやめる')) : null,
     S.archiveError ? h('p', { class: 'err', role: 'alert' }, S.archiveError) : null, sentNote(key));
-  d.addEventListener('toggle', () => { S.open['a:form'] = d.open; });
-  return d;
 }
 function archiveCard(e) {
   const c = CONF[e.confidence] || [e.confidence, 'sd-wait'], k = 'a:' + e.path;
@@ -1110,7 +1102,7 @@ function archiveCard(e) {
       e.status !== '廃止' && (e.confidence !== 'confirmed' || e.status === '要確認') ? h('button', { type: 'button', class: 'btn', style: 'min-height:36px', disabled: S.sent[k + ':p'], onclick: () => sendArchive({ type: 'promote', path: e.path }, k + ':p') }, S.sent[k + ':p'] ? '確認済みにする（送りました）' : '確認済みにする') : null,
       e.status !== '廃止' && e.type !== 'lesson' ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => {
         S.form['a:edit'] = e.path; S.form['a:type'] = e.type; S.form['a:name'] = e.name; S.form['a:aliases'] = e.aliases.join('、'); S.form['a:summary'] = e.summary || ''; S.form['a:body'] = e.body || ''; S.form['a:source'] = e.source === '依頼主の登録' ? '' : (e.source || '');
-        S.open['a:form'] = true; render(); const f = document.getElementById('a:name'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); }
+        render(); const f = document.getElementById('a:name'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); }
       } }, '編集') : null,
       e.status !== '廃止' && e.type !== 'lesson' ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.confirm[k + ':t'] = !S.confirm[k + ':t']; S.open[k] = true; render(); } }, '種類を変更') : null,
       h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyText(e.body || '', '本文') }, '本文をコピー'),
@@ -1136,27 +1128,15 @@ function knowTab() {
     searchBox('f:kn', '言葉で探す（本文も探します）')];
   if (m.archiveWait) out.push(h('p', { class: 'fine', role: 'status' }, `書庫への反映待ちが ${m.archiveWait} 件あります。/guild:quest が動いていれば、すぐ反映されます。動いていなければ、チャットで /guild:quest と送ってください。`));
   const kn = S.kn, all = m.archive || [];
-  const seg = (cap, ...opts) => h('div', { class: 'seg', role: 'group', 'aria-label': cap }, h('span', { class: 'cap' }, cap), h('span', { class: 'opts' }, ...opts));
-  const choice = (v, l, cur, set) => h('button', { type: 'button', class: 'o' + (cur === v ? ' on' : ''), 'aria-pressed': String(cur === v), onclick: () => { set(v); render(); } }, l);
-  const confOn = Object.keys(kn.conf).filter((k) => kn.conf[k]);
-  const sum = [confOn.length ? '確度：' + confOn.map((k) => CONF[k][0]).join('・') : '', kn.st === 'all' ? '廃止も含む' : '', kn.sort !== 'name' ? '確認日が新しい順' : ''].filter(Boolean).join('　');
-  out.push(h('div', { class: 'kn-cond' }, h('button', { type: 'button', class: 'btn ghost sm', 'aria-expanded': String(!!kn.cond), onclick: () => { kn.cond = !kn.cond; render(); } }, kn.cond ? '条件を閉じる' : '条件'),
-    sum ? h('span', { class: 'fine' }, sum) : null));
-  if (kn.cond) out.push(h('div', { class: 'kn-bar' },
-    seg('確度', ...Object.entries(CONF).map(([k, [l]]) => { const c = h('input', { type: 'checkbox' }); c.checked = !!kn.conf[k];
-      c.addEventListener('change', () => { kn.conf[k] = c.checked; render(); }); return h('label', { class: 'o' + (c.checked ? ' on' : '') }, c, l); })),
-    seg('状態', choice('active', '使っているもの', kn.st, (v) => { kn.st = v; }), choice('all', '廃止も含む', kn.st, (v) => { kn.st = v; })),
-    seg('並び', choice('name', '名前順', kn.sort, (v) => { kn.sort = v; }), choice('confirmed', '確認日が新しい順', kn.sort, (v) => { kn.sort = v; }))));
   if ((m.archiveRejected || []).length) out.push(h('div', { class: 'card', role: 'status', style: 'margin-bottom:10px' }, h('b', null, '反映されなかった入力（新しい5件まで）'),
     h('ul', { style: 'margin:6px 0 0' }, m.archiveRejected.map((r) => h('li', { class: 'fine' }, code(r.file), '：', r.reason)))));
   out.push(archiveForm());
-  const cmp = kn.sort === 'confirmed' ? (a, b) => String(b.confirmed || '').localeCompare(String(a.confirmed || '')) || String(a.name).localeCompare(String(b.name)) : (a, b) => String(a.name).localeCompare(String(b.name));
+  const cmp = (a, b) => String(a.name).localeCompare(String(b.name));
   const groups = ARCH_TYPES.map(([type, , title]) => ({ type, title,
-    list: all.filter((e) => e.type === type).filter((e) => kn.st === 'all' || e.status !== '廃止')
-      .filter((e) => !confOn.length || confOn.includes(e.confidence)).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort(cmp) }));
+    list: all.filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort(cmp) }));
   for (const { type, title, list } of groups) {
     const head = type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title;
-    if (!list.length) { out.push(h('p', { class: 'sub kn-h', id: 'kn-' + type, style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q || confOn.length ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
+    if (!list.length) { out.push(h('p', { class: 'sub kn-h', id: 'kn-' + type, style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
     out.push(h('h3', { class: 'sec kn-h', id: 'kn-' + type }, head, `　${list.length}件`));
     for (const e of list) out.push(archiveCard(e));
   }
@@ -1250,12 +1230,10 @@ function flowTab() {
   const card = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
   const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
   return [h('h2', { class: 'h2' }, 'ギルド案内'),
-    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼を出してから、納品物を受け取るまでの流れと、それぞれの役・スキルの説明です。あなたが操作するのは、赤い枠の場所だけです。'),
+    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼を出してから、納品物を受け取るまでの流れと、それぞれの役の説明です。あなたが操作するのは、赤い枠の場所だけです。'),
     h('div', { class: 'card', style: 'margin-bottom:16px;overflow:auto' }, flowSvg()),
     h('div', { class: 'grid2' },
-      card('スキル（チャットで使う）', dl([['/guild:init', '最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。依頼主への質問・承認・確認は、すべてこの画面で聞きます。動いている間は、画面での答えを待ち続けます。']])),
-      card('役', dl([['ギルドマスター', '/guild:quest 本体。役を呼び、進め方の判断は guild.py に任せます。判断はしません。'], ['地図師', '依頼を Todo に分解し、前提・種別・合格基準・納品物の形式を決めます。あいまいなところは質問します。'], ['冒険者', '自動でできる Todo（調べる・書き写す・整理する・書く）を実行します。最後のまとめの Todo では、納品物の資料を作ります。'], ['斥候', '動的ページ（地図・SNS など）を、ブラウザで読むだけの役。クリックも入力もしません。鑑定士が開けなかった出典を読むときにも、呼ばれます。'], ['鑑定士', '成果物を合格基準で判定します。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます（開けないものは、斥候に読んでもらいます）。成果物は直しません。'], ['司書', '依頼が終わったあと、書庫に残す用語・フロー・情報・心得の候補を挙げます。登録はしません。'], ['あなた', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。']])),
-      card('guild/ の中身', dl([['board.html', 'この画面。'], ['requests/', '出したばかりで、まだ受け付けられていない依頼。'], ['Q001/…', '依頼ごとのフォルダ。plan.json（計画）、inbox/（あなたの答え）、reports/（役の報告）、output/（成果物）。'], ['archive/', '書庫。用語・業務フロー・業務情報・個人・心得を、種類別のフォルダと索引（index.md）で持つ。'], ['templates/', '納品物のテンプレート。']])))];
+      card('役', dl([['ギルドマスター', '/guild:quest 本体。役を呼び、進め方の判断は guild.py に任せます。判断はしません。'], ['地図師', '依頼を Todo に分解し、前提・種別・合格基準・納品物の形式を決めます。あいまいなところは質問します。'], ['冒険者', '自動でできる Todo（調べる・書き写す・整理する・書く）を実行します。最後のまとめの Todo では、納品物の資料を作ります。'], ['斥候', '動的ページ（地図・SNS など）を、ブラウザで読むだけの役。クリックも入力もしません。鑑定士が開けなかった出典を読むときにも、呼ばれます。'], ['鑑定士', '成果物を合格基準で判定します。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます（開けないものは、斥候に読んでもらいます）。成果物は直しません。'], ['司書', '依頼が終わったあと、書庫に残す用語・フロー・情報・心得の候補を挙げます。登録はしません。'], ['あなた', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。']])))];
 }
 
 // 各役のモデル。正本は agents/*.md の model（tests/test_guild.py が一致を確かめる）
@@ -1277,7 +1255,8 @@ function helpTab() {
       h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられて、「道のり」が出ます。承認はこの1回だけです。'),
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
       h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。')),
-      h('p', { class: 'fine', style: 'margin:10px 0 0' }, 'スキル（/guild:init、/guild:quest）の説明は、「ギルド案内」にあります。')),
+      h('p', { class: 'fine', style: 'margin:10px 0 0' }, 'スキル（/guild:init、/guild:quest）の使い方は、下の「スキルの使い方」にあります。')),
+    sec('スキルの使い方（チャットで使う）', dl([['/guild:init', 'プロジェクトのフォルダで、最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。何度実行しても、依頼や書庫の項目は消えません。プラグインを更新したあとにもう一度実行すると、この画面が最新になります。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。質問・承認・確認は、チャットではなく、この画面の「手紙」で聞きます。動いている間は、この画面での答えを待ち続け、届くとすぐ取り込みます。'], ['止まったとき', 'しばらく動きがなければ、チャットで /guild:quest と送ってください。保存済みの答えや依頼を読み取って、続きから進めます。']])),
     sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（掲示板の一覧・目次・絞り込みで使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', 'Todo ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全 Todo が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
       h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'Todo の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
     sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['道のり', 'Todo の順序。前提が済んだものから進みます。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['やめる', '失敗した Todo を計画から外すこと。続く Todo もやめるか、進めるかを選べます。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
