@@ -1107,6 +1107,28 @@ class ArchiveTest(unittest.TestCase):
                 self.assertEqual(len(self.retype(path, to)["rejected"]), 1)
         self.assertTrue((self.adir / rel).exists() and (self.adir / les).exists() and (self.adir / dep).exists())
 
+    def test_retype_rolls_back_the_new_file_when_the_old_one_cannot_be_removed(self):
+        from unittest import mock
+        rel = guild.write_entry(self.adir, self.entry(name="料金", summary="s"))
+        real_unlink = Path.unlink
+
+        def fake(self_, *a, **k):
+            if self_.name == "料金.md" and self_.parent.name == "terms":
+                raise PermissionError("locked")
+            return real_unlink(self_, *a, **k)
+        with mock.patch.object(Path, "unlink", fake):
+            r = self.retype(rel, "fact")
+        self.assertEqual(len(r["rejected"]), 1)
+        self.assertTrue((self.adir / rel).exists())
+        self.assertFalse((self.adir / "facts" / "料金.md").exists())  # 重複して残らない
+
+    def test_rejected_archive_input_leaves_its_reason_for_the_board(self):
+        rel = guild.write_entry(self.adir, self.entry(name="A", summary="s"))
+        r = self.retype(rel, "term")  # 同じ種類
+        self.assertEqual(len(r["rejected"]), 1)
+        reason = (self.adir / "inbox" / "rejected" / "20261011-retype.json.reason.txt").read_text(encoding="utf-8")
+        self.assertIn("同じ種類", reason)
+
     def test_archive_ingest_rejects_bad_input_without_stopping(self):
         d = self.adir / "inbox"
         (d / "0-broken.json").write_text("{not json", encoding="utf-8")

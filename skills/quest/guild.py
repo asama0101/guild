@@ -743,8 +743,12 @@ def archive_apply(adir, data):
         if dup:
             raise GuildError(f"移動先に同名の項目があります: {dup}")
         e["type"] = to
-        write_entry(adir, e)  # 新しい場所へ。ファイル名が重なれば連番になり、上書きしない
-        src.unlink()  # 書けたあとで元を消す（書けなければ元は残る）
+        new = adir / write_entry(adir, e)  # 新しい場所へ。ファイル名が重なれば連番になり、上書きしない
+        try:
+            src.unlink()  # 書けたあとで元を消す（書けなければ元は残る）
+        except OSError as err:
+            new.unlink()  # 元を消せなかったら、書いたほうを戻す（2つの種類に残さない）
+            raise GuildError(f"元の項目を消せませんでした: {err}")
     elif kind == "deprecate":
         e = read_entry(entry_path(adir, data["path"]))
         e["body"] = e["body"].rstrip("\n") + f"\n\n## 廃止（{today()}）\n{one_line(data.get('reason')) or '理由の記載なし'}\n"
@@ -769,6 +773,8 @@ def archive_ingest(root):
             dest, key, item = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}
         dest.mkdir(exist_ok=True)
         shutil.move(str(f), str(dest / f.name))
+        if key == "rejected":  # ボードが理由を見せられるように残す
+            (dest / f"{f.name}.reason.txt").write_text(item["reason"], encoding="utf-8")
         report[key].append(item)
     rebuild_index(adir)
     return report

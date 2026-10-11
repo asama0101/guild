@@ -409,8 +409,13 @@ async function loadAll() {
     if (e) archive.push(e);
   }
   const archiveWait = (await S.fs.list('archive/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
+  // 反映されなかった入力の理由（guild.py が archive/inbox/rejected/ に残す）。新しい5件だけ見せる
+  const archiveRejected = [];
+  for (const f of (await S.fs.list('archive/inbox/rejected')).filter((x) => x.kind === 'file' && x.name.endsWith('.reason.txt')).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 5)) {
+    archiveRejected.push({ file: f.name.replace(/\.reason\.txt$/, ''), reason: (await S.fs.readText(`archive/inbox/rejected/${f.name}`)) || '' });
+  }
   const templates = (await S.fs.list('templates')).filter((e) => e.kind === 'file').map((e) => e.name).sort();
-  return { requests, quests, archive, archiveWait, templates, root: (cfg && cfg.root) || '' };
+  return { requests, quests, archive, archiveWait, archiveRejected, templates, root: (cfg && cfg.root) || '' };
 }
 
 // ============================================================ 読み解き
@@ -479,7 +484,7 @@ function derive(q) {
 
 function buildModel(raw) {
   const quests = raw.quests.map(derive);
-  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
@@ -760,14 +765,19 @@ function dueRow(qd, t) {
   const reqDue = qd.q.request && qd.q.request.due;
   const pick = S.form[key] !== undefined ? S.form[key] : (t.due || '');
   const inp = h('input', { type: 'date', 'aria-label': `${t.id} の期限` }); inp.value = pick; bindKey(inp, key);
-  inp.addEventListener('change', () => { S.form[key] = inp.value; render(); });
   const editable = p.status === 'active' || p.status === undefined;
+  const warn = h('p', { class: 'fine', style: 'margin:4px 0 0;color:var(--warn)' });
+  const btn = h('button', { type: 'button', class: 'btn ghost', style: 'min-height:34px', onclick: async () => { await send(qd.id, { type: 'due', todo: t.id, due: (S.form[key] !== undefined ? S.form[key] : (t.due || '')) || null }, key); delete S.form[key]; render(); } });
+  // 入力中に描き直すと、日付の欄の入力位置が先頭に戻る。ボタンと注意文だけをその場で直す
+  const sync = (v) => { btn.disabled = S.conn !== 'ok' || v === (t.due || ''); btn.textContent = v || !t.due ? '期限を設定' : '期限を解除';
+    warn.textContent = v && reqDue && v > reqDue ? `依頼の期限（${reqDue}）より後の日付です。` : ''; warn.hidden = !warn.textContent; };
+  inp.addEventListener('change', () => { S.form[key] = inp.value; sync(inp.value); });
+  sync(pick);
   return h('div', { class: 'duerow' },
     h('span', { class: 'fine' }, '期限：', t.due ? t.due : 'なし'), over ? [' ', stampEl('期限切れ', 'sd-ng')] : null,
     t.dueWait !== undefined ? [' ', stampEl(t.dueWait ? `反映待ち（${t.dueWait}）` : '反映待ち（解除）', 'sd-turn')] : null,
-    editable ? [' ', inp,
-      h('button', { type: 'button', class: 'btn ghost', style: 'min-height:34px', disabled: S.conn !== 'ok' || pick === (t.due || ''), onclick: async () => { await send(qd.id, { type: 'due', todo: t.id, due: pick || null }, key); delete S.form[key]; render(); } }, pick || !t.due ? '期限を設定' : '期限を解除')] : null,
-    pick && reqDue && pick > reqDue ? h('p', { class: 'fine', style: 'margin:4px 0 0;color:var(--warn)' }, `依頼の期限（${reqDue}）より後の日付です。`) : null);
+    editable ? [' ', inp, btn] : null,
+    editable ? warn : null);
 }
 function todoTags(qd) {
   return qd.todos.map((t) => h('article', { class: 'tag' },
@@ -1112,6 +1122,8 @@ function knowTab() {
     [['active', '使っているもの'], ['all', '廃止も含む']].map(([v, l]) => h('button', { type: 'button', class: 'fchk' + (kn.st === v ? ' on' : ''), 'aria-pressed': String(kn.st === v), onclick: () => { kn.st = v; render(); } }, l)),
     h('span', { class: 'sub', style: 'align-self:center;margin-left:10px' }, '並び：'),
     [['name', '名前順'], ['confirmed', '確認日が新しい順']].map(([v, l]) => h('button', { type: 'button', class: 'fchk' + (kn.sort === v ? ' on' : ''), 'aria-pressed': String(kn.sort === v), onclick: () => { kn.sort = v; render(); } }, l))));
+  if ((m.archiveRejected || []).length) out.push(h('div', { class: 'card', role: 'status', style: 'margin-bottom:10px' }, h('b', null, '反映されなかった入力（新しい5件まで）'),
+    h('ul', { style: 'margin:6px 0 0' }, m.archiveRejected.map((r) => h('li', { class: 'fine' }, code(r.file), '：', r.reason)))));
   out.push(archiveForm());
   const confOn = Object.keys(kn.conf).filter((k) => kn.conf[k]);
   const cmp = kn.sort === 'confirmed' ? (a, b) => String(b.confirmed || '').localeCompare(String(a.confirmed || '')) || String(a.name).localeCompare(String(b.name)) : (a, b) => String(a.name).localeCompare(String(b.name));
@@ -1302,7 +1314,7 @@ function obsidianTab() {
       sec('納品物を見る', dl([['場所', h('span', null, code('Q###/output/<Todo>/'), '。依頼ごとのフォルダの中です。納品物は、最後の「まとめの Todo」の成果物です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
       sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[terms/KGI]] のようにリンクします。'].join('\n')),
         dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止']]),
-        h('p', { class: 'fine' }, '項目を Obsidian で直接編集してもかまいませんが、索引（', code('index.md'), '）は自動では更新されません。確実に反映するには、この画面の「書庫」から編集してください。')),
+        h('p', { class: 'fine' }, '本文は Obsidian で編集してもかまいませんが、先頭のフロントマターは Obsidian の「プロパティ」画面で編集しないでください（別名などの書き方が変わり、読めなくなって消えることがあります）。索引（', code('index.md'), '）は自動では更新されません。確実に反映するには、この画面の「書庫」から編集してください。')),
       sec('整形（フォーマッタ）の設定',
         h('ul', null,
           h('li', null, 'コミュニティプラグイン「Linter」を使うなら、YAML のキーの並び替えと「タイトルの自動追加」を切ってください（見出しを勝手に足されると、項目の本文が変わります）。'),
