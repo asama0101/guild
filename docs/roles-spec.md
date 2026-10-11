@@ -15,7 +15,7 @@
 | 冒険者（`adventurer`） | サブエージェント | `auto` の Todo を実行する（調べる・書く）。報告を `reports/` に、成果物を `output/` に書く | `Read, Glob, Grep, WebSearch, WebFetch, Write, Edit` | `sonnet` |
 | 斥候（`scout`） | サブエージェント | 動的ページ（JavaScript で中身が出るページ）をブラウザで読み、文字を取って成果物にする。読むだけ（クリック・入力・ログインはしない）。地図師が `needs_browser: true` を付けた `auto` の Todo のときだけ、ギルドマスターが冒険者の代わりに呼ぶ。ブラウザが1つなので同時に1人まで | `Read, Glob, Grep, Write` と、plugin 同梱のブラウザ（`.mcp.json` の Playwright MCP）の読み取り系だけ：`browser_navigate, browser_snapshot, browser_wait_for, browser_press_key, browser_take_screenshot, browser_tabs, browser_close` | `sonnet` |
 | 鑑定士（`appraiser`） | サブエージェント | Todo の成果物を合格基準で判定し、`passed`/`rejected` と指摘を返す。出典の URL は WebFetch で開いて実在と内容を照合する。開けない出典が残り、出典が合格基準で求められているときは `needs_scout` を返し、ギルドマスターが斥候を確認モードで呼んでから再鑑定する（再鑑定は1回だけ）。成果物は直さない | `Read, Glob, Grep, WebFetch, Write` | `sonnet` |
-| 司書（`librarian`） | サブエージェント | 依頼の完了・中止後に、報告と成果物から、書庫に残す用語・業務フロー・業務情報・心得の候補を `reports/archive-draft.json` に書く。登録はしない（登録は `guild.py` と依頼主の確認） | `Read, Glob, Grep, Write` | `sonnet` |
+| 司書（`librarian`） | サブエージェント | 依頼の完了・中止後に、報告と成果物から、書庫に残す用語・業務フロー・業務情報・個人・心得の候補を `reports/archive-draft.json` に書く。登録はしない（登録は `guild.py` と依頼主の確認） | `Read, Glob, Grep, Write` | `sonnet` |
 
 - 受付（聞き取り）は専任の役を置かない。地図師が『聞くべきこと』（`questions`）を `plan-draft.json` に書き、ボードが「質問」の手紙にして依頼主に出す。ギルドマスターは質問せず、回答を `guild.py answers` で取り出して地図師に渡す（Q7。のちに、質問はすべてボードで行うと決めた）。
 - 記録（旧ノウハウ）は、書庫（`archive/`）に置き換え、専任の司書を置いた（`docs/archive-spec.md`）。全役が作業の前に `archive/index.md` を見て、使った項目を報告の「使った書庫の項目」に書く。心得（`lessons/`）は役が読まない。

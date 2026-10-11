@@ -486,8 +486,8 @@ def take_answers(qdir):
 
 
 # ============================================================ 書庫（archive）
-ARCHIVE_DIRS = {"term": "terms", "flow": "flows", "fact": "facts", "lesson": "lessons"}
-ARCHIVE_TITLES = {"term": "用語", "flow": "業務フロー", "fact": "業務情報"}  # 心得は索引に載せない（役は読まない）
+ARCHIVE_DIRS = {"term": "terms", "flow": "flows", "fact": "facts", "personal": "personal", "lesson": "lessons"}
+ARCHIVE_TITLES = {"term": "用語", "flow": "業務フロー", "fact": "業務情報", "personal": "個人"}  # 心得は索引に載せない（役は読まない）
 CONFIDENCE = ("guess", "sourced", "confirmed")  # 低い順
 ACTIVE_STATUS = ("active", "要確認")
 MAX_CANDIDATES = 12

@@ -874,13 +874,29 @@ class ArchiveTest(unittest.TestCase):
         return e
 
     def test_init_makes_archive_and_keeps_items(self):
-        for sub in ("terms", "flows", "facts", "lessons", "inbox"):
+        for sub in ("terms", "flows", "facts", "personal", "lessons", "inbox"):
             self.assertTrue((self.adir / sub).is_dir(), sub)
         self.assertTrue((self.adir / "index.md").is_file())
         self.assertFalse((self.root / "guild" / "knowledge").exists())
         guild.write_entry(self.adir, self.entry(name="A", confidence="confirmed", source="x"))
         guild.init_guild(self.root)
         self.assertTrue((self.adir / "terms" / "A.md").is_file())
+
+    def test_personal_is_a_type_in_index_and_propose(self):
+        self.assertEqual(guild.ARCHIVE_DIRS["personal"], "personal")
+        guild.write_entry(self.adir, self.entry(type="personal", name="文体", summary="敬体で簡潔に", confidence="confirmed", source="依頼主の登録"))
+        guild.rebuild_index(self.adir)
+        idx = (self.adir / "index.md").read_text(encoding="utf-8")
+        self.assertIn("## 個人", idx)
+        self.assertIn("[[personal/文体]]", idx)
+        self.draft(self.cand("C1", type="personal", name="役職", aliases=[], summary="情報システム部の課長", confidence="guess", source=""))
+        self.assertEqual(guild.archive_propose(self.q)["pending"], ["C1"])  # 心得と違い、確認の手紙を通る
+
+    def test_init_adds_personal_to_an_old_archive(self):
+        import shutil as sh
+        sh.rmtree(self.adir / "personal")
+        guild.init_guild(self.root)
+        self.assertTrue((self.adir / "personal").is_dir())
 
     def test_entry_roundtrip_and_safe_name(self):
         rel = guild.write_entry(self.adir, self.entry(type="fact", name="料金/月額: 200M?", aliases=["a,b"], summary="行1\n行2", body="本文", confidence="sourced", source="u"))

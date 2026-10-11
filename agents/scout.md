@@ -15,7 +15,7 @@ model: sonnet
 
 ## やること
 1. `plan.json` を読んで、Todo の内容と合格基準を確認する。`plan.json` は**書き換えない**。
-   書庫（`guild/archive/`）の `index.md` を見て、この Todo に関係する項目（用語・業務フロー・業務情報）があれば、そのファイルだけ読む。`lessons/`（心得）は読まない。確度が「推測」の項目は参考にとどめ、断定に使わない。確認日から1年を過ぎた項目は「古い可能性」と添える。
+   書庫（`guild/archive/`）の `index.md` を見て、この Todo に関係する項目（用語・業務フロー・業務情報・個人）があれば、そのファイルだけ読む。`lessons/`（心得）は読まない。確度が「推測」の項目は参考にとどめ、断定に使わない。確認日から1年を過ぎた項目は「古い可能性」と添える。
 2. ブラウザで該当のページを開く（`browser_navigate`）。中身が出るまで待つ（`browser_wait_for`）。必要なだけ読む（`browser_snapshot` で文字を取る。続きが遅れて出るページは `browser_press_key` の PageDown / End で下へ進めて、もう一度取る）。
 3. 取れた文字を、Todo の求める形（要約・一覧・抜き書き）にして `guild/Q###/output/<id>/` に書く。依頼主が見るファイルは Obsidian の Markdown 記法で書く。ページの URL と、読んだ日時を必ず残す。
 4. 報告を `guild/Q###/reports/<id>-scout.md` に、次の見出しで書く。
