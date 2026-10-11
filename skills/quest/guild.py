@@ -12,6 +12,7 @@ guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いてい�
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
 guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
 guild.py archive-ingest ROOT: archive/inbox/ の入力（entry・promote・deprecate）を書庫に反映する。
+入力（inbox の JSON）の type の1つに due（Todo の期限の設定・解除）がある。
 エラーは終了コード 1。
 """
 import datetime
@@ -30,6 +31,20 @@ FORMATS = {"md": ".md"}
 TEMPLATE_READABLE = (".md", ".markdown", ".txt", ".csv")
 SATISFIED = ("done", "skipped")
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def check_due(v):
+    """期限は YYYY-MM-DD の日付（実在する日）か None。"""
+    if v is None:
+        return None
+    if not isinstance(v, str) or not DATE_RE.match(v):
+        raise GuildError(f"due は YYYY-MM-DD の日付か null にしてください: {v!r}")
+    try:
+        datetime.date.fromisoformat(v)
+    except ValueError:
+        raise GuildError(f"due が実在しない日付です: {v}")
+    return v
 
 
 class GuildError(Exception):
@@ -116,6 +131,10 @@ def validate(plan, tr):
                 errs.append(f"{i}: criteria.{k} が空です")
         if t.get("confirm") and t.get("kind") != "auto":
             errs.append(f"{i}: confirm は auto の Todo だけに付けられます")
+        try:
+            check_due(t.get("due"))
+        except GuildError as e:
+            errs.append(f"{i}: {e}")
         for d in t.get("deps", []):
             if d not in ids:
                 errs.append(f"{i}: deps の {d} がありません")
@@ -247,6 +266,10 @@ def apply_input(plan, data, tr):
     t = tm.get(data.get("todo"))
     if t is None:
         raise GuildError(f"todo がありません: {data.get('todo')}")
+    if kind == "due":
+        t["due"] = check_due(data.get("due"))
+        note(plan, event="due", todo=t["id"], due=t["due"])
+        return
     if kind == "confirm":
         apply_event(t, "confirmed" if data["ok"] else "declined", tr, plan)
     elif kind == "result":

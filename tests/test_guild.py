@@ -718,6 +718,58 @@ class BoardContractTest(unittest.TestCase):
             self.assertIn(needle, board)
 
 
+class DueTest(unittest.TestCase):
+    """Todo の期限。入力 type=due で設定・変更・解除でき、plan.json を書くのは guild.py だけ。"""
+
+    def ingest(self, p, data):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "inbox").mkdir()
+            (Path(d) / "inbox" / "20261010120000-due-T1.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            return guild.ingest(Path(d) / "plan.json", p, TR)
+
+    def test_set_change_and_clear(self):
+        p = plan(todo("T1", state="running"))
+        self.assertEqual(self.ingest(p, {"type": "due", "todo": "T1", "due": "2026-10-20"})["rejected"], [])
+        self.assertEqual(p["todos"][0]["due"], "2026-10-20")
+        self.ingest(p, {"type": "due", "todo": "T1", "due": "2026-10-25"})
+        self.assertEqual(p["todos"][0]["due"], "2026-10-25")
+        self.ingest(p, {"type": "due", "todo": "T1", "due": None})
+        self.assertIsNone(p["todos"][0]["due"])
+        self.assertEqual([e["event"] for e in p["history"]], ["due", "due", "due"])
+        self.assertNotIn("id", p["history"][0])  # タイムラインは id を持つ記録を状態の変化として読む
+
+    def test_unapproved_plan_accepts_due(self):
+        p = plan(todo("T1"), approved=False)
+        self.assertEqual(self.ingest(p, {"type": "due", "todo": "T1", "due": "2026-10-20"})["rejected"], [])
+
+    def test_bad_dates_are_rejected_and_plan_is_unchanged(self):
+        for bad in ("2026-13-40", "", 20261020, "20261020", "2026-10-2", "2026-02-30"):
+            with self.subTest(bad=bad):
+                p = plan(todo("T1", due="2026-10-20"))
+                r = self.ingest(p, {"type": "due", "todo": "T1", "due": bad})
+                self.assertEqual(len(r["rejected"]), 1)
+                self.assertEqual(p["todos"][0]["due"], "2026-10-20")
+
+    def test_unknown_todo_and_aborted_plan_are_rejected(self):
+        p = plan(todo("T1"))
+        self.assertEqual(len(self.ingest(p, {"type": "due", "todo": "T9", "due": "2026-10-20"})["rejected"]), 1)
+        p["status"] = "aborted"
+        self.assertEqual(len(self.ingest(p, {"type": "due", "todo": "T1", "due": "2026-10-20"})["rejected"]), 1)
+
+    def test_validate_checks_due(self):
+        self.assertEqual(guild.validate(plan(todo("T1", due="2026-10-20"), todo("T2", due=None)), TR), [])
+        self.assertTrue(any("T1" in e and "due" in e for e in guild.validate(plan(todo("T1", due="10/20")), TR)))
+
+    def test_adopt_keeps_due_from_the_draft(self):
+        with tempfile.TemporaryDirectory() as d:
+            q = Path(d) / "Q001"
+            (q / "reports").mkdir(parents=True)
+            (q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q001", "title": "t", "todos": [
+                {"id": "T1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT, "due": "2026-10-20"}]}), encoding="utf-8")
+            guild.adopt(q / "plan.json", TR)
+            self.assertEqual(guild.load_json(q / "plan.json")["todos"][0]["due"], "2026-10-20")
+
+
 class NextViewTest(unittest.TestCase):
     def test_view(self):
         p = plan(todo("T1", state="running"), todo("T2", state="waiting_user", kind="human"),
