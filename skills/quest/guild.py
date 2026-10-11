@@ -11,7 +11,7 @@ guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいな�
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
 guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
-guild.py archive-ingest ROOT: archive/inbox/ の入力（entry・promote・deprecate）を書庫に反映する。
+guild.py archive-ingest ROOT: archive/inbox/ の入力（entry・promote・deprecate・retype）を書庫に反映する。
 入力（inbox の JSON）の type の1つに due（Todo の期限の設定・解除）がある。
 エラーは終了コード 1。
 """
@@ -729,6 +729,22 @@ def archive_apply(adir, data):
         e = read_entry(entry_path(adir, data["path"]))
         e.update(confidence="confirmed", confirmed=today(), status="active", source=e.get("source") or "依頼主の確認")
         write_entry(adir, e, data["path"])
+    elif kind == "retype":
+        src = entry_path(adir, data["path"])
+        e = read_entry(src)
+        to = data.get("to")
+        if to not in ARCHIVE_DIRS or to == "lesson" or e.get("type") == "lesson":
+            raise GuildError("心得への付け替え・心得からの付け替えはできません")
+        if to == e.get("type"):
+            raise GuildError("同じ種類です")
+        if e["status"] == "廃止":
+            raise GuildError("廃止した項目は付け替えられません")
+        dup = find_entry(adir, to, [e.get("name"), *e["aliases"]])
+        if dup:
+            raise GuildError(f"移動先に同名の項目があります: {dup}")
+        e["type"] = to
+        write_entry(adir, e)  # 新しい場所へ。ファイル名が重なれば連番になり、上書きしない
+        src.unlink()  # 書けたあとで元を消す（書けなければ元は残る）
     elif kind == "deprecate":
         e = read_entry(entry_path(adir, data["path"]))
         e["body"] = e["body"].rstrip("\n") + f"\n\n## 廃止（{today()}）\n{one_line(data.get('reason')) or '理由の記載なし'}\n"
@@ -739,7 +755,7 @@ def archive_apply(adir, data):
 
 
 def archive_ingest(root):
-    """archive/inbox/ の入力を反映する。entry（新規・編集）、promote（確認済みにする）、deprecate（廃止にする）。"""
+    """archive/inbox/ の入力を反映する。entry（新規・編集）、promote（確認済みにする）、deprecate（廃止にする）、retype（種類の付け替え）。"""
     adir = Path(root) / "guild" / "archive"
     inbox = adir / "inbox"
     report = {"applied": [], "rejected": []}

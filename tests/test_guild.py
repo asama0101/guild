@@ -1048,6 +1048,47 @@ class ArchiveTest(unittest.TestCase):
         guild.archive_ingest(self.root)
         self.assertEqual(guild.read_entry(self.adir / "terms" / "KPI.md")["summary"], "編集後")
 
+    def retype(self, path, to):
+        self.put_inbox("20261011-retype.json", {"type": "retype", "path": path, "to": to})
+        return guild.archive_ingest(self.root)
+
+    def test_retype_moves_the_file_keeps_fields_and_updates_index(self):
+        rel = guild.write_entry(self.adir, self.entry(name="料金", summary="s", body="本文", confidence="sourced", source="https://x (2026-10-01)", aliases=["fee"]))
+        old = guild.read_entry(self.adir / rel)
+        r = self.retype(rel, "fact")
+        self.assertEqual(r["rejected"], [], r)
+        self.assertFalse((self.adir / rel).exists())
+        new = guild.read_entry(self.adir / "facts" / "料金.md")
+        self.assertEqual(new["type"], "fact")
+        for k in ("confidence", "confirmed", "source", "status", "body", "aliases", "summary"):
+            self.assertEqual(new[k], old[k], k)
+        idx = (self.adir / "index.md").read_text(encoding="utf-8")
+        self.assertIn("[[facts/料金]]", idx)
+        self.assertNotIn("[[terms/料金]]", idx)
+
+    def test_retype_rejects_a_same_name_item_in_the_target(self):
+        guild.write_entry(self.adir, self.entry(type="fact", name="料金", summary="別", confidence="guess"))
+        rel = guild.write_entry(self.adir, self.entry(name="料金", summary="s", aliases=["fee"]))
+        r = self.retype(rel, "fact")
+        self.assertEqual(len(r["rejected"]), 1)
+        self.assertTrue((self.adir / rel).exists())
+
+    def test_retype_uses_a_serial_file_name_when_only_the_file_name_collides(self):
+        guild.write_entry(self.adir, self.entry(type="fact", name="別の項目", summary="x"), "facts/料金.md")  # ファイル名だけ同じ
+        rel = guild.write_entry(self.adir, self.entry(name="料金", summary="s"))
+        self.assertEqual(self.retype(rel, "fact")["rejected"], [])
+        self.assertEqual(guild.read_entry(self.adir / "facts" / "料金.md")["name"], "別の項目")
+        self.assertEqual(guild.read_entry(self.adir / "facts" / "料金-2.md")["name"], "料金")
+
+    def test_retype_rejects_bad_requests_and_changes_nothing(self):
+        rel = guild.write_entry(self.adir, self.entry(name="A", summary="s"))
+        les = guild.write_entry(self.adir, self.entry(type="lesson", name="L", summary="s"))
+        dep = guild.write_entry(self.adir, dict(self.entry(name="D", summary="s"), status="廃止"))
+        for path, to in ((rel, "term"), (rel, "lesson"), (rel, "nonsense"), (les, "term"), (dep, "fact"), ("terms/none.md", "fact"), ("../x.md", "fact")):
+            with self.subTest(path=path, to=to):
+                self.assertEqual(len(self.retype(path, to)["rejected"]), 1)
+        self.assertTrue((self.adir / rel).exists() and (self.adir / les).exists() and (self.adir / dep).exists())
+
     def test_archive_ingest_rejects_bad_input_without_stopping(self):
         d = self.adir / "inbox"
         (d / "0-broken.json").write_text("{not json", encoding="utf-8")
