@@ -101,12 +101,14 @@
 
 | コマンド | 動き |
 |---|---|
-| `init <root>` | `<root>/guild/`（`knowledge/`・`requests/`・`config.json`・`board.html`）を作る。何度実行しても依頼のデータは消さない |
+| `init <root>` | `<root>/guild/`（`archive/`（`terms/ flows/ facts/ lessons/ inbox/ index.md`）・`requests/`・`config.json`・`board.html`）を作る。何度実行しても依頼のデータは消さない |
 | `requests <root>` | ボードが保存した受付待ちの依頼を一覧する |
 | `new <root> [依頼のID]` | 次の依頼のフォルダ（`Q001…`）を作る。ID を渡すと、受付待ちの依頼を取り込む |
 | `arrivals <root>` | ボードから届いて、まだ取り込んでいない入力と依頼を一覧する |
 | `wait <root> [秒]` | 入力か依頼が届くまで待つ（既定 540 秒）。届いていれば、すぐ返す |
 | `answers <dir>` | 計画がない依頼の、質問への回答を取り出す |
+| `archive-propose <dir>` | 司書の候補（`reports/archive-draft.json`）を検査し、心得は登録、ほかは確認待ち（`archive.json` の `status` が `proposed`）にする。同名・別名の項目は更新の候補にする。候補は12件まで |
+| `archive-ingest <root>` | `archive/inbox/` の入力（`entry`・`promote`・`deprecate`）を書庫に反映し、索引（`archive/index.md`）を作り直す |
 | `adopt <plan.json>` | 同じフォルダの `reports/plan-draft.json` を検査（`validate` と同じ検査に加えて、`template` の存在と形式）し、承認前の `plan.json` にする。すでにあれば上書きしない（`status` が `replan` のときだけ、完了済みの Todo を引き継いで置き換える） |
 | `validate <plan.json>` | `deps` の参照切れ、循環、`kind`・`criteria` の欠け、未知の `state`、`human` の `confirm`、未対応の `format` を検出する |
 | `sync <plan.json>` | 前提の結果に応じて `deps_done`・`dep_failed`・`unblock` を、動かなくなるまで適用する（承認前・中止・見直し中は何もしない） |

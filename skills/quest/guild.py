@@ -10,6 +10,8 @@ guild.py requests ROOT: 受付待ちの依頼を一覧する。
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
+guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
+guild.py archive-ingest ROOT: archive/inbox/ の入力（entry・promote・deprecate）を書庫に反映する。
 エラーは終了コード 1。
 """
 import datetime
@@ -187,8 +189,11 @@ def ingest(plan_path, plan, tr):
     for f in sorted(inbox.glob("*.json")):
         try:
             data = load_json(f)
-            apply_input(plan, data, tr)
-            write_user_report(Path(plan_path).parent, data)
+            if isinstance(data, dict) and data.get("type") == "archive":
+                archive_decide(Path(plan_path).parent, data)  # 書庫の確認は、中止された依頼でも受け付ける
+            else:
+                apply_input(plan, data, tr)
+                write_user_report(Path(plan_path).parent, data)
             dest, key, item = inbox / "done", "applied", f.name
         except (GuildError, KeyError, TypeError, AttributeError) as e:
             dest, key, item = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}
@@ -292,7 +297,8 @@ def adopt(plan_path, tr):
         if not str(template).lower().endswith(TEMPLATE_READABLE):
             raise GuildError(f"template の形式は、今は読めません: {template}（読める形式: {', '.join(TEMPLATE_READABLE)}）")
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
-            "status": "active", "format": draft.get("format", "md"), **({"template": template} if template else {}), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
+            "status": "active", "format": draft.get("format", "md"), **({"template": template} if template else {}),
+            **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
     for t in todos:
         if not isinstance(t, dict):
             raise GuildError("todos の要素が不正です")
@@ -339,7 +345,7 @@ def init_guild(root):
     """ROOT/guild/ を作り、この Python のパスを config.json に記録する。何度実行しても、既存の依頼は消さない。"""
     gdir = Path(root) / "guild"
     gdir.mkdir(parents=True, exist_ok=True)
-    (gdir / "knowledge").mkdir(exist_ok=True)
+    init_archive(gdir / "archive")
     (gdir / "requests").mkdir(exist_ok=True)
     board = HERE / "board.html"
     if board.exists():
@@ -416,6 +422,10 @@ def arrivals(root):
                 except GuildError:
                     continue  # 読めない依頼は数えない（list_requests と同じ）
                 out.append({"kind": "request", "id": f.stem})
+        ainbox = gdir / "archive" / "inbox"
+        if ainbox.is_dir():
+            for f in sorted(ainbox.glob("*.json")):
+                out.append({"kind": "archive", "file": f.name})
     return out
 
 
@@ -452,12 +462,270 @@ def take_answers(qdir):
     return got
 
 
+# ============================================================ 書庫（archive）
+ARCHIVE_DIRS = {"term": "terms", "flow": "flows", "fact": "facts", "lesson": "lessons"}
+ARCHIVE_TITLES = {"term": "用語", "flow": "業務フロー", "fact": "業務情報"}  # 心得は索引に載せない（役は読まない）
+CONFIDENCE = ("guess", "sourced", "confirmed")  # 低い順
+ACTIVE_STATUS = ("active", "要確認")
+MAX_CANDIDATES = 12
+FILE_BAD = re.compile(r'[\\/:*?"<>|\s]+')
+
+
+def init_archive(adir):
+    """archive/ と種類別のフォルダ、手入力の受け皿（inbox/）、索引を作る。既存の項目は消さない。"""
+    adir = Path(adir)
+    for sub in (*ARCHIVE_DIRS.values(), "inbox"):
+        (adir / sub).mkdir(parents=True, exist_ok=True)
+    if not (adir / "index.md").exists():
+        rebuild_index(adir)
+
+
+def one_line(v):
+    return " ".join(str(v or "").split())
+
+
+def today():
+    return datetime.date.today().isoformat()
+
+
+def read_entry(path):
+    """項目のファイルを読む。見出し情報（---で囲んだ key: value）と本文（body）の辞書。読めなければ None。"""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    m = re.match(r"---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", text, re.S)
+    if not m:
+        return None
+    e = {}
+    for line in m.group(1).splitlines():
+        k, sep, v = line.partition(":")
+        if sep:
+            e[k.strip()] = v.strip()
+    e["aliases"] = [a.strip() for a in e.get("aliases", "").split(",") if a.strip()]
+    e["body"] = m.group(2)
+    e.setdefault("status", "active")
+    return e
+
+
+def entry_text(e):
+    head = ["---", f"name: {one_line(e['name'])}", f"type: {e['type']}",
+            "aliases: " + ", ".join(one_line(a).replace(",", "、") for a in e.get("aliases", []) if one_line(a)),
+            f"confidence: {e['confidence']}", f"source: {one_line(e.get('source'))}", f"confirmed: {e.get('confirmed') or today()}",
+            f"status: {e.get('status') or 'active'}", f"summary: {one_line(e.get('summary'))}", "---"]
+    return "\n".join(head) + "\n" + (e.get("body") or "").strip("\n") + "\n"
+
+
+def check_entry(e):
+    if e.get("type") not in ARCHIVE_DIRS:
+        raise GuildError(f"type が不正です: {e.get('type')}（{', '.join(ARCHIVE_DIRS)}）")
+    if not one_line(e.get("name")):
+        raise GuildError("name がありません")
+    if not one_line(e.get("summary")):
+        raise GuildError(f"summary がありません: {e.get('name')}")
+    if e.get("confidence") not in CONFIDENCE:
+        raise GuildError(f"confidence が不正です: {e.get('confidence')}（{', '.join(CONFIDENCE)}）")
+    if e["confidence"] != "guess" and not one_line(e.get("source")):
+        raise GuildError(f"出典（source）がありません: {e.get('name')}（推測なら confidence を guess にする）")
+
+
+def write_entry(adir, e, path=None):
+    """項目を書く。path（archive/ からの相対）があれば、そこへ上書き。なければ名前から新しいファイル名を決める。"""
+    adir = Path(adir)
+    check_entry(e)
+    if path is None:
+        stem = FILE_BAD.sub("-", one_line(e["name"])).strip("-. ")
+        if not stem:
+            raise GuildError(f"ファイル名にできない名前です: {e['name']}")
+        folder = adir / ARCHIVE_DIRS[e["type"]]
+        folder.mkdir(parents=True, exist_ok=True)
+        n, cand = 1, folder / f"{stem}.md"
+        while cand.exists():
+            n += 1
+            cand = folder / f"{stem}-{n}.md"
+        path = cand.relative_to(adir).as_posix()
+    target = adir / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(entry_text(e), encoding="utf-8")
+    return path
+
+
+def entry_path(adir, rel):
+    """archive/ の中の項目だけを指せる。外や、4つのフォルダ以外は指せない。"""
+    parts = str(rel).replace("\\", "/").split("/")
+    ok = len(parts) == 2 and parts[0] in ARCHIVE_DIRS.values() and parts[1].endswith(".md") and ".." not in parts[1]
+    p = Path(adir) / "/".join(parts)
+    if not ok or not p.is_file():
+        raise GuildError(f"項目が見つかりません: {rel}")
+    return p
+
+
+def all_entries(adir):
+    for folder in ARCHIVE_DIRS.values():
+        for f in sorted((Path(adir) / folder).glob("*.md")):
+            e = read_entry(f)
+            if e is not None:
+                yield f"{folder}/{f.name}", e
+
+
+def find_entry(adir, etype, names):
+    """同じ種類で、名前か別名が一致する、使われている項目（廃止を除く）を探す。大文字小文字は区別しない。"""
+    want = {one_line(n).lower() for n in names if one_line(n)}
+    for rel, e in all_entries(adir):
+        if e.get("type") != etype or e["status"] not in ACTIVE_STATUS:
+            continue
+        if want & {one_line(n).lower() for n in [e.get("name"), *e["aliases"]]}:
+            return rel
+    return None
+
+
+def rebuild_index(adir):
+    """索引（index.md）を作り直す。使われている項目（廃止を除く）だけ。心得は載せない。"""
+    adir = Path(adir)
+    out = ["# 書庫の索引", "",
+           "関係する項目だけ読む。確度は 確認済み／出典あり／推測。推測は断定に使わない。確認日から1年を過ぎた項目は、古い可能性がある。", ""]
+    label = {"confirmed": "確認済み", "sourced": "出典あり", "guess": "推測"}
+    items = list(all_entries(adir))
+    for etype, title in ARCHIVE_TITLES.items():
+        rows = [(rel, e) for rel, e in items if e.get("type") == etype and e["status"] in ACTIVE_STATUS]
+        out += [f"## {title}", ""]
+        if not rows:
+            out += ["なし", ""]
+            continue
+        out += ["| 名前 | 別名 | 確度 | 確認日 | 説明 | 場所 |", "|---|---|---|---|---|---|"]
+        for rel, e in rows:
+            mark = "（要確認）" if e["status"] == "要確認" else ""
+            cells = [e.get("name", ""), "、".join(e["aliases"]), label.get(e.get("confidence"), "") + mark, e.get("confirmed", ""), e.get("summary", ""), rel]
+            out.append("| " + " | ".join(c.replace("|", "／") for c in cells) + " |")
+        out.append("")
+    (adir / "index.md").write_text("\n".join(out), encoding="utf-8")
+
+
+def apply_candidate(adir, c, quest):
+    """候補を書庫に入れる。update_of があれば更新（食い違い＝conflict なら追記して 要確認。確度は下げない）。"""
+    rel = c.get("update_of")
+    if rel and (Path(adir) / rel).is_file():
+        old = read_entry(entry_path(adir, rel))
+        e = dict(old, aliases=sorted({*old["aliases"], *c.get("aliases", [])}), confirmed=today())
+        if c.get("conflict"):
+            e["body"] = old["body"].rstrip("\n") + f"\n\n## 食い違い（{today()}、{quest}）\n{c.get('body', '').strip()}\n出典：{one_line(c.get('source')) or 'なし'}\n"
+            e["status"] = "要確認"
+        else:
+            e.update(summary=c["summary"], body=c.get("body", ""), source=c.get("source", ""), status="active")
+            if CONFIDENCE.index(c["confidence"]) > CONFIDENCE.index(old.get("confidence", "guess")):
+                e["confidence"] = c["confidence"]
+        return write_entry(adir, e, rel)
+    return write_entry(adir, dict(c, confirmed=today(), status="active"))
+
+
+def archive_propose(qdir):
+    """司書の候補を検査する。心得はそのまま登録、ほかは依頼主の確認待ち（archive.json）。同名・別名は更新の候補にする。"""
+    qdir = Path(qdir)
+    adir = qdir.parent / "archive"
+    init_archive(adir)
+    draft = qdir / "reports" / "archive-draft.json"
+    cands = load_json(draft).get("candidates", []) if draft.exists() else []
+    if not isinstance(cands, list) or len(cands) > MAX_CANDIDATES:
+        raise GuildError(f"candidates は {MAX_CANDIDATES} 件までの配列にしてください")
+    ids = [c.get("id") if isinstance(c, dict) else None for c in cands]
+    if None in ids or len(set(ids)) != len(ids):
+        raise GuildError("候補の id が欠けているか、重なっています")
+    for c in cands:
+        check_entry(c)
+    registered, pending = [], []
+    for c in cands:
+        found = find_entry(adir, c["type"], [c["name"], *c.get("aliases", [])])
+        if found:
+            c["update_of"] = found
+        if c["type"] == "lesson":
+            registered.append(apply_candidate(adir, c, qdir.name))
+        else:
+            pending.append(c)
+    rebuild_index(adir)
+    state = {"status": "proposed" if pending else "done", "candidates": pending, "registered": registered, "decided": {}}
+    save_plan(qdir / "archive.json", state)
+    return {"status": state["status"], "registered": registered, "pending": [c["id"] for c in pending]}
+
+
+def archive_decide(qdir, data):
+    """依頼主の答え（decisions: {候補の id: register か skip}）を反映する。確認待ちでなければエラー。"""
+    qdir = Path(qdir)
+    state_path = qdir / "archive.json"
+    state = load_json(state_path) if state_path.exists() else {}
+    if state.get("status") != "proposed":
+        raise GuildError("確認待ちの登録候補がありません")
+    decisions = data.get("decisions")
+    if not isinstance(decisions, dict):
+        raise GuildError("decisions がありません")
+    adir = qdir.parent / "archive"
+    for c in state["candidates"]:
+        if decisions.get(c["id"]) == "register":
+            state["registered"].append(apply_candidate(adir, c, qdir.name))
+            state["decided"][c["id"]] = "register"
+        else:
+            state["decided"][c["id"]] = "skip"
+    state["status"] = "done"
+    rebuild_index(adir)
+    save_plan(state_path, state)
+
+
+def archive_apply(adir, data):
+    kind = data.get("type")
+    if kind == "entry":
+        e = dict(data["entry"], confidence="confirmed", confirmed=today(), status="active")
+        e.setdefault("aliases", [])
+        e["source"] = e.get("source") or "依頼主の登録"
+        check_entry(e)
+        if data.get("update_of"):
+            entry_path(adir, data["update_of"])
+            write_entry(adir, e, data["update_of"])
+            return
+        dup = find_entry(adir, e["type"], [e["name"], *e["aliases"]])
+        if dup:
+            raise GuildError(f"同名の項目があります: {dup}（編集してください）")
+        write_entry(adir, e)
+    elif kind == "promote":
+        e = read_entry(entry_path(adir, data["path"]))
+        e.update(confidence="confirmed", confirmed=today(), status="active", source=e.get("source") or "依頼主の確認")
+        write_entry(adir, e, data["path"])
+    elif kind == "deprecate":
+        e = read_entry(entry_path(adir, data["path"]))
+        e["body"] = e["body"].rstrip("\n") + f"\n\n## 廃止（{today()}）\n{one_line(data.get('reason')) or '理由の記載なし'}\n"
+        e["status"] = "廃止"
+        write_entry(adir, e, data["path"])
+    else:
+        raise GuildError(f"入力が不正です: {kind}")
+
+
+def archive_ingest(root):
+    """archive/inbox/ の入力を反映する。entry（新規・編集）、promote（確認済みにする）、deprecate（廃止にする）。"""
+    adir = Path(root) / "guild" / "archive"
+    inbox = adir / "inbox"
+    report = {"applied": [], "rejected": []}
+    if not inbox.is_dir():
+        return report
+    for f in sorted(inbox.glob("*.json")):
+        try:
+            archive_apply(adir, load_json(f))
+            dest, key, item = inbox / "done", "applied", f.name
+        except (GuildError, KeyError, TypeError, AttributeError) as e:
+            dest, key, item = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}
+        dest.mkdir(exist_ok=True)
+        shutil.move(str(f), str(dest / f.name))
+        report[key].append(item)
+    rebuild_index(adir)
+    return report
+
+
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "wait", "arrivals", "answers"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "wait", "arrivals", "answers", "archive-propose", "archive-ingest"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
     try:
+        if cmd in ("archive-propose", "archive-ingest"):
+            print(json.dumps(archive_propose(path) if cmd == "archive-propose" else archive_ingest(path), ensure_ascii=False))
+            return 0
         if cmd in ("wait", "arrivals", "answers"):
             if cmd == "wait":
                 result = wait_for(path, float(argv[3]) if len(argv) > 3 else 540)

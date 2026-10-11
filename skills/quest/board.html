@@ -312,6 +312,18 @@ const FORMATS = [
 // テンプレートは、どんな形式でも追加できる。今、中身を読んで使えるのは、文字のファイルだけ
 const TEMPLATE_READABLE = ['.md', '.markdown', '.txt', '.csv'];
 const tplReadable = (n) => TEMPLATE_READABLE.some((e) => String(n).toLowerCase().endsWith(e));
+// 書庫の種類。[type, フォルダ, 見出し]
+const ARCH_TYPES = [['term', 'terms', '用語'], ['flow', 'flows', '業務フロー'], ['fact', 'facts', '業務情報'], ['lesson', 'lessons', '心得']];
+const CONF = { confirmed: ['確認済み', 'sd-ok'], sourced: ['出典あり', 'sd-run'], guess: ['推測', 'sd-draft'] };
+function parseEntry(path, text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text || '');
+  if (!m) return null;
+  const e = { path, body: m[2].trim() };
+  for (const line of m[1].split(/\r?\n/)) { const i = line.indexOf(':'); if (i > 0) e[line.slice(0, i).trim()] = line.slice(i + 1).trim(); }
+  e.aliases = (e.aliases || '').split(',').map((x) => x.trim()).filter(Boolean);
+  e.status = e.status || 'active';
+  return e;
+}
 const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。';
 
 // ============================================================ 状態
@@ -361,15 +373,19 @@ async function loadAll() {
     if (!plan) for (const f of await S.fs.list(`${q}/inbox/done`)) {
       if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', todo: null, choice: null, qs: j.answers.map((a) => a.q) }); }
     }
-    const knowledge = (await S.fs.list('knowledge')).some((x) => x.name === `${q}.md`);
-    quests.push({ id: q, plan, request, draft, reports, output, inbox, knowledge });
+    const archive = await readJSON(`${q}/archive.json`);
+    quests.push({ id: q, plan, request, draft, reports, output, inbox, archive });
   }
   quests.sort((a, b) => b.id.localeCompare(a.id));
-  const knowledge = [];
-  for (const e of await S.fs.list('knowledge')) if (e.kind === 'file' && e.name.endsWith('.md')) knowledge.push({ name: e.name, text: (await S.fs.readText(`knowledge/${e.name}`)) || '' });
-  knowledge.sort((a, b) => b.name.localeCompare(a.name));
+  const archive = [];
+  for (const [, dir] of ARCH_TYPES) for (const f of await S.fs.list(`archive/${dir}`)) {
+    if (f.kind !== 'file' || !f.name.endsWith('.md')) continue;
+    const e = parseEntry(`${dir}/${f.name}`, await S.fs.readText(`archive/${dir}/${f.name}`));
+    if (e) archive.push(e);
+  }
+  const archiveWait = (await S.fs.list('archive/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
   const templates = (await S.fs.list('templates')).filter((e) => e.kind === 'file').map((e) => e.name).sort();
-  return { requests, quests, knowledge, templates, root: (cfg && cfg.root) || '' };
+  return { requests, quests, archive, archiveWait, templates, root: (cfg && cfg.root) || '' };
 }
 
 // ============================================================ 読み解き
@@ -407,7 +423,9 @@ function derive(q) {
   d.total = p.todos.length; d.done = p.todos.filter((t) => closed(t.state)).length;
   d.allDone = d.total > 0 && d.done === d.total;
   d.finished = d.allDone && !!p.accepted;
-  if (p.status === 'aborted') { d.label = '中止'; d.cls = 'sd-stop'; d.info = 'aborted'; return d; }
+  // 書庫の登録候補（依頼が完了・中止したあと、司書が出したもの）。中止された依頼でも答えられる
+  if (q.archive && q.archive.status === 'proposed') d.asks.push({ kind: 'archive', key: `${q.id}:archive`, label: '書庫の登録候補', cands: q.archive.candidates || [], sent: inboxHas('archive') });
+  if (p.status === 'aborted') { d.label = '中止'; d.cls = 'sd-stop'; d.info = 'aborted'; d.me = d.asks.some((a) => !a.sent) ? '書庫の登録候補' : '—'; return d; }
   if (p.status === 'replan') { d.label = '計画を直し中'; d.cls = 'sd-run'; d.info = 'replan'; return d; }
   if (!p.approved) {
     d.asks.push({ kind: 'approve', key: `${q.id}:approve`, label: '承認', sent: inboxHas('approve') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
@@ -433,12 +451,13 @@ function derive(q) {
 
 function buildModel(raw) {
   const quests = raw.quests.map(derive);
-  return { root: raw.root, requests: raw.requests, knowledge: raw.knowledge, templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
   if (a.kind === 'accept') return '納品物の受け取り確認';
   if (a.kind === 'questions') return '依頼についての質問';
+  if (a.kind === 'archive') return '書庫に登録する候補の確認';
   if (a.kind === 'confirm') return `${a.todo.id}「${a.todo.title}」の実行前の確認`;
   if (a.kind === 'result') return `${a.todo.id}「${a.todo.title}」`;
   return `${a.todo.id} ができなかったため、進め方の判断`;
@@ -601,6 +620,24 @@ function letterFor(qd, a) {
       h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'answers', answers: a.qs.map((x, i) => answerOf(x, S.form, k, i)) }, k) }, '答えを送る')),
       sentNote(k));
   }
+  if (a.kind === 'archive') {
+    const typeName = (t) => (ARCH_TYPES.find((x) => x[0] === t) || [t, t, t])[2];
+    return h('section', { class: 'letter', 'aria-label': '書庫の登録候補' }, seal('書'),
+      h('div', { class: 'kick' }, 'お願い：書庫に残すもの'), h('h3', null, '次の依頼で役に立てるものを、選んでください'),
+      h('p', null, '司書が、この依頼から書庫に残す候補を挙げました。「登録」を選んだものだけが、書庫に入ります。推測のものは、はじめ「不要」になっています。'),
+      a.cands.map((c, i) => {
+        const ck = `${k}:c${c.id}`, def = c.confidence === 'guess' ? 'skip' : 'register', cf = CONF[c.confidence] || [c.confidence, 'sd-wait'];
+        return h('div', { class: 'qa' },
+          h('span', { class: 'lbl' }, `${i + 1}. ${c.name}（${typeName(c.type)}）`, ' ', stampEl(cf[0], cf[1]), c.update_of ? [' ', stampEl('更新', 'sd-turn')] : null, c.conflict ? [' ', stampEl('食い違い', 'sd-ng')] : null),
+          h('p', { class: 'fine', style: 'margin:0 0 4px' }, c.summary),
+          c.body ? h('p', { class: 'fine', style: 'margin:0 0 4px;white-space:pre-wrap' }, c.body) : null,
+          h('p', { class: 'fine', style: 'margin:0 0 4px' }, '出典：' + (c.source || 'なし') + (c.update_of ? `　更新先：${c.update_of}` : '')),
+          radio(ck + 'r', ck, 'register', c.update_of ? (c.conflict ? '登録する（両方の値を残して「要確認」にする）' : '登録する（既存の項目を更新）') : '登録する', '', '', def),
+          radio(ck + 'r', ck, 'skip', '不要', '', '', def));
+      }),
+      h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'archive', decisions: Object.fromEntries(a.cands.map((c) => [c.id, S.form[`${k}:c${c.id}`] || (c.confidence === 'guess' ? 'skip' : 'register')])) }, k) }, '選んだとおりに送る')),
+      sentNote(k));
+  }
   if (a.kind === 'accept') {
     const ck = k + ':fix';
     return h('section', { class: 'letter', 'aria-label': '受け取りの確認' }, seal('検'),
@@ -672,7 +709,7 @@ function infoLetter(qd) {
   if (qd.info === 'finished') {
     return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
       deliverableBlock(qd),
-      qd.q.knowledge ? h('p', { class: 'fine', style: 'margin:0' }, '成功したこと、失敗したこと、業務知識を ', code(`knowledge/${qd.id}.md`), ' に記録しました。次の依頼で役に立てます。') : null);
+      qd.q.archive && qd.q.archive.status === 'done' && (qd.q.archive.registered || []).length ? h('p', { class: 'fine', style: 'margin:0' }, `書庫に ${qd.q.archive.registered.length} 件を登録しました。次の依頼で役に立てます。`) : null);
   }
   return null;
 }
@@ -876,22 +913,77 @@ function delivTab() {
   return out;
 }
 
+function sendArchive(obj, key) {
+  return writeOrFallback(`archive/inbox/${nowName(obj.type, String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true); });
+}
+function archiveForm() {
+  const edit = S.form['a:edit'] || '';
+  const sel = h('select', { id: 'a:type', 'aria-label': '種類', disabled: !!edit }, ARCH_TYPES.map(([t, , l]) => h('option', { value: t }, l)));
+  sel.value = S.form['a:type'] || 'term'; bindKey(sel, 'a:type');
+  const inp = (key, ph, id) => { const e = h('input', { type: 'text', id, placeholder: ph, style: 'width:100%;min-height:40px;padding:6px 12px;font:inherit;border:1px solid var(--brass);border-radius:4px;background:var(--surface)' }); e.value = S.form[key] || ''; return bindKey(e, key); };
+  const key = 'a:form';
+  const d = h('details', { class: 'card', style: 'margin-bottom:14px', open: !!S.open['a:form'] }, h('summary', { style: 'cursor:pointer;font-weight:700' }, edit ? `項目を編集する（${edit}）` : '自分で項目を登録する'),
+    h('p', { class: 'fine', style: 'margin:8px 0' }, '社内の用語・業務フロー・業務情報など、調べても出てこない知識を入れられます。登録した項目は「確認済み」になります。'),
+    h('div', { class: 'trow' }, h('label', { class: 'fine', for: 'a:type' }, '種類'), sel),
+    h('label', { class: 'lbl', for: 'a:name' }, '名前（用語名・フロー名・情報の題）'), inp('a:name', '例：経費精算', 'a:name'),
+    h('label', { class: 'lbl', for: 'a:aliases' }, '別名・略称（任意。読点「、」かカンマで区切る）'), inp('a:aliases', '例：精算、経費申請', 'a:aliases'),
+    h('label', { class: 'lbl', for: 'a:summary' }, '一言の説明（1行）'), inp('a:summary', '例：経費を申請して承認されるまでの流れ', 'a:summary'),
+    h('label', { class: 'lbl', for: 'a:body' }, '本文（任意。手順・意味・数値など）'), textarea('a:body', { id: 'a:body', rows: '5' }),
+    h('label', { class: 'lbl', for: 'a:source' }, '出典・根拠（任意。例：経理部の○○さんに確認）'), inp('a:source', '', 'a:source'),
+    h('div', { class: 'btns' },
+      h('button', { class: 'btn go', type: 'button', disabled: S.conn !== 'ok', onclick: async () => {
+        const name = (S.form['a:name'] || '').trim(), summary = (S.form['a:summary'] || '').trim();
+        if (!name || !summary) { S.archiveError = '名前と一言の説明は、必ず書いてください。'; render(); return; }
+        S.archiveError = '';
+        const entry = { type: S.form['a:type'] || 'term', name, aliases: (S.form['a:aliases'] || '').split(/[、,，]/).map((x) => x.trim()).filter(Boolean), summary, body: (S.form['a:body'] || '').trim(), source: (S.form['a:source'] || '').trim() };
+        await sendArchive(edit ? { type: 'entry', update_of: edit, entry } : { type: 'entry', entry }, key);
+        if (S.sent[key]) for (const f of ['a:edit', 'a:name', 'a:aliases', 'a:summary', 'a:body', 'a:source']) S.form[f] = '';
+        render();
+      } }, edit ? '編集を送る' : '登録を送る'),
+      edit ? h('button', { class: 'btn', type: 'button', onclick: () => { for (const f of ['a:edit', 'a:name', 'a:aliases', 'a:summary', 'a:body', 'a:source']) S.form[f] = ''; render(); } }, '編集をやめる') : null),
+    S.archiveError ? h('p', { class: 'err', role: 'alert' }, S.archiveError) : null, sentNote(key));
+  d.addEventListener('toggle', () => { S.open['a:form'] = d.open; });
+  return d;
+}
+function archiveCard(e) {
+  const c = CONF[e.confidence] || [e.confidence, 'sd-wait'], k = 'a:' + e.path;
+  const ms = e.confirmed ? new Date(e.confirmed).getTime() : NaN, old = !isNaN(ms) && Date.now() - ms > 365 * 86400000;
+  const why = k + ':why', asking = !!S.confirm[k];
+  const d = h('details', { class: 'card', style: 'margin-bottom:10px', open: !!S.open[k] },
+    h('summary', { style: 'cursor:pointer;font-weight:700' }, e.name, ' ', stampEl(c[0], c[1]), e.status !== 'active' ? [' ', stampEl(e.status, e.status === '廃止' ? 'sd-stop' : 'sd-turn')] : null, old ? [' ', stampEl('古い可能性', 'sd-draft')] : null),
+    h('p', { class: 'fine', style: 'margin:6px 0' }, e.summary || ''),
+    e.aliases.length ? h('p', { class: 'fine', style: 'margin:0 0 6px' }, '別名：' + e.aliases.join('、')) : null,
+    h('p', { class: 'fine', style: 'margin:0 0 6px' }, `出典：${e.source || 'なし'}　確認日：${e.confirmed || '—'}　`, code(e.path)),
+    h('pre', { style: 'white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0' }, e.body || '(本文なし)'),
+    h('div', { class: 'btns', style: 'margin:10px 0 0' },
+      e.status !== '廃止' && (e.confidence !== 'confirmed' || e.status === '要確認') ? h('button', { type: 'button', class: 'btn', style: 'min-height:36px', disabled: S.sent[k + ':p'], onclick: () => sendArchive({ type: 'promote', path: e.path }, k + ':p') }, S.sent[k + ':p'] ? '確認済みにする（送りました）' : '確認済みにする') : null,
+      e.status !== '廃止' && e.type !== 'lesson' ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => {
+        S.form['a:edit'] = e.path; S.form['a:type'] = e.type; S.form['a:name'] = e.name; S.form['a:aliases'] = e.aliases.join('、'); S.form['a:summary'] = e.summary || ''; S.form['a:body'] = e.body || ''; S.form['a:source'] = e.source === '依頼主の登録' ? '' : (e.source || '');
+        S.open['a:form'] = true; render(); const f = document.getElementById('a:name'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); }
+      } }, '編集') : null,
+      h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyText(e.body || '', '本文') }, '本文をコピー'),
+      h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyPath('archive/' + e.path) }, 'パスをコピー'),
+      e.status !== '廃止' && !asking ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.confirm[k] = true; S.open[k] = true; render(); } }, '廃止する') : null),
+    asking ? h('div', { class: 'qa', style: 'margin-top:10px' }, h('span', { class: 'lbl' }, '廃止の理由（任意）'), textarea(why, { rows: '2' }),
+      h('p', { class: 'fine' }, '廃止すると、索引から外れ、役は読まなくなります。ファイルは消えません。'),
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn wax', onclick: async () => { S.confirm[k] = false; await sendArchive({ type: 'deprecate', path: e.path, reason: (S.form[why] || '').trim() }, k + ':d'); } }, '廃止する'),
+        h('button', { type: 'button', class: 'btn', onclick: () => { S.confirm[k] = false; render(); } }, 'やめておく'))) : null);
+  d.addEventListener('toggle', () => { S.open[k] = d.open; });
+  return d;
+}
 function knowTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
   const q = (S.form['f:kn'] || '').trim().toLowerCase();
-  const titleOf = (n) => { const x = m.quests.find((y) => y.id + '.md' === n); return x ? x.title : ''; };
-  const list = (m.knowledge || []).filter((k) => hit(q, k.name, titleOf(k.name), k.text));
-  const out = [h('h2', { class: 'h2' }, 'ノウハウ'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '完了した（または中止した）依頼から、成功したこと・失敗したこと・業務知識を記録したものです。次の依頼で、地図師が読みます。'),
+  const out = [h('h2', { class: 'h2' }, '書庫'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '用語・業務フロー・業務情報を、種類別にためています。次の依頼で、役が索引を見て、関係する項目を使います。依頼が終わるたびに、司書が登録候補を挙げます（「掲示板」の手紙で選びます）。'),
     searchBox('f:kn', '言葉で探す（本文も探します）')];
-  if (!list.length) out.push(h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'まだノウハウはありません。依頼が完了（または中止）すると、ここに溜まります。'));
-  for (const k of list) {
-    const d = h('details', { class: 'card', style: 'margin-bottom:10px', open: !!S.open['k:' + k.name] }, h('summary', { style: 'cursor:pointer;font-weight:700' }, `${k.name.replace(/\.md$/, '')}　${titleOf(k.name)}`),
-      h('div', { class: 'btns', style: 'margin:10px 0' },
-        h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyText(k.text, '中身') }, '中身をコピー'),
-        h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyPath('knowledge/' + k.name) }, 'パスをコピー')),
-      S.toast ? null : null, h('pre', { style: 'white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0' }, k.text || '(空です)'));
-    d.addEventListener('toggle', () => { S.open['k:' + k.name] = d.open; });
-    out.push(d);
+  if (m.archiveWait) out.push(h('p', { class: 'fine', role: 'status' }, `書庫への反映待ちが ${m.archiveWait} 件あります。/guild:quest が動いていれば、すぐ反映されます。動いていなければ、チャットで /guild:quest と送ってください。`));
+  out.push(archiveForm());
+  for (const [type, , title] of ARCH_TYPES) {
+    const list = (m.archive || []).filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    out.push(h('h3', { class: 'sec' }, type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title, `　${list.length}件`));
+    if (!list.length) out.push(h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'まだありません。'));
+    for (const e of list) out.push(archiveCard(e));
   }
   return out;
 }
@@ -947,7 +1039,7 @@ function flowSvg() {
   arrow([[140, 495], [140, 525]], '全 Todo が済む', 150, 515);
   box(40, 525, 'adv', 'まとめの Todo', '納品物の資料を作る');
   box(300, 525, 'me', '受け取りの確認', '受け取る／直してほしい');
-  box(560, 525, 'gm', '記録する', 'ノウハウに残す');
+  box(560, 525, 'gm', '書庫に残す', '司書の候補を選ぶ');
   arrow([[240, 557], [300, 557]]); arrow([[500, 557], [560, 557]], '受け取る', 506, 549);
   note(300, 612, '「直してほしい」→ 計画の作り直し（上の「計画を直す」へ）');
   // 凡例
@@ -963,8 +1055,8 @@ function flowTab() {
     h('div', { class: 'card', style: 'margin-bottom:16px;overflow:auto' }, flowSvg()),
     h('div', { class: 'grid2' },
       card('スキル（チャットで使う）', dl([['/guild:init', '最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。依頼主への質問・承認・確認は、すべてこの画面で聞きます。動いている間は、画面での答えを待ち続けます。']])),
-      card('役', dl([['ギルドマスター', '/guild:quest 本体。役を呼び、進め方の判断は guild.py に任せます。判断はしません。'], ['地図師', '依頼を Todo に分解し、前提・種別・合格基準・納品物の形式を決めます。あいまいなところは質問します。'], ['冒険者', '自動でできる Todo（調べる・書き写す・整理する・書く）を実行します。最後のまとめの Todo では、納品物の資料を作ります。'], ['斥候', '動的ページ（地図・SNS など）を、ブラウザで読むだけの役。クリックも入力もしません。'], ['鑑定士', '成果物を合格基準で判定します。成果物は直しません。'], ['あなた', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。']])),
-      card('guild/ の中身', dl([['board.html', 'この画面。'], ['requests/', '出したばかりで、まだ受け付けられていない依頼。'], ['Q001/…', '依頼ごとのフォルダ。plan.json（計画）、inbox/（あなたの答え）、reports/（役の報告）、output/（成果物）。'], ['knowledge/', 'ノウハウ。'], ['templates/', '納品物のテンプレート。']])))];
+      card('役', dl([['ギルドマスター', '/guild:quest 本体。役を呼び、進め方の判断は guild.py に任せます。判断はしません。'], ['地図師', '依頼を Todo に分解し、前提・種別・合格基準・納品物の形式を決めます。あいまいなところは質問します。'], ['冒険者', '自動でできる Todo（調べる・書き写す・整理する・書く）を実行します。最後のまとめの Todo では、納品物の資料を作ります。'], ['斥候', '動的ページ（地図・SNS など）を、ブラウザで読むだけの役。クリックも入力もしません。'], ['鑑定士', '成果物を合格基準で判定します。成果物は直しません。'], ['司書', '依頼が終わったあと、書庫に残す用語・フロー・情報・心得の候補を挙げます。登録はしません。'], ['あなた', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。']])),
+      card('guild/ の中身', dl([['board.html', 'この画面。'], ['requests/', '出したばかりで、まだ受け付けられていない依頼。'], ['Q001/…', '依頼ごとのフォルダ。plan.json（計画）、inbox/（あなたの答え）、reports/（役の報告）、output/（成果物）。'], ['archive/', '書庫。用語・業務フロー・業務情報・心得を、種類別のフォルダと索引（index.md）で持つ。'], ['templates/', '納品物のテンプレート。']])))];
 }
 
 function helpTab() {
@@ -979,7 +1071,7 @@ function helpTab() {
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
       h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。'))),
     sec('印の見方', h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
-    sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['道のり', 'Todo の順序。前提が済んだものから進みます。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['やめる', '失敗した Todo を計画から外すこと。続く Todo もやめるか、進めるかを選べます。'], ['ノウハウ', '完了した依頼から、成功・失敗・業務知識を記録したもの。次の依頼で使われます。']])),
+    sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['道のり', 'Todo の順序。前提が済んだものから進みます。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['やめる', '失敗した Todo を計画から外すこと。続く Todo もやめるか、進めるかを選べます。'], ['書庫', '用語・業務フロー・業務情報を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
     sec('困ったとき', h('div', { class: 'faq' },
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
@@ -1031,7 +1123,7 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const oldBox = document.querySelector('.rbox'), boxTop = oldBox ? oldBox.scrollTop : 0;
-  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', 'ノウハウ'], ['talk', '記録'], ['flow', 'しくみ'], ['help', 'ヘルプ']];
+  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '記録'], ['flow', 'しくみ'], ['help', 'ヘルプ']];
   const body = { board: boardTab, deliv: delivTab, know: knowTab, talk: talkTab, flow: flowTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
@@ -1167,9 +1259,9 @@ function demoTree(scene) {
   const mk = (id, title, kind, deps, state, c, extra) => ({ id, title, kind, deps, criteria: c, state, retries: 0, output: null, ...(extra || {}) });
   const S3 = {
     plan: [['pending'], ['pending'], ['pending']], human: [['done'], ['waiting_user'], ['pending']], confirm: [['done'], ['done'], ['awaiting_confirm']],
-    failed: [['done'], ['failed'], ['blocked']], done: [['done'], ['done'], ['done']], accept: [['done'], ['done'], ['done']]
+    failed: [['done'], ['failed'], ['blocked']], done: [['done'], ['done'], ['done']], archive: [['done'], ['done'], ['done']], accept: [['done'], ['done'], ['done']]
   }[scene] || [['done'], ['waiting_user'], ['pending']];
-  const approved = scene !== 'plan', isDone = scene === 'done' || scene === 'accept';
+  const approved = scene !== 'plan', isDone = scene === 'done' || scene === 'accept' || scene === 'archive';
   if (scene === 'questions') {
     return { 'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), requests: {}, Q001: { 'request.json': J({ text: '社内の議事録テンプレートを見直したい' }), reports: { 'plan-draft.json': J({ quest: 'Q001', title: '議事録テンプレートの見直し', todos: [], questions: [{ text: '見直す対象は、どのテンプレートですか', options: ['週次定例の議事録', '全社会議の議事録', '両方'], recommended: '両方', reason: '依頼文からは、どちらか分からないため、まず両方を見るのが安全です。' }, { text: '納品物は、どの形がよいですか', options: ['比較表だけ', '新しいテンプレート案まで'], recommended: '新しいテンプレート案まで', reason: '「見直す」には、案を出すことまで含まれると考えられます。' }] }) }, output: {}, inbox: {} } };
   }
@@ -1179,7 +1271,7 @@ function demoTree(scene) {
   if (scene === 'confirm' || isDone) h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(59), id: 'T2', event: 'passed', from: 'review', to: 'done' }, { t: at(59), id: 'T3', event: 'deps_done', from: 'pending', to: 'awaiting_confirm' });
   if (isDone) h1.push({ t: at(55), id: 'T3', event: 'confirmed', from: 'awaiting_confirm', to: 'running' }, { t: at(54), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(53), id: 'T3', event: 'passed', from: 'review', to: 'done' });
   if (scene === 'failed') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'reported_failed', from: 'waiting_user', to: 'failed' }, { t: at(60), id: 'T3', event: 'dep_failed', from: 'pending', to: 'blocked' });
-  const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', approved, status: 'active', accepted: scene === 'done', history: h1,
+  const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', approved, status: 'active', accepted: scene === 'done' || scene === 'archive', history: h1,
     todos: [mk('T1', 'notes.txt を読み、要点を3行にまとめた digest.md を作る', 'auto', [], S3[0][0], t1c), mk('T2', '上司に口頭で内容を共有し、了承をもらう', 'human', ['T1'], S3[1][0], t2c), mk('T3', 'digest.md を publish フォルダにコピーして公開する', 'auto', ['T2'], S3[2][0], t3c, { confirm: true })] };
   const day = 24 * 60, p2 = { quest: 'Q002', title: '議事録のテンプレートを3種類比べる', approved: true, status: 'active', accepted: true,
     history: [{ t: at(day + 120), event: 'adopted' }, { t: at(day + 118), event: 'approved' }, { t: at(day + 118), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 100), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 98), id: 'T1', event: 'passed', from: 'review', to: 'done' },
@@ -1190,9 +1282,9 @@ function demoTree(scene) {
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   return {
-    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, knowledge: { 'Q002.md': T('## 成功したこと\n- 見本') },
+    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, archive: { terms: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: 重要業績評価指標\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。') }, flows: {}, facts: {}, lessons: {}, inbox: {} },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
-    Q001: { 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
+    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md' }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }
   };
 }

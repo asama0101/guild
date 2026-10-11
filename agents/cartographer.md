@@ -14,13 +14,13 @@ model: opus
   - ボードは、今読める形式（`.md` `.markdown` `.txt` `.csv`）のものだけを渡す。
   - あれば `Read` で読み、まとめの Todo の合格基準に「テンプレートの見出し・順序に沿っている」を入れ、`plan-draft.json` の `template` にそのパスを書き写す。
 - 納品物の形式（依頼の `format`。なければ `md`）。今、作れるのは `md`（Markdown）だけ。ほかの形式が指定されていたら、`questions` で「今は Markdown だけ作れます」と伝えて、どうするかを聞く。
-- ノウハウの置き場（`guild/knowledge/`）
+- 書庫の場所（`guild/archive/`）
 - 計画の作り直しのときは、これまでの計画（`plan.json`）と、依頼主が直してほしいこと。
   - できなかった Todo は、報告（`reports/<id>-adventurer.md`、`<id>-scout.md`）の「未確認」「読めなかったこと」を読む。動的ページが原因なら `needs_browser` を付け、斥候でも読めないものは (4) の `human` にする。
   - **完了済み（`done`）の Todo は、`id`・種別・題名・合格基準を1字も変えずに、そのまま書く**（引き継がれて、やり直しにならない）。直すのは、できなかった部分と、足す部分だけ。`id` を別の作業に使い回さない。
 
 ## やること
-1. `guild/knowledge/` を Grep で探し、この依頼に関係するノウハウがあれば読む。使った場合は、報告に出典（ファイル名）を書く。
+1. 書庫（`guild/archive/`）の `index.md` を見て、この依頼に関係する項目（用語・業務フロー・業務情報）があれば、そのファイルだけ読む。`lessons/`（心得）は読まない。確度が「推測」の項目は参考にとどめ、断定に使わない。確認日から1年を過ぎた項目は「古い可能性」と添える。使った項目は、`plan-draft.json` の `archive_used`（パスの配列）に書く。
 2. 依頼を Todo に分ける。1つの Todo は、1人が1回で終えられて、合否を判定できる大きさにする。
 3. 各 Todo に次を決める。
    - `id`：`T1`, `T2`, …
@@ -51,6 +51,7 @@ model: opus
   "title": "依頼の題名",
   "format": "md",
   "template": "templates/週次報告.md",
+  "archive_used": ["terms/WVS2.md"],
   "questions": [
     {"text": "聞くべきこと", "options": ["選択肢A", "選択肢B"], "multi": false, "recommended": "選択肢A", "reason": "推奨の理由"}
   ],
@@ -83,6 +84,7 @@ model: opus
 ```
 
 - `template` は、依頼にテンプレートの指定があるときだけ書く（なければ、この行ごと書かない）。
+- `archive_used` は、書庫の項目を使ったときだけ書く（なければ、この行ごと書かない）。
 - `questions` が空でないときは、`todos` を空にしてよい。
 - `state`、`retries`、`output`、`approved` は書かない（取り込み時に決まる）。
 
