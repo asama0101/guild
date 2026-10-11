@@ -21,11 +21,11 @@ body{margin:0;background:var(--bg)}
 .tabs .tools button.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
 .lr,.quick{scroll-margin-top:70px}
 .qitem{transition:opacity .5s,transform .5s,box-shadow .5s,background .5s}
-/* 集中表示：目次などから選んだ依頼の票（行と中身）を深紅の枠で囲み、ほかの票を暗く保つ。解除するまで残る */
+/* 集中表示：目次などから選んだ依頼の票（行と中身）は明るいまま、ほかの票を暗く保つ。解除するまで残る */
 .ledger.focusing .qitem:not(.hit){opacity:.22}
 .ledger.focusing .qitem:not(.hit):hover{opacity:.6}
-.qitem.hit{position:relative;z-index:2;background:var(--surface);box-shadow:0 0 0 3px var(--seal)}
-.qitem.hit.pop{transform:scale(1.015);box-shadow:0 0 0 3px var(--seal),0 14px 28px -10px rgba(74,15,24,.55)}
+.qitem.hit{position:relative;z-index:2;background:var(--surface)}.qitem.hit .lr:focus-visible{outline:0}
+.qitem.hit.pop{transform:scale(1.015);box-shadow:0 14px 28px -10px rgba(74,15,24,.55)}
 @media (prefers-reduced-motion:reduce){.qitem{transition:none}.qitem.hit.pop{transform:none}}
 .tabs button{font:inherit;font-weight:700;min-height:44px;padding:6px 22px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--banner);color:var(--banner-ink);cursor:pointer;margin-bottom:-2px}
 .tabs button.on{background:var(--paper);color:var(--ink);border-color:var(--line)}
