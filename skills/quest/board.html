@@ -121,11 +121,9 @@ dl.c dd{margin:0}
 .way .n{border:1px solid var(--brass);border-radius:3px;padding:3px 10px;background:var(--surface)}
 .way .n.h{border-style:dashed}
 code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px}
-.kn-tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:2px solid var(--brass);margin-top:6px}
-.kn-tabs button{font:inherit;font-weight:700;font-size:14px;min-height:38px;padding:4px 16px;border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0;background:var(--paper2);color:var(--sub);cursor:pointer;margin-bottom:-2px}
-.kn-tabs button .n{font-weight:400;font-size:12px;margin-left:6px}
-.kn-tabs button.on{background:var(--surface);color:var(--ink);border-color:var(--brass);border-bottom:2px solid var(--surface);box-shadow:inset 0 3px 0 var(--seal)}
-.kn-bar{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;padding:10px 14px;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);border-top:0;font-size:13px}
+.kn-cond{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:10px 0}
+.kn-h{scroll-margin-top:70px}
+.kn-bar{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;padding:10px 14px;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);font-size:13px}
 .seg{display:inline-flex;align-items:center;gap:8px}
 .seg .cap{color:var(--sub)}
 .seg .opts{display:inline-flex;border:1px solid var(--brass);border-radius:3px;overflow:hidden}
@@ -375,7 +373,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {}, talk: {} }, kn: { tab: 'all', conf: {}, st: 'active', sort: 'name' }, limit: { board: 20, talk: 20, msg: 50 }, msgKey: '',
+  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {}, talk: {} }, kn: { cur: null, cond: false, conf: {}, st: 'active', sort: 'name' }, limit: { board: 20, talk: 20, msg: 50 }, msgKey: '',
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -937,7 +935,7 @@ function jumpQuest(id) {
   S.openQ[id] = true; S.sel = id; S.tq = id; S.flash = { id, until: Date.now() + 2500 }; render();
   const el = document.querySelector(`[data-q="${id}"]`);
   if (el) {
-    const bar = document.querySelector('.tabs'), top = bar ? bar.getBoundingClientRect().bottom : 0;
+    const bar = document.querySelector('.tabs'), top = bar ? bar.offsetHeight : 0;  // 固定されたときのタブの高さ（スクロール前の位置ではなく）
     window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - top - 8);
     el.focus({ preventScroll: true });
   }
@@ -1131,13 +1129,13 @@ function knowTab() {
     searchBox('f:kn', '言葉で探す（本文も探します）')];
   if (m.archiveWait) out.push(h('p', { class: 'fine', role: 'status' }, `書庫への反映待ちが ${m.archiveWait} 件あります。/guild:quest が動いていれば、すぐ反映されます。動いていなければ、チャットで /guild:quest と送ってください。`));
   const kn = S.kn, all = m.archive || [];
-  const cnt = (t) => all.filter((e) => t === 'all' || e.type === t).length;
   const seg = (cap, ...opts) => h('div', { class: 'seg', role: 'group', 'aria-label': cap }, h('span', { class: 'cap' }, cap), h('span', { class: 'opts' }, ...opts));
   const choice = (v, l, cur, set) => h('button', { type: 'button', class: 'o' + (cur === v ? ' on' : ''), 'aria-pressed': String(cur === v), onclick: () => { set(v); render(); } }, l);
-  out.push(h('div', { class: 'kn-tabs', role: 'tablist', 'aria-label': '書庫の種類' },
-    [['all', 'すべて'], ...ARCH_TYPES.map(([t, , l]) => [t, l])].map(([t, l]) =>
-      h('button', { type: 'button', role: 'tab', 'aria-selected': String(kn.tab === t), class: kn.tab === t ? 'on' : '', onclick: () => { kn.tab = t; render(); } }, l, h('span', { class: 'n' }, String(cnt(t)))))));
-  out.push(h('div', { class: 'kn-bar' },
+  const confOn = Object.keys(kn.conf).filter((k) => kn.conf[k]);
+  const sum = [confOn.length ? '確度：' + confOn.map((k) => CONF[k][0]).join('・') : '', kn.st === 'all' ? '廃止も含む' : '', kn.sort !== 'name' ? '確認日が新しい順' : ''].filter(Boolean).join('　');
+  out.push(h('div', { class: 'kn-cond' }, h('button', { type: 'button', class: 'btn ghost sm', 'aria-expanded': String(!!kn.cond), onclick: () => { kn.cond = !kn.cond; render(); } }, kn.cond ? '条件を閉じる' : '条件'),
+    sum ? h('span', { class: 'fine' }, sum) : null));
+  if (kn.cond) out.push(h('div', { class: 'kn-bar' },
     seg('確度', ...Object.entries(CONF).map(([k, [l]]) => { const c = h('input', { type: 'checkbox' }); c.checked = !!kn.conf[k];
       c.addEventListener('change', () => { kn.conf[k] = c.checked; render(); }); return h('label', { class: 'o' + (c.checked ? ' on' : '') }, c, l); })),
     seg('状態', choice('active', '使っているもの', kn.st, (v) => { kn.st = v; }), choice('all', '廃止も含む', kn.st, (v) => { kn.st = v; })),
@@ -1145,18 +1143,39 @@ function knowTab() {
   if ((m.archiveRejected || []).length) out.push(h('div', { class: 'card', role: 'status', style: 'margin-bottom:10px' }, h('b', null, '反映されなかった入力（新しい5件まで）'),
     h('ul', { style: 'margin:6px 0 0' }, m.archiveRejected.map((r) => h('li', { class: 'fine' }, code(r.file), '：', r.reason)))));
   out.push(archiveForm());
-  const confOn = Object.keys(kn.conf).filter((k) => kn.conf[k]);
   const cmp = kn.sort === 'confirmed' ? (a, b) => String(b.confirmed || '').localeCompare(String(a.confirmed || '')) || String(a.name).localeCompare(String(b.name)) : (a, b) => String(a.name).localeCompare(String(b.name));
-  for (const [type, , title] of ARCH_TYPES) {
-    if (kn.tab !== 'all' && kn.tab !== type) continue;
-    const list = all.filter((e) => e.type === type).filter((e) => kn.st === 'all' || e.status !== '廃止')
-      .filter((e) => !confOn.length || confOn.includes(e.confidence)).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort(cmp);
+  const groups = ARCH_TYPES.map(([type, , title]) => ({ type, title,
+    list: all.filter((e) => e.type === type).filter((e) => kn.st === 'all' || e.status !== '廃止')
+      .filter((e) => !confOn.length || confOn.includes(e.confidence)).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort(cmp) }));
+  for (const { type, title, list } of groups) {
     const head = type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title;
-    if (!list.length) { out.push(h('p', { class: 'sub', style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q || confOn.length ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
-    out.push(h('h3', { class: 'sec' }, head, `　${list.length}件`));
+    if (!list.length) { out.push(h('p', { class: 'sub kn-h', id: 'kn-' + type, style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q || confOn.length ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
+    out.push(h('h3', { class: 'sec kn-h', id: 'kn-' + type }, head, `　${list.length}件`));
     for (const e of list) out.push(archiveCard(e));
   }
-  return out;
+  const toc = h('aside', { class: 'toc', 'aria-label': '書庫の目次' }, h('div', { class: 'toch' }, '書庫の目次'),
+    groups.map((g) => h('button', { type: 'button', class: 'tocb' + (kn.cur === g.type ? ' on' : ''), 'data-kn': g.type, onclick: () => jumpKn(g.type) },
+      h('span', { class: 'id' }, g.title), h('span', { class: 'tt' }, `${g.list.length}件`))));
+  out.push(h('div', { 'aria-hidden': 'true', style: 'min-height:calc(100vh - 80px)' }));  // 最後の種類の見出しも、目次から押したときに先頭へ来られるように、余白を足す
+  return [h('div', { class: 'bwrap' }, toc, h('div', { class: 'bmain' }, out))];
+}
+// 書庫の目次：押した種類の見出しへ、固定のタブの下に出るように移動する
+function jumpKn(type) {
+  S.kn.cur = type;
+  document.querySelectorAll('.tocb[data-kn]').forEach((b) => b.classList.toggle('on', b.dataset.kn === type));
+  const el = document.getElementById('kn-' + type); if (!el) return;
+  const bar = document.querySelector('.tabs'), top = bar ? bar.offsetHeight : 0;  // 固定されたときのタブの高さ（スクロール前の位置ではなく）
+  window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - top - 8);
+}
+function spyKn() {
+  if (S.tab !== 'know') return;
+  const bar = document.querySelector('.tabs'), top = (bar ? bar.getBoundingClientRect().bottom : 0) + 40;
+  const hs = [...document.querySelectorAll('.kn-h')]; if (!hs.length) return;
+  let cur = hs[0].id.slice(3); hs.forEach((el) => { if (el.getBoundingClientRect().top <= top) cur = el.id.slice(3); });
+  // ページの一番下まで来ていて、押した種類の見出しがまだ下にあるときは、押した種類のままにする（それ以上スクロールできないため）
+  const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4, mine = S.kn.cur && document.getElementById('kn-' + S.kn.cur);
+  if (atEnd && mine && mine.getBoundingClientRect().top > top) return;
+  if (cur && cur !== S.kn.cur) { S.kn.cur = cur; document.querySelectorAll('.tocb[data-kn]').forEach((b) => b.classList.toggle('on', b.dataset.kn === cur)); }
 }
 
 // ---- ギルド案内（処理フローの図とスキルの説明）
@@ -1503,6 +1522,7 @@ async function start() {
   try { history.scrollRestoration = 'manual'; } catch (e) { /* 使えなくても続ける */ }
   const params = new URLSearchParams(location.search);
   for (const ev of ['dragover', 'drop']) document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest('.dz')) e.preventDefault(); });
+  window.addEventListener('scroll', spyKn, { passive: true });
   document.addEventListener('compositionstart', () => { S.composing = true; });
   document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); const k = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key; if (k && k.startsWith('f:')) { S.form[k] = document.activeElement.value; render(); } });
   document.addEventListener('input', (e) => {
