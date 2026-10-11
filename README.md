@@ -1,0 +1,105 @@
+# guild
+
+依頼を Todo に分解し、自動で実行できるものは自動で、依頼主の実行が要るものは結果を待って、解決まで進める Claude Code プラグインです。用語・業務フロー・業務情報・個人・心得を「書庫」に溜め、次の依頼で全役が使います。RPG のギルドの世界観（役名・掲示板）で作っています。個人利用を前提にしています。
+
+## 特長
+
+- **グラフで進める**: 進め方（Todo の依存関係と状態遷移）は手順書の文章ではなくデータ（`plan.json`、`transitions.json`）で持ち、`guild.py` が辿ります。役は作業と報告だけをして、順序・合否・リトライは判断しません。
+- **承認は計画の1回だけ**: 計画を承認したあとは完了まで承認を取りません。ただし不可逆・外部公開の操作の前は確認します。
+- **質問はすべてボードで**: 質問・承認・結果の入力・失敗の判断は、チャットではなくボード（`guild/board.html`）の「手紙」で答えます。
+- **合格基準で判定**: 各 Todo に合格基準（観点・合格ライン・確かめ方）を付け、鑑定士が判定します。満たさなければ実行に戻ります（最大2回）。
+- **書庫に溜めて使う**: 依頼の完了・中止後に、司書が登録候補を挙げ、依頼主が選んだものが `guild/archive/` に溜まります。
+
+## 必要なもの
+
+- Claude Code
+- Python 3（`/guild:init` が `py`、`python3`、`python` の順に探します）
+- Chrome または Edge（ボードを開くため）
+- Node.js（`npx`。斥候が動的ページを読むときだけ。`.mcp.json` の Playwright MCP を使います）
+
+## 導入
+
+このリポジトリをマーケットプレイスとして追加し、プラグインを入れます（`.claude-plugin/marketplace.json`）。
+
+```
+/plugin marketplace add <このリポジトリのパス>
+/plugin install guild@guild-local
+```
+
+## 使い方
+
+1. 作業するプロジェクトのフォルダで `/guild:init` を実行します。`guild/`、`guild/archive/`、`guild/requests/`、`guild/config.json`、`guild/board.html` ができます。何度実行しても、依頼や書庫の項目は消えません。`board.html` は最新の版に置き換わります。
+2. `guild/board.html` を Chrome か Edge で開き、「フォルダを選ぶ」でプロジェクトのフォルダを選び、依頼を書きます。チャットから出すときは `/guild:quest <依頼文>` です。
+3. `/guild:quest` を動かしている間、ギルドマスター（この会話）がボードへの答えを待ちます。ボードの「手紙」に答えると続きが進みます。
+4. 全 Todo が済むと「受け取りの確認」の手紙が出ます。受け取ると完了で、納品物（Markdown）が `guild/Q###/output/` に残ります。
+
+## コマンド
+
+| コマンド | 内容 |
+|---|---|
+| `/guild:init` | 現在のフォルダに `guild/` を作り、使える Python を `config.json` に記録する |
+| `/guild:quest` | 依頼の分解・実行・判定・納品までを進めるギルドマスター |
+
+## 流れ
+
+1. **依頼**: 依頼主が課題を伝える。
+2. **分解**: 地図師が Todo の依存グラフと、各 Todo の種別（`auto`＝自動実行／`human`＝依頼主の実行）・合格基準を作る。曖昧な点は「質問」の手紙で聞く。
+3. **承認（1回）**: 計画をボードに出し、依頼主が承認または直す。
+4. **実行**: 前提が済んだ Todo から、冒険者（動的ページは斥候）が進める。`human` の Todo はボードで依頼し、結果の入力を待つ。
+5. **合否**: 鑑定士が合格基準で判定する。不合格なら実行に戻る。
+6. **記録**: 完了・中止後に司書が書庫の候補を挙げ、依頼主が選んだものを登録する。
+7. **納品**: 納品物を依頼主に渡す。
+
+Todo の状態は `pending` → `running` → `review` → `done` と進みます（`confirm` 付きは `awaiting_confirm`、`human` は `waiting_user` を挟みます）。定義は `skills/quest/transitions.json` です。
+
+## 役
+
+| 役 | 名前 | モデル | やること |
+|---|---|---|---|
+| ギルドマスター | `/guild:quest` 本体 | 利用者のモデル | 依頼の受け付け、`guild.py` の実行、役の呼び出し、ボードの答えの待機 |
+| 地図師 | `cartographer` | opus | 依頼を Todo に分解し、種別・合格基準を決める |
+| 冒険者 | `adventurer` | sonnet | `auto` の Todo を実行し、報告と成果物を書く |
+| 斥候 | `scout` | sonnet | ブラウザで動的ページを読む（読むだけ） |
+| 鑑定士 | `appraiser` | sonnet | 成果物を合格基準で判定する（成果物は直さない） |
+| 司書 | `librarian` | sonnet | 書庫に残す用語などの候補を挙げる（登録はしない） |
+
+## ボード
+
+1ファイルの HTML で、外部通信はしません。タブは「掲示板／納品物／書庫／冒険の書／ギルド案内／Obsidian／ヘルプ」の7つです。
+
+- **掲示板**: 依頼の入力、「あなたの番」、依頼の一覧、手紙、Todo の道のり
+- **納品物**: 受け取った納品物の一覧
+- **書庫**: 用語・業務フロー・業務情報・個人・心得の閲覧・検索・登録・編集
+- **冒険の書**: 役たちとのやりとりと報告書
+- **ギルド案内**: 処理フローの図と役の説明
+
+## データの置き場
+
+```
+guild/
+  config.json     Python のパスなどの設定
+  board.html      ボード
+  archive/        書庫（index.md、terms/ flows/ facts/ personal/ lessons/）
+  Q001/           依頼ごとのフォルダ（plan.json、reports/、output/、inbox/）
+```
+
+書庫と納品物は Obsidian の記法で書かれるので、`guild/` を Obsidian の Vault にして読めます。
+
+## 開発
+
+構成:
+
+- `skills/` — `init`、`quest`（`guild.py`、`board.html`、`transitions.json`）
+- `agents/` — 各役の定義
+- `docs/` — SPEC と設計メモ（`spec.md`、`roles-spec.md`、`archive-spec.md`、`graph-format.md`、`board-design.md`）
+- `tests/` — テスト
+
+テストは次で実行します。
+
+```
+python -m unittest tests.test_guild
+```
+
+## ライセンス
+
+未設定です。
