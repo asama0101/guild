@@ -1534,6 +1534,14 @@ async function start() {
   const params = new URLSearchParams(location.search);
   for (const ev of ['dragover', 'drop']) document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest('.dz')) e.preventDefault(); });
   window.addEventListener('scroll', spyKn, { passive: true });
+  // 集中表示は、票の外をクリックすると解除する（目次と「あなたの番」の帯は、押した依頼へ移るので除く）。再描画はせず、見た目だけをその場で戻す
+  document.addEventListener('click', (e) => {
+    if (!S.focusQ || !(e.target instanceof Element) || e.target.closest('.qitem.hit, .tocb, .attn')) return;
+    S.focusQ = null;
+    document.querySelectorAll('.ledger.focusing').forEach((x) => x.classList.remove('focusing'));
+    document.querySelectorAll('.qitem.hit').forEach((x) => x.classList.remove('hit', 'pop'));
+    document.querySelectorAll('.fbar').forEach((x) => x.remove());
+  }, true);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.focusQ && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '')) { S.focusQ = null; render(); } });
   document.addEventListener('compositionstart', () => { S.composing = true; });
   document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); const k = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key; if (k && k.startsWith('f:')) { S.form[k] = document.activeElement.value; render(); } });
