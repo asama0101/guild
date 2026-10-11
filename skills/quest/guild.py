@@ -209,7 +209,7 @@ def write_user_report(qdir, data):
         return
     rep = Path(qdir) / "reports"
     rep.mkdir(exist_ok=True)
-    files = "\n".join(f"- {x}" for x in data.get("files", [])) or "なし"
+    files = "\n".join(f"- [[{x}]]" for x in data.get("files", [])) or "なし"
     result = "できた" if data.get("ok") else "できなかった"
     body = f"## 結果\n{result}\n## メモ\n{data.get('note') or 'なし'}\n## 添付\n{files}\n"
     (rep / f"{data['todo']}-user.md").write_text(body, encoding="utf-8")
@@ -501,18 +501,36 @@ def read_entry(path):
     for line in m.group(1).splitlines():
         k, sep, v = line.partition(":")
         if sep:
-            e[k.strip()] = v.strip()
-    e["aliases"] = [a.strip() for a in e.get("aliases", "").split(",") if a.strip()]
+            e[k.strip()] = yaml_value(v.strip())
+    if not isinstance(e.get("aliases"), list):
+        e["aliases"] = []
+    e["aliases"] = [str(a).strip() for a in e["aliases"] if str(a).strip()]
     e["body"] = m.group(2)
     e.setdefault("status", "active")
     return e
 
 
+def yaml_str(v):
+    """YAML の二重引用符の文字列にする（JSON の文字列は YAML としても正しい）。コロンや # が入っても崩れない。"""
+    return json.dumps(one_line(v), ensure_ascii=False)
+
+
+def yaml_value(v):
+    """見出し情報の値を読む。二重引用符の文字列と [ ] のリストは JSON として、それ以外はそのまま。"""
+    if v[:1] in ('"', "["):
+        try:
+            return json.loads(v)
+        except ValueError:
+            pass
+    return v
+
+
 def entry_text(e):
-    head = ["---", f"name: {one_line(e['name'])}", f"type: {e['type']}",
-            "aliases: " + ", ".join(one_line(a).replace(",", "、") for a in e.get("aliases", []) if one_line(a)),
-            f"confidence: {e['confidence']}", f"source: {one_line(e.get('source'))}", f"confirmed: {e.get('confirmed') or today()}",
-            f"status: {e.get('status') or 'active'}", f"summary: {one_line(e.get('summary'))}", "---"]
+    aliases = [one_line(a) for a in e.get("aliases", []) if one_line(a)]
+    head = ["---", f"name: {yaml_str(e['name'])}", f"type: {e['type']}",
+            "aliases: " + json.dumps(aliases, ensure_ascii=False),
+            f"confidence: {e['confidence']}", f"source: {yaml_str(e.get('source'))}", f"confirmed: {e.get('confirmed') or today()}",
+            f"status: {yaml_str(e.get('status') or 'active')}", f"summary: {yaml_str(e.get('summary'))}", "---"]
     return "\n".join(head) + "\n" + (e.get("body") or "").strip("\n") + "\n"
 
 
@@ -595,7 +613,7 @@ def rebuild_index(adir):
         out += ["| 名前 | 別名 | 確度 | 確認日 | 説明 | 場所 |", "|---|---|---|---|---|---|"]
         for rel, e in rows:
             mark = "（要確認）" if e["status"] == "要確認" else ""
-            cells = [e.get("name", ""), "、".join(e["aliases"]), label.get(e.get("confidence"), "") + mark, e.get("confirmed", ""), e.get("summary", ""), rel]
+            cells = [e.get("name", ""), "、".join(e["aliases"]), label.get(e.get("confidence"), "") + mark, e.get("confirmed", ""), e.get("summary", ""), f"[[{rel[:-3]}]]"]
             out.append("| " + " | ".join(c.replace("|", "／") for c in cells) + " |")
         out.append("")
     (adir / "index.md").write_text("\n".join(out), encoding="utf-8")

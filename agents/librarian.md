@@ -37,7 +37,7 @@ model: sonnet
       "name": "WVS2",
       "aliases": ["Wide Area Virtual Switch 2"],
       "summary": "KDDI の広域仮想スイッチ（1行）",
-      "body": "意味や使いどころを、Markdown で数行。",
+      "body": "意味や使いどころを、Obsidian の Markdown で数行。ほかの項目へのリンクは [[terms/名前]]。",
       "confidence": "sourced",
       "source": "https://… （閲覧日 2026-10-10）"
     }

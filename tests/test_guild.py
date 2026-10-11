@@ -525,7 +525,7 @@ class FixesTest(unittest.TestCase):
             p = plan(todo("T2", kind="human", state="waiting_user"))
             self.ingest_one(p, {"type": "result", "todo": "T2", "ok": False, "note": "取れなかった", "files": ["inbox/files/T2-m.txt"]}, d)
             body = (Path(d) / "reports" / "T2-user.md").read_text(encoding="utf-8")
-            for needle in ("## 結果\nできなかった", "取れなかった", "- inbox/files/T2-m.txt"):
+            for needle in ("## 結果\nできなかった", "取れなかった", "- [[inbox/files/T2-m.txt]]"):
                 self.assertIn(needle, body)
 
     def test_rejected_input_writes_no_report(self):
@@ -837,6 +837,8 @@ class ArchiveTest(unittest.TestCase):
         e = guild.read_entry(self.adir / rel)
         self.assertEqual((e["name"], e["type"], e["confidence"], e["status"]), ("料金/月額: 200M?", "fact", "sourced", "active"))
         self.assertEqual(e["summary"], "行1 行2")
+        self.assertEqual(e["aliases"], ["a,b"])
+        self.assertIn('aliases: ["a,b"]', (self.adir / rel).read_text(encoding="utf-8"))
         self.assertEqual(e["body"].strip(), "本文")
         with self.assertRaises(guild.GuildError):
             guild.write_entry(self.adir, self.entry(name=".."))
@@ -856,6 +858,7 @@ class ArchiveTest(unittest.TestCase):
         guild.rebuild_index(self.adir)
         idx = (self.adir / "index.md").read_text(encoding="utf-8")
         self.assertIn("生きている", idx)
+        self.assertIn("[[terms/生きている]]", idx)
         self.assertIn("食い違い", idx)
         self.assertNotIn("廃止の語", idx)
         self.assertNotIn("心得ひとつ", idx)
