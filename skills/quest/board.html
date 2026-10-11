@@ -1200,6 +1200,14 @@ function flowTab() {
       card('guild/ の中身', dl([['board.html', 'この画面。'], ['requests/', '出したばかりで、まだ受け付けられていない依頼。'], ['Q001/…', '依頼ごとのフォルダ。plan.json（計画）、inbox/（あなたの答え）、reports/（役の報告）、output/（成果物）。'], ['archive/', '書庫。用語・業務フロー・業務情報・心得を、種類別のフォルダと索引（index.md）で持つ。'], ['templates/', '納品物のテンプレート。']])))];
 }
 
+// 各役のモデル。正本は agents/*.md の model（tests/test_guild.py が一致を確かめる）
+const ROLE_MODELS = {
+  cartographer: ['地図師', 'opus'],
+  adventurer: ['冒険者', 'sonnet'],
+  scout: ['斥候', 'sonnet'],
+  appraiser: ['鑑定士', 'sonnet'],
+  librarian: ['司書', 'sonnet']
+};
 function helpTab() {
   const sec = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
   const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
@@ -1215,6 +1223,8 @@ function helpTab() {
     sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（掲示板の一覧・目次・絞り込みで使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', 'Todo ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全 Todo が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
       h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'Todo の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
     sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['道のり', 'Todo の順序。前提が済んだものから進みます。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['やめる', '失敗した Todo を計画から外すこと。続く Todo もやめるか、進めるかを選べます。'], ['書庫', '用語・業務フロー・業務情報を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
+    sec('各役のモデル', dl([...Object.values(ROLE_MODELS).map(([name, model]) => [name, model]), ['ギルドマスター', '/guild:quest を動かしているセッションのモデル（役の定義にはありません）']]),
+      h('p', { class: 'fine', style: 'margin:8px 0 0' }, 'モデルは、プラグインの agents/ にある各役の定義で決まります。変えたいときは、そこの model を書き換えます。')),
     sec('困ったとき', h('div', { class: 'faq' },
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),

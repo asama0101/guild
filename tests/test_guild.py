@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -770,6 +771,21 @@ class DueTest(unittest.TestCase):
                 {"id": "T1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT, "due": "2026-10-20"}]}), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             self.assertEqual(guild.load_json(q / "plan.json")["todos"][0]["due"], "2026-10-20")
+
+
+class RoleModelsTest(unittest.TestCase):
+    """ヘルプに書く各役のモデルが、agents/*.md の model と一致する。"""
+
+    def test_board_help_matches_agents(self):
+        board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
+        block = board.split("const ROLE_MODELS = {", 1)[1].split("};", 1)[0]
+        shown = dict((a, m) for a, _, m in re.findall(r"(\w+): \['([^']+)', '(\w+)'\]", block))
+        agents = {}
+        for f in (ROOT / "agents").glob("*.md"):
+            m = re.search(r"^model: (\w+)$", f.read_text(encoding="utf-8"), re.M)
+            self.assertIsNotNone(m, f.name)
+            agents[f.stem] = m.group(1)
+        self.assertEqual(shown, agents)
 
 
 class NextViewTest(unittest.TestCase):
