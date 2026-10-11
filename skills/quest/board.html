@@ -20,10 +20,16 @@ body{margin:0;background:var(--bg)}
 .tabs .tools button{margin-bottom:0;min-height:38px;padding:4px 14px;border:1px solid var(--brass);border-radius:6px;background:var(--surface);color:var(--ink)}
 .tabs .tools button.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
 .lr,.quick{scroll-margin-top:70px}
-.lr.flash{box-shadow:inset 6px 0 0 var(--seal);animation:flashfade 2.5s ease-out}
-.lr:focus-visible{outline:2px solid var(--seal);outline-offset:-2px}
-@keyframes flashfade{from{background:var(--head)}to{background:transparent}}
-@media (prefers-reduced-motion:reduce){.lr.flash{animation:none}}
+.qitem{transition:opacity .5s,transform .5s,box-shadow .5s,background .5s}
+/* 集中表示：目次などから選んだ依頼の票（行と中身）を深紅の枠で囲み、ほかの票を暗く保つ。解除するまで残る */
+.ledger.focusing .qitem:not(.hit){opacity:.22}
+.ledger.focusing .qitem:not(.hit):hover{opacity:.6}
+.qitem.hit{position:relative;z-index:2;background:var(--surface);box-shadow:0 0 0 3px var(--seal)}
+.qitem.hit.pop{transform:scale(1.015);box-shadow:0 0 0 3px var(--seal),0 14px 28px -10px rgba(74,15,24,.55)}
+.fbar{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:5px 14px 5px 20px;background:var(--seal);color:var(--banner-ink);font-size:13px}
+.fbar button{font:inherit;font-size:12.5px;min-height:28px;padding:0 12px;border:1px solid var(--banner-ink);border-radius:3px;background:transparent;color:var(--banner-ink);cursor:pointer}
+.fbar button:hover{background:rgba(240,207,122,.18)}
+@media (prefers-reduced-motion:reduce){.qitem{transition:none}.qitem.hit.pop{transform:none}}
 .tabs button{font:inherit;font-weight:700;min-height:44px;padding:6px 22px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--banner);color:var(--banner-ink);cursor:pointer;margin-bottom:-2px}
 .tabs button.on{background:var(--paper);color:var(--ink);border-color:var(--line)}
 .panel{background:var(--paper);border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;padding:22px 26px 30px}
@@ -932,14 +938,14 @@ function jumpQuest(id) {
   if (me && !filterQuests('board', [me]).length) S.stf.board = {};
   const list = filterQuests('board', all), i = list.findIndex((x) => x.id === id);
   if (i >= 0 && i >= S.limit.board) S.limit.board = i + 1;
-  S.openQ[id] = true; S.sel = id; S.tq = id; S.flash = { id, until: Date.now() + 2500 }; render();
+  S.openQ[id] = true; S.sel = id; S.tq = id; S.focusQ = id; S.popUntil = Date.now() + 900; render();
   const el = document.querySelector(`[data-q="${id}"]`);
   if (el) {
     const bar = document.querySelector('.tabs'), top = bar ? bar.offsetHeight : 0;  // 固定されたときのタブの高さ（スクロール前の位置ではなく）
     window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - top - 8);
     el.focus({ preventScroll: true });
   }
-  setTimeout(render, 2600);  // 強調を消す
+  setTimeout(() => { if (S.focusQ === id) render(); }, 1000);  // 持ち上がりを戻す（枠と暗さは解除するまで残る）
 }
 function questToc(list) {
   if (!list.length) return null;
@@ -958,14 +964,19 @@ function ledger(m) {
     h('span', null, stampEl('受付待ち', 'sd-wait')), h('span', null, '—'), cancelCell(r)));
   const pg = pageOf('board', filterQuests('board', m.quests));
   for (const qd of pg.shown) {
-    rows.push(h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : '') + (S.flash && S.flash.id === qd.id && Date.now() < S.flash.until ? ' flash' : ''), role: 'row', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => { S.openQ[qd.id] = !S.openQ[qd.id]; S.sel = qd.id; S.tq = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
-      h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me)));
-    if (S.openQ[qd.id]) rows.push(questDetail(qd));
+    const on = S.focusQ === qd.id, pop = on && S.popUntil > Date.now();
+    const row = h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => { const was = S.focusQ === qd.id; S.focusQ = null; S.openQ[qd.id] = was ? false : !S.openQ[qd.id]; S.sel = qd.id; S.tq = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
+      h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me));
+    const kids = [row];
+    if (on) kids.push(h('div', { class: 'fbar', role: 'status' }, h('span', null, 'この依頼に集中しています'), h('button', { type: 'button', onclick: () => { S.focusQ = null; render(); } }, 'もとに戻す')));
+    if (S.openQ[qd.id]) kids.push(questDetail(qd));
+    rows.push(h('div', { class: 'qitem' + (on ? ' hit' : '') + (pop ? ' pop' : ''), role: 'rowgroup' }, kids));
   }
   if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「依頼」を押してください。')));
   if (pg.more) rows.push(h('div', { class: 'lr plain' }, h('span'), pg.more));
   if (m.quests.length && !m.requests.length && !pg.shown.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, '選んだ状態の依頼はありません。')));
-  return h('div', { class: 'ledger', role: 'table', 'aria-label': '依頼の一覧' }, rows);
+  const focusing = !!S.focusQ && pg.shown.some((x) => x.id === S.focusQ);
+  return h('div', { class: 'ledger' + (focusing ? ' focusing' : ''), role: 'table', 'aria-label': '依頼の一覧' }, rows);
 }
 
 function boardTab() {
@@ -1523,6 +1534,7 @@ async function start() {
   const params = new URLSearchParams(location.search);
   for (const ev of ['dragover', 'drop']) document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest('.dz')) e.preventDefault(); });
   window.addEventListener('scroll', spyKn, { passive: true });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.focusQ && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '')) { S.focusQ = null; render(); } });
   document.addEventListener('compositionstart', () => { S.composing = true; });
   document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); const k = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key; if (k && k.startsWith('f:')) { S.form[k] = document.activeElement.value; render(); } });
   document.addEventListener('input', (e) => {
