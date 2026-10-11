@@ -26,9 +26,6 @@ body{margin:0;background:var(--bg)}
 .ledger.focusing .qitem:not(.hit):hover{opacity:.6}
 .qitem.hit{position:relative;z-index:2;background:var(--surface);box-shadow:0 0 0 3px var(--seal)}
 .qitem.hit.pop{transform:scale(1.015);box-shadow:0 0 0 3px var(--seal),0 14px 28px -10px rgba(74,15,24,.55)}
-.fbar{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:5px 14px 5px 20px;background:var(--seal);color:var(--banner-ink);font-size:13px}
-.fbar button{font:inherit;font-size:12.5px;min-height:28px;padding:0 12px;border:1px solid var(--banner-ink);border-radius:3px;background:transparent;color:var(--banner-ink);cursor:pointer}
-.fbar button:hover{background:rgba(240,207,122,.18)}
 @media (prefers-reduced-motion:reduce){.qitem{transition:none}.qitem.hit.pop{transform:none}}
 .tabs button{font:inherit;font-weight:700;min-height:44px;padding:6px 22px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--banner);color:var(--banner-ink);cursor:pointer;margin-bottom:-2px}
 .tabs button.on{background:var(--paper);color:var(--ink);border-color:var(--line)}
@@ -968,7 +965,6 @@ function ledger(m) {
     const row = h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => { const was = S.focusQ === qd.id; S.focusQ = null; S.openQ[qd.id] = was ? false : !S.openQ[qd.id]; S.sel = qd.id; S.tq = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
       h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me));
     const kids = [row];
-    if (on) kids.push(h('div', { class: 'fbar', role: 'status' }, h('span', null, 'この依頼に集中しています'), h('button', { type: 'button', onclick: () => { S.focusQ = null; render(); } }, 'もとに戻す')));
     if (S.openQ[qd.id]) kids.push(questDetail(qd));
     rows.push(h('div', { class: 'qitem' + (on ? ' hit' : '') + (pop ? ' pop' : ''), role: 'rowgroup' }, kids));
   }
@@ -1540,7 +1536,6 @@ async function start() {
     S.focusQ = null;
     document.querySelectorAll('.ledger.focusing').forEach((x) => x.classList.remove('focusing'));
     document.querySelectorAll('.qitem.hit').forEach((x) => x.classList.remove('hit', 'pop'));
-    document.querySelectorAll('.fbar').forEach((x) => x.remove());
   }, true);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.focusQ && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '')) { S.focusQ = null; render(); } });
   document.addEventListener('compositionstart', () => { S.composing = true; });
