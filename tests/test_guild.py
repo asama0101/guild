@@ -774,9 +774,9 @@ class DueTest(unittest.TestCase):
 
 
 class RoleModelsTest(unittest.TestCase):
-    """ヘルプに書く各役のモデルが、agents/*.md の model と一致する。"""
+    """ギルド案内に書く各役のモデルが、agents/*.md の model と一致する。"""
 
-    def test_board_help_matches_agents(self):
+    def test_board_matches_agents(self):
         board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
         block = board.split("const ROLE_MODELS = {", 1)[1].split("};", 1)[0]
         shown = dict((a, m) for a, _, m in re.findall(r"(\w+): \['([^']+)', '(\w+)'\]", block))
