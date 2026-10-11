@@ -94,6 +94,7 @@
 - `auto` の Todo のうち、読む相手が動的ページのものには `needs_browser: true` を付ける。ギルドマスターが、冒険者の代わりに斥候を呼ぶ（成果物と報告は同じ `output/<id>/`、報告は `reports/<id>-scout.md`）。
 - `human` の Todo には `instruction`（依頼主が読んでそのまま動ける、何を・どこで・何を使って・終わったら何を教えるか）を付ける。ボードの「あなたの番」の手紙に出る。
 - `criteria` は合格基準（観点・合格ライン・確かめ方）。空の Todo は検証で弾く。
+- `due` は Todo の期限（任意。`YYYY-MM-DD` の実在する日か `null`）。ボードの `due` の入力で設定・変更・解除する（承認前でも、進行中でも可。中止・見直し中は拒否）。表示と警告だけで、遷移には使わない。履歴には `{event: "due", todo, due}` を残す（`id` は付けない）。
 - `approved` が `true` になるまで、実行（`next`）は何も返さない。
 - `accepted` は、依頼主が納品物を受け取ったとき（`accept` の入力）に `true` になる。全 Todo が済んでも、`accepted` になるまでは完了ではない。`next` の出力の `awaiting_accept`（受け取り待ち）と `complete`（完了）で見分ける。「直してほしい」は `decision` の `replan`（コメント付き）。
 
@@ -108,7 +109,7 @@
 | `wait <root> [秒]` | 入力か依頼が届くまで待つ（既定 540 秒）。届いていれば、すぐ返す |
 | `answers <dir>` | 計画がない依頼の、質問への回答を取り出す |
 | `archive-propose <dir>` | 司書の候補（`reports/archive-draft.json`）を検査し、心得は登録、ほかは確認待ち（`archive.json` の `status` が `proposed`）にする。同名・別名の項目は更新の候補にする。候補は12件まで |
-| `archive-ingest <root>` | `archive/inbox/` の入力（`entry`・`promote`・`deprecate`）を書庫に反映し、索引（`archive/index.md`）を作り直す |
+| `archive-ingest <root>` | `archive/inbox/` の入力（`entry`・`promote`・`deprecate`・`retype`）を書庫に反映し、索引（`archive/index.md`）を作り直す |
 | `adopt <plan.json>` | 同じフォルダの `reports/plan-draft.json` を検査（`validate` と同じ検査に加えて、`template` の存在と形式）し、承認前の `plan.json` にする。すでにあれば上書きしない（`status` が `replan` のときだけ、完了済みの Todo を引き継いで置き換える） |
 | `validate <plan.json>` | `deps` の参照切れ、循環、`kind`・`criteria` の欠け、未知の `state`、`human` の `confirm`、未対応の `format` を検出する |
 | `sync <plan.json>` | 前提の結果に応じて `deps_done`・`dep_failed`・`unblock` を、動かなくなるまで適用する（承認前・中止・見直し中は何もしない） |
@@ -121,7 +122,7 @@
 ## 決定（未決だった3点）
 
 - **入力の戻し方**: 旧版（`feat/guild-0.1`）と同じく、画面は `plan.json` を書かない。画面は File System Access API（`showDirectoryPicker`）で `guild/` 内の `inbox/*.json` に入力だけを書き、`guild.py ingest` が検査して `plan.json` に反映する。`plan.json` を書けるのは `guild.py` だけ。
-  - 入力ファイルの種類: `approve`（計画の承認）、`accept`（全 Todo が済んだあとの、納品物の受け取り。済んでいないとき・受け取り済みのときは拒否）、`confirm`（実行前の確認：実行する／しない）、`result`（`human` の結果：できた／できなかった、添付パス）、`decision`（`failed` 時の判断 `skip`・`drop`、計画の作り直し `replan`、中止 `abort`）。
+  - 入力ファイルの種類: `approve`（計画の承認）、`accept`（全 Todo が済んだあとの、納品物の受け取り。済んでいないとき・受け取り済みのときは拒否）、`confirm`（実行前の確認：実行する／しない）、`result`（`human` の結果：できた／できなかった、添付パス）、`decision`（`failed` 時の判断 `skip`・`drop`、計画の作り直し `replan`、中止 `abort`）、`due`（Todo の期限の設定・解除）。
   - 反映の合図は要らない。`/guild:quest` が `guild.py wait` で到着を待ち、届いたら `ingest` で取り込む。
 - **入力の契約と書き込み側の方針**: 境界は『`guild/inbox/*.json` に入力が置かれたら `guild.py ingest` が拾う』に固定する。最初の版の書き込み側は File System Access API とし、書けないときは『JSON をコピー』ボタンに落とす。保存の失敗は理由を画面に出す。ローカルサーバー（`guild.py serve`）は最初の版では作らない。自動で進めたくなったら書き込み側だけを差し替える。
 - **確認の印**: Todo に `confirm: true` を持たせる。分解時に付け、計画の承認で見える。`next` は、`confirm: true` の Todo を『確認待ち』として別に返し、確認が済むまで `running` にしない。

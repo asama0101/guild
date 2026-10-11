@@ -69,7 +69,7 @@ disable-model-invocation: true
 
 1. **到着を取り込む**：`guild.py arrivals <root>` を見る。
    - 受付待ちの依頼（`kind` が `request`）→ 手順1で受け付け、手順2へ。
-   - 書庫への入力（`kind` が `archive`。依頼主がボードで書庫に直接登録・昇格・廃止したもの）→ `guild.py archive-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
+   - 書庫への入力（`kind` が `archive`。依頼主がボードで書庫に直接登録・昇格・廃止・種類の付け替えをしたもの）→ `guild.py archive-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
    - `inbox`（計画あり。登録候補への答え `archive` も含む）→ `guild.py ingest <dir>/plan.json`。拒否された入力があれば、理由を短くチャットで伝える。
    - `inbox`（計画なし）→ `guild.py answers <dir>` で回答を取り出し、手順2の3へ。
 2. **進める**：計画のある依頼ごとに、`guild.py sync <plan>`、続けて `guild.py next <plan>` を実行する。`next` の各グループを次のように扱う。
