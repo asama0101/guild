@@ -1264,8 +1264,8 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const oldBox = document.querySelector('.rbox'), boxTop = oldBox ? oldBox.scrollTop : 0;
-  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '冒険の書'], ['flow', 'ギルド案内'], ['help', 'ヘルプ']];
-  const body = { board: boardTab, deliv: delivTab, know: knowTab, talk: talkTab, flow: flowTab, help: helpTab }[S.tab]();
+  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '冒険の書'], ['flow', 'ギルド案内'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
+  const body = { board: boardTab, deliv: delivTab, know: knowTab, talk: talkTab, flow: flowTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox()].filter(Boolean));
@@ -1273,6 +1273,32 @@ function render() {
   const newBox = document.querySelector('.rbox'); if (newBox && boxTop) newBox.scrollTop = boxTop;
   if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus({ preventScroll: true }); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
   window.scrollTo(0, sy);
+}
+
+// ---- Obsidian 連携の案内（読むだけ。画面は何も書き換えない）
+function obsidianTab() {
+  const sec = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
+  const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
+  const pre = (t) => h('pre', { style: 'white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:6px 0' }, t);
+  return [h('h2', { class: 'h2' }, 'Obsidian で読む'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '書庫と納品物は Markdown で、Obsidian の記法で書かれています。Obsidian で開くと、リンクをたどり、検索や関係図が使えます。この画面から Obsidian の中身は変わりません（読むための案内です）。'),
+    h('div', { class: 'grid2' },
+      sec('Vault（保管庫）の作り方',
+        h('ol', null,
+          h('li', null, 'Obsidian で「保管庫を開く」→「フォルダを保管庫として開く」を選びます。'),
+          h('li', null, h('b', null, 'プロジェクトの ', code('guild/'), ' フォルダ'), 'を選びます（書庫と納品物の両方が見えます）。'),
+          h('li', null, '設定 →「ファイルとリンク」→「除外ファイル」に ', code('inbox/'), '、', code('reports/'), '、', code('requests/'), ' を足します（やりとりの JSON と報告で、検索がうるさくなるため）。')),
+        h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
+      sec('ディレクトリ構成', pre(['guild/', '  archive/            書庫', '    index.md          索引（役が最初に読む）', '    terms/ flows/ facts/ personal/   用語／業務フロー／業務情報／個人', '    lessons/          心得（役は読まない）', '  Q001/               依頼ごとのフォルダ', '    output/T3/…       納品物（最後のまとめの Todo の成果物）', '    reports/          役の報告', '    plan.json         計画（guild.py だけが書く。触らない）', '  templates/          納品物のテンプレート'].join('\n'))),
+      sec('納品物を見る', dl([['場所', h('span', null, code('Q###/output/<Todo>/'), '。依頼ごとのフォルダの中です。納品物は、最後の「まとめの Todo」の成果物です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
+      sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[terms/KGI]] のようにリンクします。'].join('\n')),
+        dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止']]),
+        h('p', { class: 'fine' }, '項目を Obsidian で直接編集してもかまいませんが、索引（', code('index.md'), '）は自動では更新されません。確実に反映するには、この画面の「書庫」から編集してください。')),
+      sec('整形（フォーマッタ）の設定',
+        h('ul', null,
+          h('li', null, 'コミュニティプラグイン「Linter」を使うなら、YAML のキーの並び替えと「タイトルの自動追加」を切ってください（見出しを勝手に足されると、項目の本文が変わります）。'),
+          h('li', null, 'フロントマターは、値を二重引用符で囲む書き方のままにしてください（コロンや # が入っても崩れません）。'),
+          h('li', null, '改行は LF のままにしてください。')),
+        h('p', { class: 'fine' }, '設定を変えなくても、読むだけなら問題ありません。')))];
 }
 
 // ============================================================ 書き込み
