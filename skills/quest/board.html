@@ -20,7 +20,8 @@ body{margin:0;background:var(--bg)}
 .tabs .tools button{margin-bottom:0;min-height:38px;padding:4px 14px;border:1px solid var(--brass);border-radius:6px;background:var(--surface);color:var(--ink)}
 .tabs .tools button.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
 .lr,.quick{scroll-margin-top:70px}
-.lr.flash{outline:3px solid var(--seal);outline-offset:-3px;animation:flashfade 2.5s ease-out}
+.lr.flash{box-shadow:inset 6px 0 0 var(--seal);animation:flashfade 2.5s ease-out}
+.lr:focus-visible{outline:2px solid var(--seal);outline-offset:-2px}
 @keyframes flashfade{from{background:var(--head)}to{background:transparent}}
 @media (prefers-reduced-motion:reduce){.lr.flash{animation:none}}
 .tabs button{font:inherit;font-weight:700;min-height:44px;padding:6px 22px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--banner);color:var(--banner-ink);cursor:pointer;margin-bottom:-2px}
@@ -87,6 +88,7 @@ body{margin:0;background:var(--bg)}
 .btn{min-height:46px;padding:6px 22px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer;border:2px solid var(--ink);background:var(--paper2);color:var(--ink)}
 .btn.go{background:var(--ok);border-color:var(--ok-edge);color:var(--on)}
 .btn.wax{background:var(--ng);border-color:var(--ng-edge);color:var(--on)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.ghost{border-color:var(--brass);color:var(--sub)}
 textarea{width:100%;box-sizing:border-box;min-height:66px;border:1px solid var(--brass);border-radius:4px;padding:10px;font:inherit;font-size:14px;background:var(--surface);color:var(--ink);resize:vertical}
 input[type=date]{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass);border-radius:4px;padding:6px 10px;background:var(--surface)}
@@ -100,7 +102,11 @@ input[type=date]{font:inherit;font-size:14px;min-height:42px;border:1px solid va
 .drop{border:2px dashed var(--brass);border-radius:4px;padding:12px;text-align:center;font-size:13.5px;color:var(--sub);background:var(--surface2)}
 .sec{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:17px;margin:24px 0 10px}
 .tag{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--brass);border-radius:3px;padding:10px 14px;margin-bottom:8px}
-.duerow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+.duerow{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0 0;padding-top:8px;border-top:1px dotted var(--brass);font-size:13px}
+.duerow .dl{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800}
+.duerow input[type=date]{font:inherit;font-size:13px;min-height:32px;padding:2px 8px;border:1px solid var(--brass);border-radius:3px;background:var(--paper2);color:var(--ink)}
+.duerow .dwarn{flex-basis:100%;margin:0;color:var(--warn)}
+.tag.over{border-left-color:var(--ng)}
 .tag .row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}
 .tid{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px;background:var(--ink);color:var(--paper);border-radius:3px;padding:0 7px}
 .ttl{font-weight:700;flex:1 1 240px}
@@ -115,6 +121,20 @@ dl.c dd{margin:0}
 .way .n{border:1px solid var(--brass);border-radius:3px;padding:3px 10px;background:var(--surface)}
 .way .n.h{border-style:dashed}
 code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px}
+.kn-tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:2px solid var(--brass);margin-top:6px}
+.kn-tabs button{font:inherit;font-weight:700;font-size:14px;min-height:38px;padding:4px 16px;border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0;background:var(--paper2);color:var(--sub);cursor:pointer;margin-bottom:-2px}
+.kn-tabs button .n{font-weight:400;font-size:12px;margin-left:6px}
+.kn-tabs button.on{background:var(--surface);color:var(--ink);border-color:var(--brass);border-bottom:2px solid var(--surface);box-shadow:inset 0 3px 0 var(--seal)}
+.kn-bar{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;padding:10px 14px;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);border-top:0;font-size:13px}
+.seg{display:inline-flex;align-items:center;gap:8px}
+.seg .cap{color:var(--sub)}
+.seg .opts{display:inline-flex;border:1px solid var(--brass);border-radius:3px;overflow:hidden}
+.seg .o{font:inherit;font-size:13px;min-height:32px;padding:2px 12px;border:0;border-right:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg .o:last-child{border-right:0}
+.seg .o.on{background:var(--paper);font-weight:700;box-shadow:inset 0 -3px 0 var(--seal)}
+.seg .o input{accent-color:var(--seal);margin:0}
+.seg .o:focus-within,.seg .o:focus-visible{outline:2px solid var(--seal);outline-offset:-2px}
+.tree{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border:1px solid var(--line);border-left:4px solid var(--brass);border-radius:3px;padding:12px 14px;font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12.5px;line-height:1.7;margin:6px 0}
 .filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
 .bwrap{display:grid;grid-template-columns:190px minmax(0,1fr);gap:0 20px;align-items:start}
 .bmain{min-width:0}
@@ -766,21 +786,21 @@ function dueRow(qd, t) {
   const pick = S.form[key] !== undefined ? S.form[key] : (t.due || '');
   const inp = h('input', { type: 'date', 'aria-label': `${t.id} の期限` }); inp.value = pick; bindKey(inp, key);
   const editable = p.status === 'active' || p.status === undefined;
-  const warn = h('p', { class: 'fine', style: 'margin:4px 0 0;color:var(--warn)' });
-  const btn = h('button', { type: 'button', class: 'btn ghost', style: 'min-height:34px', onclick: async () => { await send(qd.id, { type: 'due', todo: t.id, due: (S.form[key] !== undefined ? S.form[key] : (t.due || '')) || null }, key); delete S.form[key]; render(); } });
+  const warn = h('p', { class: 'dwarn' });
+  const btn = h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => { await send(qd.id, { type: 'due', todo: t.id, due: (S.form[key] !== undefined ? S.form[key] : (t.due || '')) || null }, key); delete S.form[key]; render(); } });
   // 入力中に描き直すと、日付の欄の入力位置が先頭に戻る。ボタンと注意文だけをその場で直す
   const sync = (v) => { btn.disabled = S.conn !== 'ok' || v === (t.due || ''); btn.textContent = v || !t.due ? '期限を設定' : '期限を解除';
     warn.textContent = v && reqDue && v > reqDue ? `依頼の期限（${reqDue}）より後の日付です。` : ''; warn.hidden = !warn.textContent; };
   inp.addEventListener('change', () => { S.form[key] = inp.value; sync(inp.value); });
   sync(pick);
   return h('div', { class: 'duerow' },
-    h('span', { class: 'fine' }, '期限：', t.due ? t.due : 'なし'), over ? [' ', stampEl('期限切れ', 'sd-ng')] : null,
-    t.dueWait !== undefined ? [' ', stampEl(t.dueWait ? `反映待ち（${t.dueWait}）` : '反映待ち（解除）', 'sd-turn')] : null,
-    editable ? [' ', inp, btn] : null,
+    h('span', { class: 'dl' }, '期限'), h('span', null, t.due ? t.due : 'なし'), over ? stampEl('期限切れ', 'sd-ng') : null,
+    t.dueWait !== undefined ? [stampEl(t.dueWait ? `反映待ち（${t.dueWait}）` : '反映待ち（解除）', 'sd-turn')] : null,
+    editable ? [inp, btn] : null,
     editable ? warn : null);
 }
 function todoTags(qd) {
-  return qd.todos.map((t) => h('article', { class: 'tag' },
+  return qd.todos.map((t) => h('article', { class: 'tag' + (overdue(t, Date.now()) ? ' over' : '') },
     h('div', { class: 'row' }, h('span', { class: 'tid' }, t.id), h('span', { class: 'ttl' }, t.title), stampEl(t.stamp, t.cls)),
     h('div', { class: 'kind' }, (t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動で実行（実行前に確認）' : '自動で実行') + '　前提：' + ((t.deps || []).join('・') || 'なし')),
     t.confirm ? h('div', { class: 'lock' }, '実行の直前に、もう一度お聞きします') : null,
@@ -1112,16 +1132,16 @@ function knowTab() {
   if (m.archiveWait) out.push(h('p', { class: 'fine', role: 'status' }, `書庫への反映待ちが ${m.archiveWait} 件あります。/guild:quest が動いていれば、すぐ反映されます。動いていなければ、チャットで /guild:quest と送ってください。`));
   const kn = S.kn, all = m.archive || [];
   const cnt = (t) => all.filter((e) => t === 'all' || e.type === t).length;
-  out.push(h('div', { class: 'filters', role: 'tablist', 'aria-label': '書庫の種類' },
+  const seg = (cap, ...opts) => h('div', { class: 'seg', role: 'group', 'aria-label': cap }, h('span', { class: 'cap' }, cap), h('span', { class: 'opts' }, ...opts));
+  const choice = (v, l, cur, set) => h('button', { type: 'button', class: 'o' + (cur === v ? ' on' : ''), 'aria-pressed': String(cur === v), onclick: () => { set(v); render(); } }, l);
+  out.push(h('div', { class: 'kn-tabs', role: 'tablist', 'aria-label': '書庫の種類' },
     [['all', 'すべて'], ...ARCH_TYPES.map(([t, , l]) => [t, l])].map(([t, l]) =>
-      h('button', { type: 'button', role: 'tab', 'aria-selected': String(kn.tab === t), class: 'fchk' + (kn.tab === t ? ' on' : ''), onclick: () => { kn.tab = t; render(); } }, `${l} ${cnt(t)}`))));
-  out.push(h('div', { class: 'filters sf', role: 'group', 'aria-label': '書庫の絞り込み' }, h('span', { class: 'sub', style: 'align-self:center' }, '確度：'),
-    Object.entries(CONF).map(([k, [l]]) => { const c = h('input', { type: 'checkbox' }); c.checked = !!kn.conf[k];
-      c.addEventListener('change', () => { kn.conf[k] = c.checked; render(); }); return h('label', { class: 'fchk' + (c.checked ? ' on' : '') }, c, l); }),
-    h('span', { class: 'sub', style: 'align-self:center;margin-left:10px' }, '状態：'),
-    [['active', '使っているもの'], ['all', '廃止も含む']].map(([v, l]) => h('button', { type: 'button', class: 'fchk' + (kn.st === v ? ' on' : ''), 'aria-pressed': String(kn.st === v), onclick: () => { kn.st = v; render(); } }, l)),
-    h('span', { class: 'sub', style: 'align-self:center;margin-left:10px' }, '並び：'),
-    [['name', '名前順'], ['confirmed', '確認日が新しい順']].map(([v, l]) => h('button', { type: 'button', class: 'fchk' + (kn.sort === v ? ' on' : ''), 'aria-pressed': String(kn.sort === v), onclick: () => { kn.sort = v; render(); } }, l))));
+      h('button', { type: 'button', role: 'tab', 'aria-selected': String(kn.tab === t), class: kn.tab === t ? 'on' : '', onclick: () => { kn.tab = t; render(); } }, l, h('span', { class: 'n' }, String(cnt(t)))))));
+  out.push(h('div', { class: 'kn-bar' },
+    seg('確度', ...Object.entries(CONF).map(([k, [l]]) => { const c = h('input', { type: 'checkbox' }); c.checked = !!kn.conf[k];
+      c.addEventListener('change', () => { kn.conf[k] = c.checked; render(); }); return h('label', { class: 'o' + (c.checked ? ' on' : '') }, c, l); })),
+    seg('状態', choice('active', '使っているもの', kn.st, (v) => { kn.st = v; }), choice('all', '廃止も含む', kn.st, (v) => { kn.st = v; })),
+    seg('並び', choice('name', '名前順', kn.sort, (v) => { kn.sort = v; }), choice('confirmed', '確認日が新しい順', kn.sort, (v) => { kn.sort = v; }))));
   if ((m.archiveRejected || []).length) out.push(h('div', { class: 'card', role: 'status', style: 'margin-bottom:10px' }, h('b', null, '反映されなかった入力（新しい5件まで）'),
     h('ul', { style: 'margin:6px 0 0' }, m.archiveRejected.map((r) => h('li', { class: 'fine' }, code(r.file), '：', r.reason)))));
   out.push(archiveForm());
@@ -1301,7 +1321,7 @@ function render() {
 function obsidianTab() {
   const sec = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
   const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
-  const pre = (t) => h('pre', { style: 'white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:6px 0' }, t);
+  const pre = (t) => h('pre', { class: 'tree' }, t);
   return [h('h2', { class: 'h2' }, 'Obsidian で読む'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '書庫と納品物は Markdown で、Obsidian の記法で書かれています。Obsidian で開くと、リンクをたどり、検索や関係図が使えます。この画面から Obsidian の中身は変わりません（読むための案内です）。'),
     h('div', { class: 'grid2' },
       sec('Vault（保管庫）の作り方',
@@ -1310,7 +1330,7 @@ function obsidianTab() {
           h('li', null, h('b', null, 'プロジェクトの ', code('guild/'), ' フォルダ'), 'を選びます（書庫と納品物の両方が見えます）。'),
           h('li', null, '設定 →「ファイルとリンク」→「除外ファイル」に ', code('inbox/'), '、', code('reports/'), '、', code('requests/'), ' を足します（やりとりの JSON と報告で、検索がうるさくなるため）。')),
         h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
-      sec('ディレクトリ構成', pre(['guild/', '  archive/            書庫', '    index.md          索引（役が最初に読む）', '    terms/ flows/ facts/ personal/   用語／業務フロー／業務情報／個人', '    lessons/          心得（役は読まない）', '  Q001/               依頼ごとのフォルダ', '    output/T3/…       納品物（最後のまとめの Todo の成果物）', '    reports/          役の報告', '    plan.json         計画（guild.py だけが書く。触らない）', '  templates/          納品物のテンプレート'].join('\n'))),
+      sec('ディレクトリ構成', pre(['guild/', '  archive/            書庫', '    index.md          索引（役が最初に読む）', '    terms/            用語', '    flows/            業務フロー', '    facts/            業務情報', '    personal/         個人', '    lessons/          心得（役は読まない）', '  Q001/               依頼ごとのフォルダ', '    output/T3/…       納品物（最後のまとめの Todo の成果物）', '    reports/          役の報告', '    plan.json         計画（guild.py だけが書く。触らない）', '  templates/          納品物のテンプレート'].join('\n'))),
       sec('納品物を見る', dl([['場所', h('span', null, code('Q###/output/<Todo>/'), '。依頼ごとのフォルダの中です。納品物は、最後の「まとめの Todo」の成果物です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
       sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[terms/KGI]] のようにリンクします。'].join('\n')),
         dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止']]),
