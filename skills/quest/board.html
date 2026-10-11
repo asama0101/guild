@@ -159,6 +159,12 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .grid2{column-count:2;column-gap:16px}
 .grid2>.card{break-inside:avoid;margin:0 0 16px}
 @media (max-width:900px){.grid2{column-count:1}}
+.role{display:grid;grid-template-columns:170px minmax(0,1fr);gap:4px 18px;padding:12px 0;border-top:1px dotted var(--brass)}
+.role:first-of-type{border-top:0}
+.role .nm{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800;font-size:16px}
+.role .md{font-size:12.5px;line-height:1.5}
+.role .when{font-size:12.5px;color:var(--sub)}
+@media (max-width:620px){.role{grid-template-columns:1fr}}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:18px 22px}
 .card h3{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:17px;margin:0 0 8px}
 .card ol{margin:0;padding-left:22px;font-size:14.5px}
@@ -1166,11 +1172,11 @@ function spyKn() {
 }
 
 // ---- ギルド案内（処理フローの図とスキルの説明）
-const ACTOR = { me: ['あなた（ボード）', '--banner', '--banner-ink'], gm: ['ギルドマスター', '--brass', '--on'], cart: ['地図師', '--ok', '--on'], adv: ['冒険者・斥候', '--warn', '--on'], app: ['鑑定士', '--stop', '--on'], sys: ['', '--surface2', '--ink'] };
+const ACTOR = { me: ['あなた（ボード）', '--banner', '--banner-ink'], gm: ['ギルドマスター', '--brass', '--on'], cart: ['地図師', '--ok', '--on'], adv: ['冒険者・斥候', '--warn', '--on'], app: ['鑑定士', '--stop', '--on'], lib: ['司書', '--mute', '--on'], sys: ['', '--surface2', '--ink'] };
 function flowSvg() {
   const ns = 'http://www.w3.org/2000/svg';
   const E = (tag, a, ...kids) => { const e = document.createElementNS(ns, tag); for (const k in (a || {})) { if (k === 'style') e.style.cssText = a[k]; else e.setAttribute(k, a[k]); } for (const c of kids) e.append(c); return e; };
-  const svg = E('svg', { viewBox: '0 0 1000 672', role: 'img', 'aria-label': '依頼から納品までの処理の流れの図', style: 'width:100%;height:auto;max-width:1000px;font-family:inherit' });
+  const svg = E('svg', { viewBox: '0 0 1000 704', role: 'img', 'aria-label': '依頼から納品までの処理の流れの図', style: 'width:100%;height:auto;max-width:1000px;font-family:inherit' });
   svg.append(E('defs', null, E('marker', { id: 'ah', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' }, E('path', { d: 'M0 0 L10 5 L0 10 z', style: 'fill:var(--sub)' }))));
   const box = (x, y, who, title, sub, w) => {
     const a = ACTOR[who], ww = w || 200;
@@ -1194,8 +1200,8 @@ function flowSvg() {
   box(520, 118, 'me', '計画を承認', '最初の1回だけ');
   arrow([[620, 84], [620, 118]]);
   // 実行ループ
-  svg.append(E('rect', { x: 10, y: 205, width: 980, height: 290, rx: 10, style: 'fill:none;stroke:var(--brass);stroke-width:2;stroke-dasharray:7 5' }));
-  note(24, 227, '実行ループ（Todo ごとに、前提が済んだものからくり返す。独立した Todo は同時に進む）');
+  svg.append(E('rect', { x: 10, y: 205, width: 980, height: 315, rx: 10, style: 'fill:none;stroke:var(--brass);stroke-width:2;stroke-dasharray:7 5' }));
+  note(24, 227, '実行ループ（Todo ごとに、前提が済んだものからくり返す。独立した Todo は同時に進む。最後は「まとめの Todo」）');
   arrow([[620, 182], [620, 205]]);
   box(40, 240, 'me', '実行前の確認', '確認の印がある Todo');
   box(40, 325, 'adv', '実行する', '調べる・書く（動的ページは斥候）');
@@ -1211,29 +1217,48 @@ function flowSvg() {
   arrow([[400, 389], [400, 420]], '不合格', 408, 408);
   box(560, 420, 'me', '失敗の判断', 'やめる・進める・直す・中止');
   arrow([[500, 452], [560, 452]], '上限超え', 502, 444);
+  note(560, 506, '「実行しない」「できなかった」を選んだときも、ここへ');
   box(790, 325, 'sys', '計画を直す', '合格済みの Todo は引き継ぐ', 190);
   arrow([[760, 452], [885, 452], [885, 389]], '直す', 800, 444, true);
   note(800, 478, '→ 地図師が作り直して、再承認');
+  note(24, 506, '不合格のとき、「あなたの実行」の Todo は、あなたに戻ります');
   // 納品
-  arrow([[140, 495], [140, 525]], '全 Todo が済む', 150, 515);
-  box(40, 525, 'adv', 'まとめの Todo', '納品物の資料を作る');
-  box(300, 525, 'me', '受け取りの確認', '受け取る／直してほしい');
-  box(560, 525, 'gm', '書庫に残す', '司書の候補を選ぶ');
-  arrow([[240, 557], [300, 557]]); arrow([[500, 557], [560, 557]], '受け取る', 506, 549);
-  note(300, 612, '「直してほしい」→ 計画の作り直し（上の「計画を直す」へ）');
+  arrow([[140, 520], [140, 550]]);
+  box(40, 550, 'sys', '全 Todo が済む', '最後のまとめの Todo が納品物を作る', 210);
+  box(300, 550, 'me', '受け取りの確認', '受け取る／直してほしい');
+  box(560, 550, 'lib', '書庫に残す', '依頼主が登録を選ぶ');
+  arrow([[250, 582], [300, 582]]); arrow([[500, 582], [560, 582]], '受け取る', 506, 574);
+  note(300, 637, '「直してほしい」→ 計画の作り直し（上の「計画を直す」へ）');
+  note(300, 654, '中止（失敗の判断で選ぶ）→ 合格済みの成果物だけ案内して終わり。書庫への記録は、中止のときも行います');
   // 凡例
-  let lx = 20; for (const k of ['me', 'gm', 'cart', 'adv', 'app']) { svg.append(E('rect', { x: lx, y: 640, width: 16, height: 16, rx: 3, style: `fill:var(${ACTOR[k][1]})` })); svg.append(E('text', { x: lx + 22, y: 653, style: 'font-size:12px;fill:var(--ink)' }, ACTOR[k][0])); lx += 170; }
+  let lx = 20; for (const k of ['me', 'gm', 'cart', 'adv', 'app', 'lib']) { svg.append(E('rect', { x: lx, y: 674, width: 16, height: 16, rx: 3, style: `fill:var(${ACTOR[k][1]})` })); svg.append(E('text', { x: lx + 22, y: 687, style: 'font-size:12px;fill:var(--ink)' }, ACTOR[k][0])); lx += 160; }
   return svg;
+}
+
+// ギルド案内の「役」。モデルは ROLE_MODELS（agents/*.md の model と、テストで一致を確かめている）から引く
+const ROLES = [
+  ['ギルドマスター', null, '/guild:quest が動いている間、ずっと', '依頼を受け付け、役を呼び、あなたの答えを待ちます。進め方の判断（順序・遷移・やり直し）は guild.py に任せ、自分では判断しません。', '/guild:quest を動かしているセッションのモデル'],
+  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、前提・種別（自動／あなた）・確認の印・合格基準・納品物の形式を決めます。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
+  ['冒険者', 'adventurer', '自動でできる Todo ごと', '調べる・書き写す・整理する・書く。最後のまとめの Todo では、納品物の資料を作ります。報告は reports/、成果物は output/ に書きます。'],
+  ['斥候', 'scout', '動的ページを読む Todo。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
+  ['鑑定士', 'appraiser', 'Todo ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、斥候に読んでもらいます。成果物は直しません。'],
+  ['司書', 'librarian', '依頼が完了したあと、中止したあと', '報告と成果物から、書庫に残す用語・業務フロー・業務情報・個人・心得の候補を、12件まで挙げます。登録はしません（選ぶのはあなたです。心得だけは、そのまま登録されます）。'],
+  ['あなた', null, '計画の承認・確認の印の前・「あなたの実行」・失敗の判断・受け取り', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。', '—']];
+function rolesCard() {
+  return h('section', { class: 'card' }, h('h3', null, '役'),
+    ROLES.map(([name, key, when, does, modelText]) => h('div', { class: 'role' },
+      h('div', null, h('div', { class: 'nm' }, name), h('div', { class: 'md' }, key ? [h('span', { class: 'fine' }, 'モデル　'), h('code', null, ROLE_MODELS[key][1])] : h('span', { class: 'fine' }, modelText === '—' ? 'モデル　—' : modelText))),
+      h('div', null, h('div', { class: 'when' }, '呼ばれるとき：', when), h('p', { style: 'margin:2px 0 0;font-size:14px' }, does)))),
+    h('p', { class: 'fine', style: 'margin:10px 0 0' }, 'モデルの名前（opus・sonnet）は別名で、提供元の推奨する版に更新されます。変えたいときは、プラグインの agents/ にある各役の定義の model を書き換えます。'));
 }
 
 function flowTab() {
   const card = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
   const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
   return [h('h2', { class: 'h2' }, 'ギルド案内'),
-    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼を出してから、納品物を受け取るまでの流れと、それぞれの役の説明です。あなたが操作するのは、赤い枠の場所だけです。'),
+    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼を出してから、納品物を受け取るまでの流れと、それぞれの役の説明です。あなたが操作するのは、赤い箱の場所と、「書庫に残す」で登録を選ぶときです。'),
     h('div', { class: 'card', style: 'margin-bottom:16px;overflow:auto' }, flowSvg()),
-    h('div', { class: 'grid2' },
-      card('役', dl([['ギルドマスター', '/guild:quest 本体。役を呼び、進め方の判断は guild.py に任せます。判断はしません。'], ['地図師', '依頼を Todo に分解し、前提・種別・合格基準・納品物の形式を決めます。あいまいなところは質問します。'], ['冒険者', '自動でできる Todo（調べる・書き写す・整理する・書く）を実行します。最後のまとめの Todo では、納品物の資料を作ります。'], ['斥候', '動的ページ（地図・SNS など）を、ブラウザで読むだけの役。クリックも入力もしません。鑑定士が開けなかった出典を読むときにも、呼ばれます。'], ['鑑定士', '成果物を合格基準で判定します。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます（開けないものは、斥候に読んでもらいます）。成果物は直しません。'], ['司書', '依頼が終わったあと、書庫に残す用語・フロー・情報・心得の候補を挙げます。登録はしません。'], ['あなた', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。']])))];
+    rolesCard()];
 }
 
 // 各役のモデル。正本は agents/*.md の model（tests/test_guild.py が一致を確かめる）
