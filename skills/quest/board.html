@@ -574,6 +574,12 @@ function answerOf(x, form, k, i) {
   if (x.multi) { const a = form[key] !== undefined ? form[key] : asList(x.recommended); return { q: x.text, choice: a.join('、'), choices: a, note }; }
   return { q: x.text, choice: form[key] !== undefined ? form[key] : (x.recommended || ''), note };
 }
+// 中止した依頼の「一部の成果物」。合格（done）した Todo の成果物だけ
+function partialOutputs(qd) {
+  const p = qd.q.plan, all = qd.q.output || [];
+  const ok = p ? p.todos.filter((t) => t.state === 'done').map((t) => t.id) : [];
+  return all.filter((f) => ok.some((i) => f.startsWith(`${qd.id}/output/${i}/`)));
+}
 // 納品物は、依頼主に渡す資料（地図師が deliverable の印を付けた Todo の成果物）。途中の成果物は材料
 function deliverables(qd) {
   const p = qd.q.plan, all = qd.q.output;
@@ -727,7 +733,13 @@ function letterFor(qd, a) {
 function infoLetter(qd) {
   if (qd.info === 'decomposing') return h('section', { class: 'letter' }, seal('分'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '分解中'), h('h3', null, '依頼を受け付けました'), h('p', null, '地図師が道のりを描いています。まだ計画はありません。進まないときは、チャットで ', code('/guild:quest'), ' と送ってください。'));
   if (qd.info === 'replan') return h('section', { class: 'letter' }, seal('直'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '計画を直しています'), h('h3', null, '計画の作り直しを待っています'), h('p', null, '/guild:quest が動いていれば、地図師がすぐ作り直します。動いていなければ、チャットで ', code('/guild:quest'), ' と送ってください。'));
-  if (qd.info === 'aborted') return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '中止'), h('h3', null, 'この依頼は中止されました'), h('p', null, 'できていた成果物は ', code(`${qd.id}/output/`), ' に残っています。'));
+  if (qd.info === 'aborted') {
+    const part = partialOutputs(qd);
+    return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, part.length ? '中止（一部の成果物あり）' : '中止'), h('h3', null, 'この依頼は中止されました'),
+      part.length
+        ? [h('p', null, '合格した Todo の成果物です。納品物ではなく、途中までのものです（未鑑定・不合格のものは含みません）。'), h('ul', { class: 'flist' }, part.map((f) => fileRow(f)))]
+        : h('p', null, '合格した Todo の成果物はありません。途中のファイルは ', code(`${qd.id}/output/`), ' に残っていることがあります。'));
+  }
   if (qd.info === 'finished') {
     return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
       deliverableBlock(qd),

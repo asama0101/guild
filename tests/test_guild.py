@@ -1012,5 +1012,37 @@ class ArchiveTest(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
 
 
+class PiledLettersTest(unittest.TestCase):
+    """『あなたの番』の手紙が溜まったとき、wait / ingest / next が止まらないこと。"""
+
+    def test_many_letters_do_not_stall_autonomous_todos(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            qs = [guild.new_quest(root) for _ in range(3)]
+            for q in qs:
+                p = plan(*[todo(f"H{i}", kind="human", state="waiting_user") for i in range(1, 11)],
+                         todo("A1", state="running"))
+                (Path(q["dir"]) / "plan.json").write_text(json.dumps(p), encoding="utf-8")
+            # 1つの依頼の人の Todo 10件に、手紙を溜めずに放置しても、自動の A1 は ready のまま
+            for q in qs:
+                v = guild.next_view(json.loads((Path(q["dir"]) / "plan.json").read_text(encoding="utf-8")))
+                self.assertEqual(v["ready"], ["A1"])
+                self.assertEqual(len(v["waiting_user"]), 10)
+            # 依頼主が全部に答えを返しても、1回の ingest で全部を取り込み、arrivals が空になる
+            q = qs[0]
+            for i in range(1, 11):
+                (Path(q["dir"]) / "inbox").joinpath(f"{i:02d}.json").write_text(
+                    json.dumps({"type": "result", "todo": f"H{i}", "ok": True, "note": "", "files": []}), encoding="utf-8")
+            self.assertEqual(len(guild.arrivals(root)), 10)
+            self.assertLess(guild.wait_for(root, 5, interval=0.1)["waited"], 1)
+            path = Path(q["dir"]) / "plan.json"
+            plan_ = json.loads(path.read_text(encoding="utf-8"))
+            rep = guild.ingest(path, plan_, TR)
+            self.assertEqual((len(rep["applied"]), rep["rejected"]), (10, []))
+            self.assertEqual(guild.arrivals(root), [])
+            self.assertEqual(guild.next_view(plan_)["review"], [f"H{i}" for i in range(1, 11)])
+
+
 if __name__ == "__main__":
     unittest.main()
