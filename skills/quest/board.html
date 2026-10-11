@@ -373,7 +373,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {}, talk: {} }, kn: { cur: null }, limit: { board: 20, talk: 20, msg: 50 }, msgKey: '',
+  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {} }, kn: { cur: null }, limit: { board: 20, msg: 50 }, msgKey: '',
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -941,11 +941,14 @@ function jumpQuest(id) {
   }
   setTimeout(() => { if (S.focusQ === id) render(); }, 1000);  // 持ち上がりを戻す（枠と暗さは解除するまで残る）
 }
-function questToc(list) {
+// 依頼の目次。掲示板は押した依頼へ飛び、冒険の書は押した依頼のやりとりに切り替える（pick・cur・allLabel で指定）
+function questToc(list, o = {}) {
   if (!list.length) return null;
+  const pick = o.pick || jumpQuest, cur = o.pick ? o.cur : S.sel;
   return h('aside', { class: 'toc', 'aria-label': '依頼の目次' }, h('div', { class: 'toch' }, '依頼の目次'),
+    o.allLabel ? h('button', { type: 'button', class: 'tocb' + (cur === 'all' ? ' on' : ''), onclick: () => pick('all') }, h('span', { class: 'tt' }, o.allLabel)) : null,
     list.map((x) => { const need = x.asks.some((a) => !a.sent);
-      return h('button', { type: 'button', class: 'tocb' + (need ? ' need' : '') + (S.sel === x.id ? ' on' : ''), onclick: () => jumpQuest(x.id) },
+      return h('button', { type: 'button', class: 'tocb' + (need ? ' need' : '') + (cur === x.id ? ' on' : ''), onclick: () => pick(x.id) },
         h('span', { class: 'id' }, x.id), h('span', { class: 'tt' }, x.title),
         h('span', { class: 'st' }, h('span', { class: `stamp sm ${x.cls}` }, x.label), need ? h('span', { class: 'stamp sm sd-turn' }, 'あなたの番') : null)); }));
 }
@@ -1003,15 +1006,9 @@ function ganttBlock(x) {
 
 function talkTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
-  const flt = filterQuests('talk', m.quests);
-  if (S.tq !== 'all' && flt.length && !flt.some((x) => x.id === S.tq)) S.tq = flt[0].id;
-  const scopeIds = S.tq === 'all' ? flt.map((x) => x.id) : [S.tq || (m.quests[0] && m.quests[0].id)].filter(Boolean);
-  const pg = pageOf('talk', flt);
-  const sel1 = h('select', { 'aria-label': '依頼の選択', style: 'min-height:40px;max-width:100%;padding:4px 10px;font:inherit;border:1px solid var(--brass);border-radius:4px;background:var(--surface);color:var(--ink)', onchange: (e) => { S.tq = e.target.value; render(); } },
-    pg.shown.map((x) => { const o = h('option', { value: x.id }, `${x.id} ${x.title.length > 24 ? x.title.slice(0, 24) + '…' : x.title}${x.asks.some((a) => !a.sent) ? '（あなたの番）' : ''}`); o.selected = S.tq === x.id; return o; }),
-    (() => { const o = h('option', { value: 'all' }, 'すべての依頼'); o.selected = S.tq === 'all'; return o; })());
-  const chips = h('div', { class: 'filters', 'aria-label': '依頼の選択' }, h('span', { class: 'sub', style: 'align-self:center' }, '依頼：'), sel1, pg.more);
-  const out = [h('h2', { class: 'h2' }, '冒険の書'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、新しい順に見られます。時間の帯（タイムライン）は、「掲示板」の依頼の「道のり」の下にあります。'), m.quests.length ? stateFilter('talk', m.quests) : null, chips];
+  if (S.tq !== 'all' && !m.quests.some((x) => x.id === S.tq)) S.tq = m.quests.length ? m.quests[0].id : null;
+  const scopeIds = S.tq === 'all' ? m.quests.map((x) => x.id) : [S.tq].filter(Boolean);
+  const out = [h('h2', { class: 'h2' }, '冒険の書'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、新しい順に見られます。左の目次で依頼を選びます。時間の帯（タイムライン）は、「掲示板」の依頼の「道のり」の下にあります。')];
   const sel = scopeIds.map((id) => m.quests.find((x) => x.id === id)).filter(Boolean);
   {
     const roles = [['all', 'すべて'], ['cart', '地図師'], ['adv', '冒険者'], ['app', '鑑定士'], ['me', 'あなた'], ['note', '指摘だけ']];
@@ -1020,8 +1017,8 @@ function talkTab() {
     let msgs = sel.flatMap((x) => messagesOf(x)).sort((a, b) => new Date(b.t) - new Date(a.t));
     msgs = msgs.filter((x) => S.role === 'all' || (S.role === 'note' ? x.role === 'app' && x.note : x.role === S.role));
     if (!msgs.length) out.push(h('p', { class: 'sub' }, S.role === 'note' ? '指摘はありません。' : 'このあたりのやりとりは、まだありません。'));
-    // 依頼・役・状態の絞り込みが変わったら、件数の区切りを50件に戻す。新しい順に50件ずつ、古い側を足す
-    const mk = [S.tq, S.role, STATES.filter((x) => S.stf.talk[x]).join()].join('|');
+    // 依頼・役の絞り込みが変わったら、件数の区切りを50件に戻す。新しい順に50件ずつ、古い側を足す
+    const mk = [S.tq, S.role].join('|');
     if (S.msgKey !== mk) { S.msgKey = mk; S.limit.msg = 50; }
     const total = msgs.length; msgs = msgs.slice(0, S.limit.msg);
     for (const x of msgs) { const r = roleOf(x.role);
@@ -1031,7 +1028,8 @@ function talkTab() {
     if (total > msgs.length) out.push(h('button', { type: 'button', class: 'btn ghost morebtn', onclick: () => { S.limit.msg += 50; render(); } }, `さらに古いやりとりを表示（残り ${total - msgs.length} 件）`));
   }
   out.push(h('p', { class: 'fine', style: 'margin-top:14px' }, '答える用件は、「掲示板」の手紙に出ます。', h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px;margin-left:8px', onclick: () => { S.tab = 'board'; render(); } }, '掲示板へ')));
-  return out;
+  const toc = questToc(m.quests, { pick: (id) => { S.tq = id; render(); }, cur: S.tq, allLabel: 'すべての依頼' });
+  return toc ? [h('div', { class: 'bwrap' }, toc, h('div', { class: 'bmain' }, out))] : out;
 }
 
 function searchBox(key, placeholder) {
