@@ -333,7 +333,7 @@ const FORMATS = [
 const TEMPLATE_READABLE = ['.md', '.markdown', '.txt', '.csv'];
 const tplReadable = (n) => TEMPLATE_READABLE.some((e) => String(n).toLowerCase().endsWith(e));
 // 書庫の種類。[type, フォルダ, 見出し]
-const ARCH_TYPES = [['term', 'terms', '用語'], ['flow', 'flows', '業務フロー'], ['fact', 'facts', '業務情報'], ['lesson', 'lessons', '心得']];
+const ARCH_TYPES = [['term', 'terms', '用語'], ['flow', 'flows', '業務フロー'], ['fact', 'facts', '業務情報'], ['personal', 'personal', '個人'], ['lesson', 'lessons', '心得']];
 const CONF = { confirmed: ['確認済み', 'sd-ok'], sourced: ['出典あり', 'sd-run'], guess: ['推測', 'sd-draft'] };
 function parseEntry(path, text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text || '');
@@ -351,7 +351,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {}, talk: {} }, limit: { board: 20, talk: 20, msg: 50 }, msgKey: '',
+  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {}, talk: {} }, kn: { tab: 'all', conf: {}, st: 'active', sort: 'name' }, limit: { board: 20, talk: 20, msg: 50 }, msgKey: '',
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -1005,12 +1005,12 @@ function sendArchive(obj, key) {
 }
 function archiveForm() {
   const edit = S.form['a:edit'] || '';
-  const sel = h('select', { id: 'a:type', 'aria-label': '種類', disabled: !!edit }, ARCH_TYPES.map(([t, , l]) => h('option', { value: t }, l)));
+  const sel = h('select', { id: 'a:type', 'aria-label': '種類', disabled: !!edit }, ARCH_TYPES.filter((x) => x[0] !== 'lesson').map(([t, , l]) => h('option', { value: t }, l)));
   sel.value = S.form['a:type'] || 'term'; bindKey(sel, 'a:type');
   const inp = (key, ph, id) => { const e = h('input', { type: 'text', id, placeholder: ph, style: 'width:100%;min-height:40px;padding:6px 12px;font:inherit;border:1px solid var(--brass);border-radius:4px;background:var(--surface)' }); e.value = S.form[key] || ''; return bindKey(e, key); };
   const key = 'a:form';
   const d = h('details', { class: 'card', style: 'margin-bottom:14px', open: !!S.open['a:form'] }, h('summary', { style: 'cursor:pointer;font-weight:700' }, edit ? `項目を編集する（${edit}）` : '自分で項目を登録する'),
-    h('p', { class: 'fine', style: 'margin:8px 0' }, '社内の用語・業務フロー・業務情報など、調べても出てこない知識を入れられます。登録した項目は「確認済み」になります。'),
+    h('p', { class: 'fine', style: 'margin:8px 0' }, '社内の用語・業務フロー・業務情報・個人（文体の好みなど）、調べても出てこない知識を入れられます。登録した項目は「確認済み」になります。'),
     h('div', { class: 'trow' }, h('label', { class: 'fine', for: 'a:type' }, '種類'), sel),
     h('label', { class: 'lbl', for: 'a:name' }, '名前（用語名・フロー名・情報の題）'), inp('a:name', '例：経費精算', 'a:name'),
     h('label', { class: 'lbl', for: 'a:aliases' }, '別名・略称（任意。読点「、」かカンマで区切る）'), inp('a:aliases', '例：精算、経費申請', 'a:aliases'),
@@ -1035,7 +1035,7 @@ function archiveForm() {
 function archiveCard(e) {
   const c = CONF[e.confidence] || [e.confidence, 'sd-wait'], k = 'a:' + e.path;
   const ms = e.confirmed ? new Date(e.confirmed).getTime() : NaN, old = !isNaN(ms) && Date.now() - ms > 365 * 86400000;
-  const why = k + ':why', asking = !!S.confirm[k];
+  const why = k + ':why', asking = !!S.confirm[k], retyping = !!S.confirm[k + ':t'];
   const d = h('details', { class: 'card', style: 'margin-bottom:10px', open: !!S.open[k] },
     h('summary', { style: 'cursor:pointer;font-weight:700' }, e.name, ' ', stampEl(c[0], c[1]), e.status !== 'active' ? [' ', stampEl(e.status, e.status === '廃止' ? 'sd-stop' : 'sd-turn')] : null, old ? [' ', stampEl('古い可能性', 'sd-draft')] : null,
       e.summary ? h('span', { class: 'fine', style: 'font-weight:400;margin-left:10px' }, e.summary.length > 60 ? e.summary.slice(0, 60) + '…' : e.summary) : null),
@@ -1049,6 +1049,7 @@ function archiveCard(e) {
         S.form['a:edit'] = e.path; S.form['a:type'] = e.type; S.form['a:name'] = e.name; S.form['a:aliases'] = e.aliases.join('、'); S.form['a:summary'] = e.summary || ''; S.form['a:body'] = e.body || ''; S.form['a:source'] = e.source === '依頼主の登録' ? '' : (e.source || '');
         S.open['a:form'] = true; render(); const f = document.getElementById('a:name'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); }
       } }, '編集') : null,
+      e.status !== '廃止' && e.type !== 'lesson' ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.confirm[k + ':t'] = !S.confirm[k + ':t']; S.open[k] = true; render(); } }, '種類を変更') : null,
       h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyText(e.body || '', '本文') }, '本文をコピー'),
       h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => copyPath('archive/' + e.path) }, 'パスをコピー'),
       e.status !== '廃止' && !asking ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.confirm[k] = true; S.open[k] = true; render(); } }, '廃止する') : null),
@@ -1056,21 +1057,42 @@ function archiveCard(e) {
       h('p', { class: 'fine' }, '廃止すると、索引から外れ、役は読まなくなります。ファイルは消えません。'),
       h('div', { class: 'btns' },
         h('button', { type: 'button', class: 'btn wax', onclick: async () => { S.confirm[k] = false; await sendArchive({ type: 'deprecate', path: e.path, reason: (S.form[why] || '').trim() }, k + ':d'); } }, '廃止する'),
-        h('button', { type: 'button', class: 'btn', onclick: () => { S.confirm[k] = false; render(); } }, 'やめておく'))) : null);
+        h('button', { type: 'button', class: 'btn', onclick: () => { S.confirm[k] = false; render(); } }, 'やめておく'))) : null,
+    retyping ? h('div', { class: 'qa', style: 'margin-top:10px' }, h('span', { class: 'lbl' }, `いまの種類：${(ARCH_TYPES.find((x) => x[0] === e.type) || [0, 0, e.type])[2]}　→　移す先`),
+      h('div', { class: 'btns' }, ARCH_TYPES.filter(([t]) => t !== e.type && t !== 'lesson').map(([t, , l]) =>
+        h('button', { type: 'button', class: 'btn', onclick: async () => { S.confirm[k + ':t'] = false; await sendArchive({ type: 'retype', path: e.path, to: t }, k + ':t:' + t); } }, `${l}にする`)),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => { S.confirm[k + ':t'] = false; render(); } }, 'やめておく')),
+      h('p', { class: 'fine' }, '確度・出典・本文はそのままです。同じ名前の項目が移す先にあると、反映されず、元の場所のままです。')) : null);
   d.addEventListener('toggle', () => { S.open[k] = d.open; });
   return d;
 }
 function knowTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
   const q = (S.form['f:kn'] || '').trim().toLowerCase();
-  const out = [h('h2', { class: 'h2' }, '書庫'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '用語・業務フロー・業務情報を、種類別にためています。次の依頼で、役が索引を見て、関係する項目を使います。依頼が終わるたびに、司書が登録候補を挙げます（「掲示板」の手紙で選びます）。'),
+  const out = [h('h2', { class: 'h2' }, '書庫'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '用語・業務フロー・業務情報・個人を、種類別にためています。次の依頼で、役が索引を見て、関係する項目を使います。依頼が終わるたびに、司書が登録候補を挙げます（「掲示板」の手紙で選びます）。'),
     searchBox('f:kn', '言葉で探す（本文も探します）')];
   if (m.archiveWait) out.push(h('p', { class: 'fine', role: 'status' }, `書庫への反映待ちが ${m.archiveWait} 件あります。/guild:quest が動いていれば、すぐ反映されます。動いていなければ、チャットで /guild:quest と送ってください。`));
+  const kn = S.kn, all = m.archive || [];
+  const cnt = (t) => all.filter((e) => t === 'all' || e.type === t).length;
+  out.push(h('div', { class: 'filters', role: 'tablist', 'aria-label': '書庫の種類' },
+    [['all', 'すべて'], ...ARCH_TYPES.map(([t, , l]) => [t, l])].map(([t, l]) =>
+      h('button', { type: 'button', role: 'tab', 'aria-selected': String(kn.tab === t), class: 'fchk' + (kn.tab === t ? ' on' : ''), onclick: () => { kn.tab = t; render(); } }, `${l} ${cnt(t)}`))));
+  out.push(h('div', { class: 'filters sf', role: 'group', 'aria-label': '書庫の絞り込み' }, h('span', { class: 'sub', style: 'align-self:center' }, '確度：'),
+    Object.entries(CONF).map(([k, [l]]) => { const c = h('input', { type: 'checkbox' }); c.checked = !!kn.conf[k];
+      c.addEventListener('change', () => { kn.conf[k] = c.checked; render(); }); return h('label', { class: 'fchk' + (c.checked ? ' on' : '') }, c, l); }),
+    h('span', { class: 'sub', style: 'align-self:center;margin-left:10px' }, '状態：'),
+    [['active', '使っているもの'], ['all', '廃止も含む']].map(([v, l]) => h('button', { type: 'button', class: 'fchk' + (kn.st === v ? ' on' : ''), 'aria-pressed': String(kn.st === v), onclick: () => { kn.st = v; render(); } }, l)),
+    h('span', { class: 'sub', style: 'align-self:center;margin-left:10px' }, '並び：'),
+    [['name', '名前順'], ['confirmed', '確認日が新しい順']].map(([v, l]) => h('button', { type: 'button', class: 'fchk' + (kn.sort === v ? ' on' : ''), 'aria-pressed': String(kn.sort === v), onclick: () => { kn.sort = v; render(); } }, l))));
   out.push(archiveForm());
+  const confOn = Object.keys(kn.conf).filter((k) => kn.conf[k]);
+  const cmp = kn.sort === 'confirmed' ? (a, b) => String(b.confirmed || '').localeCompare(String(a.confirmed || '')) || String(a.name).localeCompare(String(b.name)) : (a, b) => String(a.name).localeCompare(String(b.name));
   for (const [type, , title] of ARCH_TYPES) {
-    const list = (m.archive || []).filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    if (kn.tab !== 'all' && kn.tab !== type) continue;
+    const list = all.filter((e) => e.type === type).filter((e) => kn.st === 'all' || e.status !== '廃止')
+      .filter((e) => !confOn.length || confOn.includes(e.confidence)).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort(cmp);
     const head = type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title;
-    if (!list.length) { out.push(h('p', { class: 'sub', style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
+    if (!list.length) { out.push(h('p', { class: 'sub', style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q || confOn.length ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
     out.push(h('h3', { class: 'sec' }, head, `　${list.length}件`));
     for (const e of list) out.push(archiveCard(e));
   }
@@ -1369,11 +1391,11 @@ function demoTree(scene) {
       { t: at(day + 98), id: 'T2', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 80), id: 'T2', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 79), id: 'T2', event: 'passed', from: 'review', to: 'done' },
       { t: at(day + 79), id: 'T3', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 60), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 58), id: 'T3', event: 'passed', from: 'review', to: 'done' }],
     todos: [mk('T1', 'テンプレートを3種類集める', 'auto', [], 'done', t1c), mk('T2', '観点表をつくって比べる', 'auto', ['T1'], 'done', t1c), mk('T3', '比較表にまとめる', 'auto', ['T2'], 'done', t1c)] };
-  p1.todos[2].deliverable = true; p2.todos[2].deliverable = true;
+  p1.todos[0].due = '2026-10-01'; p1.todos[1].due = '2026-12-31'; p1.todos[2].deliverable = true; p2.todos[2].deliverable = true;
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   return {
-    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, archive: { terms: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。') }, flows: {}, facts: {}, lessons: {}, inbox: {} },
+    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, archive: { terms: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。') }, flows: {}, facts: {}, personal: { '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。') }, lessons: {}, inbox: {} },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
     Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md' }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }

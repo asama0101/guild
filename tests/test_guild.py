@@ -696,6 +696,8 @@ class BoardContractTest(unittest.TestCase):
         ({"type": "decision", "todo": "T2", "choice": "skip"}, lambda: plan(todo("T2", kind="human", state="failed"), todo("T3", state="blocked", deps=["T2"])), {"T2": "skipped"}),
         ({"type": "decision", "choice": "replan"}, lambda: plan(todo("T2", state="failed")), None),
         ({"type": "decision", "choice": "abort"}, lambda: plan(todo("T2", state="failed")), None),
+        ({"type": "due", "todo": "T1", "due": "2026-10-20"}, lambda: plan(todo("T1", state="running")), {"T1": "running"}),
+        ({"type": "due", "todo": "T1", "due": None}, lambda: plan(todo("T1"), approved=False), {"T1": "pending"}),
     ]
 
     def test_every_input_the_board_writes_is_accepted(self):
@@ -714,7 +716,7 @@ class BoardContractTest(unittest.TestCase):
 
     def test_board_source_writes_the_same_shapes(self):
         board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
-        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how"):
+        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how", "type: 'retype'"):
             self.assertIn(needle, board)
 
 
