@@ -2,7 +2,7 @@
   "mcpServers": {
     "browser": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@playwright/mcp@0.0.83", "--headless", "--isolated", "--block-service-workers"]
+      "args": ["/c", "npx", "-y", "@playwright/mcp@0.0.83", "--headless", "--isolated", "--block-service-workers", "--output-dir", "${TEMP}/guild-playwright", "--output-max-size", "10485760"]
     }
   }
 }

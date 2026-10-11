@@ -112,6 +112,24 @@ dl.c dd{margin:0}
 .way .n.h{border-style:dashed}
 code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px}
 .filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.bwrap{display:grid;grid-template-columns:190px minmax(0,1fr);gap:0 20px;align-items:start}
+.bmain{min-width:0}
+.toc{position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto;border:1px solid var(--line);background:var(--paper2);font-size:13px}
+.toch{position:sticky;top:0;font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--paper2)}
+.tocb{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:transparent;border:0;border-bottom:1px solid var(--line);padding:6px 10px;cursor:pointer}
+.tocb:hover{background:var(--head)}
+.tocb.need{box-shadow:inset 4px 0 0 var(--warn)}
+.tocb.on{background:var(--surface);font-weight:700;box-shadow:inset 4px 0 0 var(--seal)}
+.tocb .id{display:block;font-weight:700}
+.tocb .tt{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tocb .st{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.stamp.sm{font-size:11px;padding:0 6px;border-width:1px;transform:none;font-weight:700}
+@media (max-width:900px){.bwrap{display:block}.toc{display:none}}
+/* 画面が広いとき（本文1100px＋左右の余白に目次が入る幅）は、目次を本文の外の左の余白に固定する */
+@media (min-width:1540px){.bwrap{display:block}.toc{position:fixed;top:70px;left:calc(50% - 760px);width:190px;max-height:calc(100vh - 90px)}}
+.fchk{display:inline-flex;align-items:center;gap:6px;font-size:13px;min-height:36px;border:1px solid var(--brass);border-radius:999px;padding:2px 12px;cursor:pointer;background:transparent}
+.fchk.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.morebtn{min-height:34px}
 .filters button{font:inherit;font-size:13px;min-height:36px;border:1px solid var(--brass);border-radius:999px;padding:2px 14px;background:transparent;color:var(--ink);cursor:pointer}
 .filters button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .msg{display:flex;gap:12px;margin-bottom:12px}
@@ -122,7 +140,9 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .bub time{display:block;font-size:11.5px;color:var(--sub)}
 .bub p{margin:0}
 .bub a{font-size:12.5px;color:var(--gold)}
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}
+.grid2{column-count:2;column-gap:16px}
+.grid2>.card{break-inside:avoid;margin:0 0 16px}
+@media (max-width:900px){.grid2{column-count:1}}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:18px 22px}
 .card h3{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:17px;margin:0 0 8px}
 .card ol{margin:0;padding-left:22px;font-size:14.5px}
@@ -330,7 +350,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all',
+  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {}, talk: {} }, limit: { board: 20, talk: 20, msg: 50 }, msgKey: '',
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -582,7 +602,8 @@ function deliverableBlock(qd) {
 }
 function fileField(key, label, multiple) {
   const inp = h('input', { type: 'file', 'aria-label': label }); if (multiple) inp.multiple = true;
-  inp.dataset.fileKey = key;
+  // document 側の change ではなく、入力欄そのものに付ける。選択ダイアログを開いている間に画面が作り直されても、選んだファイルを失わない
+  inp.addEventListener('change', () => { const got = Array.from(inp.files || []); if (!got.length) return; S.files[key] = multiple ? [...(S.files[key] || []), ...got] : got.slice(0, 1); render(); });
   const cur = S.files[key] || [];
   const zone = h('label', { class: 'filebtn dz' },
     h('span', { class: 'dzmsg' }, cur.length ? 'ここにドロップして、追加・差し替え' : 'ここにファイルをドラッグ＆ドロップ、または'),
@@ -821,31 +842,75 @@ async function cancelRequest(id) {
   S.confirm[id + ':cancel'] = false; S.newSaved = ''; await refresh(true);
 }
 
+// ---- 状態で絞る・件数を区切る・目次から飛ぶ
+const STATES = ['承認待ち', '進行中', '要判断', '受け取り待ち', '完了', '中止'];
+const PAGE = 20;
+function filterQuests(tab, quests) {
+  const on = STATES.filter((x) => S.stf[tab][x]);
+  return on.length ? quests.filter((x) => on.includes(x.label)) : quests;
+}
+function stateFilter(tab, quests) {
+  const on = STATES.filter((x) => S.stf[tab][x]);
+  return h('div', { class: 'filters sf', role: 'group', 'aria-label': '状態で絞る' }, h('span', { class: 'sub', style: 'align-self:center' }, '状態：'),
+    STATES.map((st) => { const n = quests.filter((x) => x.label === st).length;
+      const c = h('input', { type: 'checkbox' }); c.checked = !!S.stf[tab][st];
+      c.addEventListener('change', () => { S.stf[tab][st] = c.checked; S.limit[tab] = PAGE; render(); });
+      return h('label', { class: 'fchk' + (c.checked ? ' on' : '') }, c, `${st} ${n}`); }),
+    on.length ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:34px', onclick: () => { S.stf[tab] = {}; S.limit[tab] = PAGE; render(); } }, '解除') : null);
+}
+// 一覧は新しい依頼が先頭。先頭から limit 件を出し、残り（古い側）は「さらに古い依頼を表示」で足す
+function pageOf(tab, list) {
+  const hidden = Math.max(0, list.length - S.limit[tab]);
+  return { shown: list.slice(0, S.limit[tab]), hidden, more: hidden ? h('button', { type: 'button', class: 'btn ghost morebtn', onclick: () => { S.limit[tab] += PAGE; render(); } }, `さらに古い依頼を表示（残り ${hidden} 件）`) : null };
+}
+function jumpQuest(id) {
+  S.tab = 'board';
+  const all = S.model ? S.model.quests : [], me = all.find((x) => x.id === id);
+  if (me && !filterQuests('board', [me]).length) S.stf.board = {};
+  const list = filterQuests('board', all), i = list.findIndex((x) => x.id === id);
+  if (i >= 0 && i >= S.limit.board) S.limit.board = i + 1;
+  S.openQ[id] = true; S.sel = id; S.tq = id; render();
+  const el = document.querySelector(`[data-q="${id}"]`); if (el) el.scrollIntoView({ block: 'start' });
+}
+function questToc(list) {
+  if (!list.length) return null;
+  return h('aside', { class: 'toc', 'aria-label': '依頼の目次' }, h('div', { class: 'toch' }, '依頼の目次'),
+    list.map((x) => { const need = x.asks.some((a) => !a.sent);
+      return h('button', { type: 'button', class: 'tocb' + (need ? ' need' : '') + (S.sel === x.id ? ' on' : ''), onclick: () => jumpQuest(x.id) },
+        h('span', { class: 'id' }, x.id), h('span', { class: 'tt' }, x.title),
+        h('span', { class: 'st' }, h('span', { class: `stamp sm ${x.cls}` }, x.label), need ? h('span', { class: 'stamp sm sd-turn' }, 'あなたの番') : null)); }));
+}
+
 function ledger(m) {
   const sel = S.sel;
   const rows = [h('div', { class: 'lh', role: 'row' }, h('span', null, 'ID'), h('span', null, '依頼'), h('span', null, '状態'), h('span', null, '進み'), h('span', null, 'あなたの番'))];
   for (const r of m.requests) rows.push(h('div', { class: 'lr plain', role: 'row' }, h('span', { class: 'id' }, r.id),
     h('span', null, r.text.split('\n')[0].slice(0, 80), h('span', { class: 'sub', style: 'display:block' }, '/guild:quest が動いていれば受け付けます。動いていなければ、チャットで /guild:quest と送ってください。')),
     h('span', null, stampEl('受付待ち', 'sd-wait')), h('span', null, '—'), cancelCell(r)));
-  for (const qd of m.quests) {
+  const pg = pageOf('board', filterQuests('board', m.quests));
+  for (const qd of pg.shown) {
     rows.push(h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', 'data-q': qd.id, onclick: () => { S.openQ[qd.id] = !S.openQ[qd.id]; S.sel = qd.id; S.tq = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
       h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me)));
     if (S.openQ[qd.id]) rows.push(questDetail(qd));
   }
   if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「依頼」を押してください。')));
+  if (pg.more) rows.push(h('div', { class: 'lr plain' }, h('span'), pg.more));
+  if (m.quests.length && !m.requests.length && !pg.shown.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, '選んだ状態の依頼はありません。')));
   return h('div', { class: 'ledger', role: 'table', 'aria-label': '依頼の一覧' }, rows);
 }
 
 function boardTab() {
   const m = S.model, out = [];
   if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
-    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.openQ[n.q] = true; S.sel = n.q; S.tq = n.q; render(); } }, n.text))));
+    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text))));
   out.push(composer());
+  if (m && m.quests.length) out.push(stateFilter('board', m.quests));
   if (m && m.quests.length) out.push(h('div', { class: 'btns', style: 'margin:0 0 8px' },
     h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px', disabled: m.quests.every((x) => S.openQ[x.id]), onclick: () => { for (const x of m.quests) S.openQ[x.id] = true; render(); } }, 'すべて開く'),
     h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px', disabled: !m.quests.some((x) => S.openQ[x.id]), onclick: () => { S.openQ = {}; render(); } }, 'すべて閉じる')));
   if (m) out.push(ledger(m));
-  return out;
+  const toc = m ? questToc(filterQuests('board', m.quests)) : null;
+  return toc ? [h('div', { class: 'bwrap' }, toc, h('div', { class: 'bmain' }, out))] : out;
 }
 
 function ganttBlock(x) {
@@ -865,11 +930,15 @@ function ganttBlock(x) {
 
 function talkTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
-  const scopeIds = S.tq === 'all' ? m.quests.map((x) => x.id) : [S.tq || (m.quests[0] && m.quests[0].id)].filter(Boolean);
-  const chips = h('div', { class: 'filters', 'aria-label': '依頼の選択' }, h('span', { class: 'sub', style: 'align-self:center' }, '依頼：'),
-    m.quests.map((x) => h('button', { type: 'button', class: S.tq === x.id ? 'on' : '', onclick: () => { S.tq = x.id; render(); } }, `${x.id} ${x.title.slice(0, 14)}`, x.asks.some((a) => !a.sent) ? ' ●あなたの番' : '')),
-    h('button', { type: 'button', class: S.tq === 'all' ? 'on' : '', onclick: () => { S.tq = 'all'; render(); } }, 'すべての依頼'));
-  const out = [h('h2', { class: 'h2' }, '記録'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、新しい順に見られます。時間の帯（タイムライン）は、「掲示板」の依頼の「道のり」の下にあります。'), chips];
+  const flt = filterQuests('talk', m.quests);
+  if (S.tq !== 'all' && flt.length && !flt.some((x) => x.id === S.tq)) S.tq = flt[0].id;
+  const scopeIds = S.tq === 'all' ? flt.map((x) => x.id) : [S.tq || (m.quests[0] && m.quests[0].id)].filter(Boolean);
+  const pg = pageOf('talk', flt);
+  const sel1 = h('select', { 'aria-label': '依頼の選択', style: 'min-height:40px;max-width:100%;padding:4px 10px;font:inherit;border:1px solid var(--brass);border-radius:4px;background:var(--surface);color:var(--ink)', onchange: (e) => { S.tq = e.target.value; render(); } },
+    pg.shown.map((x) => { const o = h('option', { value: x.id }, `${x.id} ${x.title.length > 24 ? x.title.slice(0, 24) + '…' : x.title}${x.asks.some((a) => !a.sent) ? '（あなたの番）' : ''}`); o.selected = S.tq === x.id; return o; }),
+    (() => { const o = h('option', { value: 'all' }, 'すべての依頼'); o.selected = S.tq === 'all'; return o; })());
+  const chips = h('div', { class: 'filters', 'aria-label': '依頼の選択' }, h('span', { class: 'sub', style: 'align-self:center' }, '依頼：'), sel1, pg.more);
+  const out = [h('h2', { class: 'h2' }, '冒険の書'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、新しい順に見られます。時間の帯（タイムライン）は、「掲示板」の依頼の「道のり」の下にあります。'), m.quests.length ? stateFilter('talk', m.quests) : null, chips];
   const sel = scopeIds.map((id) => m.quests.find((x) => x.id === id)).filter(Boolean);
   {
     const roles = [['all', 'すべて'], ['cart', '地図師'], ['adv', '冒険者'], ['app', '鑑定士'], ['me', 'あなた'], ['note', '指摘だけ']];
@@ -878,10 +947,15 @@ function talkTab() {
     let msgs = sel.flatMap((x) => messagesOf(x)).sort((a, b) => new Date(b.t) - new Date(a.t));
     msgs = msgs.filter((x) => S.role === 'all' || (S.role === 'note' ? x.role === 'app' && x.note : x.role === S.role));
     if (!msgs.length) out.push(h('p', { class: 'sub' }, S.role === 'note' ? '指摘はありません。' : 'このあたりのやりとりは、まだありません。'));
+    // 依頼・役・状態の絞り込みが変わったら、件数の区切りを50件に戻す。新しい順に50件ずつ、古い側を足す
+    const mk = [S.tq, S.role, STATES.filter((x) => S.stf.talk[x]).join()].join('|');
+    if (S.msgKey !== mk) { S.msgKey = mk; S.limit.msg = 50; }
+    const total = msgs.length; msgs = msgs.slice(0, S.limit.msg);
     for (const x of msgs) { const r = roleOf(x.role);
       out.push(h('div', { class: 'msg' }, h('div', { class: 'who' }, h('span', { class: `av ${r[2]}` }, r[0]), r[1]),
         h('div', { class: 'bub' }, h('time', null, fmtTime(x.t)), h('p', null, S.tq === 'all' ? h('span', { class: 'qtag' }, x.q) : null, x.text),
           x.report ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(x.q, x.report); } }, '報告を読む：' + x.report) : null))); }
+    if (total > msgs.length) out.push(h('button', { type: 'button', class: 'btn ghost morebtn', onclick: () => { S.limit.msg += 50; render(); } }, `さらに古いやりとりを表示（残り ${total - msgs.length} 件）`));
   }
   out.push(h('p', { class: 'fine', style: 'margin-top:14px' }, '答える用件は、「掲示板」の手紙に出ます。', h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px;margin-left:8px', onclick: () => { S.tab = 'board'; render(); } }, '掲示板へ')));
   return out;
@@ -900,7 +974,7 @@ function delivTab() {
   const waiting = m.quests.filter((x) => x.allDone && !x.finished && x.q.plan && x.q.plan.status === 'active');
   const out = [h('h2', { class: 'h2' }, '納品物'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '受け取った納品物（まとめた資料）の一覧です。ファイル名を押すと開き、中身とパスをコピーできます。'),
     searchBox('f:dl', '依頼の名前やファイル名で探す')];
-  if (waiting.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, '受け取り待ち'), waiting.map((x) => h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.tab = 'board'; S.openQ[x.id] = true; S.sel = x.id; S.tq = x.id; render(); } }, `${x.id} ${x.title.slice(0, 20)}`))));
+  if (waiting.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, '受け取り待ち'), waiting.map((x) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(x.id) }, `${x.id} ${x.title.slice(0, 20)}`))));
   if (!done.length) out.push(h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'まだ、受け取った納品物はありません。'));
   for (const x of done) {
     const acc = x.q.plan.history.find((e) => e.event === 'accepted');
@@ -950,7 +1024,8 @@ function archiveCard(e) {
   const ms = e.confirmed ? new Date(e.confirmed).getTime() : NaN, old = !isNaN(ms) && Date.now() - ms > 365 * 86400000;
   const why = k + ':why', asking = !!S.confirm[k];
   const d = h('details', { class: 'card', style: 'margin-bottom:10px', open: !!S.open[k] },
-    h('summary', { style: 'cursor:pointer;font-weight:700' }, e.name, ' ', stampEl(c[0], c[1]), e.status !== 'active' ? [' ', stampEl(e.status, e.status === '廃止' ? 'sd-stop' : 'sd-turn')] : null, old ? [' ', stampEl('古い可能性', 'sd-draft')] : null),
+    h('summary', { style: 'cursor:pointer;font-weight:700' }, e.name, ' ', stampEl(c[0], c[1]), e.status !== 'active' ? [' ', stampEl(e.status, e.status === '廃止' ? 'sd-stop' : 'sd-turn')] : null, old ? [' ', stampEl('古い可能性', 'sd-draft')] : null,
+      e.summary ? h('span', { class: 'fine', style: 'font-weight:400;margin-left:10px' }, e.summary.length > 60 ? e.summary.slice(0, 60) + '…' : e.summary) : null),
     h('p', { class: 'fine', style: 'margin:6px 0' }, e.summary || ''),
     e.aliases.length ? h('p', { class: 'fine', style: 'margin:0 0 6px' }, '別名：' + e.aliases.join('、')) : null,
     h('p', { class: 'fine', style: 'margin:0 0 6px' }, `出典：${e.source || 'なし'}　確認日：${e.confirmed || '—'}　`, code(e.path)),
@@ -981,14 +1056,15 @@ function knowTab() {
   out.push(archiveForm());
   for (const [type, , title] of ARCH_TYPES) {
     const list = (m.archive || []).filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
-    out.push(h('h3', { class: 'sec' }, type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title, `　${list.length}件`));
-    if (!list.length) out.push(h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'まだありません。'));
+    const head = type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title;
+    if (!list.length) { out.push(h('p', { class: 'sub', style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
+    out.push(h('h3', { class: 'sec' }, head, `　${list.length}件`));
     for (const e of list) out.push(archiveCard(e));
   }
   return out;
 }
 
-// ---- しくみ（処理フローの図とスキルの説明）
+// ---- ギルド案内（処理フローの図とスキルの説明）
 const ACTOR = { me: ['あなた（ボード）', '--banner', '--banner-ink'], gm: ['ギルドマスター', '--brass', '--on'], cart: ['地図師', '--ok', '--on'], adv: ['冒険者・斥候', '--warn', '--on'], app: ['鑑定士', '--stop', '--on'], sys: ['', '--surface2', '--ink'] };
 function flowSvg() {
   const ns = 'http://www.w3.org/2000/svg';
@@ -1002,8 +1078,8 @@ function flowSvg() {
     svg.append(E('text', { x: x + 10, y: y + 38, style: `font-size:15px;font-weight:700;fill:var(${a[2]})` }, title));
     svg.append(E('text', { x: x + 10, y: y + 56, style: `font-size:11.5px;fill:var(${a[2]})` }, sub));
   };
-  const arrow = (pts, label, lx, ly, dashed) => {
-    svg.append(E('polyline', { points: pts.map((p) => p.join(',')).join(' '), fill: 'none', 'marker-end': 'url(#ah)', style: `stroke:var(--sub);stroke-width:1.6${dashed ? ';stroke-dasharray:5 4' : ''}` }));
+  const arrow = (pts, label, lx, ly, dashed, both) => {
+    svg.append(E('polyline', { points: pts.map((p) => p.join(',')).join(' '), fill: 'none', 'marker-end': 'url(#ah)', ...(both ? { 'marker-start': 'url(#ah)' } : {}), style: `stroke:var(--sub);stroke-width:1.6${dashed ? ';stroke-dasharray:5 4' : ''}` }));
     if (label) svg.append(E('text', { x: lx, y: ly, style: 'font-size:11.5px;fill:var(--sub)' }, label));
   };
   const note = (x, y, t, anchor) => svg.append(E('text', { x, y, 'text-anchor': anchor || 'start', style: 'font-size:12px;fill:var(--sub)' }, t));
@@ -1028,6 +1104,8 @@ function flowSvg() {
   arrow([[240, 349], [300, 349]]); arrow([[240, 442], [272, 442], [272, 370], [300, 370]]);
   box(560, 325, 'sys', '合格 → 次の Todo へ', '前提が済んだ Todo が動く');
   arrow([[500, 357], [560, 357]], '合格', 512, 349);
+  box(300, 240, 'adv', '出典を読む（斥候）', '開けない出典を、ブラウザで読む', 230);
+  arrow([[400, 325], [400, 304]], '開けない出典は確認を頼む（1回）', 412, 319, false, true);
   box(300, 420, 'adv', 'やり直し', '指摘をもとに、回数に上限');
   arrow([[400, 389], [400, 420]], '不合格', 408, 408);
   box(560, 420, 'me', '失敗の判断', 'やめる・進める・直す・中止');
@@ -1050,12 +1128,12 @@ function flowSvg() {
 function flowTab() {
   const card = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
   const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
-  return [h('h2', { class: 'h2' }, 'しくみ'),
+  return [h('h2', { class: 'h2' }, 'ギルド案内'),
     h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼を出してから、納品物を受け取るまでの流れと、それぞれの役・スキルの説明です。あなたが操作するのは、赤い枠の場所だけです。'),
     h('div', { class: 'card', style: 'margin-bottom:16px;overflow:auto' }, flowSvg()),
     h('div', { class: 'grid2' },
       card('スキル（チャットで使う）', dl([['/guild:init', '最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。依頼主への質問・承認・確認は、すべてこの画面で聞きます。動いている間は、画面での答えを待ち続けます。']])),
-      card('役', dl([['ギルドマスター', '/guild:quest 本体。役を呼び、進め方の判断は guild.py に任せます。判断はしません。'], ['地図師', '依頼を Todo に分解し、前提・種別・合格基準・納品物の形式を決めます。あいまいなところは質問します。'], ['冒険者', '自動でできる Todo（調べる・書き写す・整理する・書く）を実行します。最後のまとめの Todo では、納品物の資料を作ります。'], ['斥候', '動的ページ（地図・SNS など）を、ブラウザで読むだけの役。クリックも入力もしません。'], ['鑑定士', '成果物を合格基準で判定します。成果物は直しません。'], ['司書', '依頼が終わったあと、書庫に残す用語・フロー・情報・心得の候補を挙げます。登録はしません。'], ['あなた', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。']])),
+      card('役', dl([['ギルドマスター', '/guild:quest 本体。役を呼び、進め方の判断は guild.py に任せます。判断はしません。'], ['地図師', '依頼を Todo に分解し、前提・種別・合格基準・納品物の形式を決めます。あいまいなところは質問します。'], ['冒険者', '自動でできる Todo（調べる・書き写す・整理する・書く）を実行します。最後のまとめの Todo では、納品物の資料を作ります。'], ['斥候', '動的ページ（地図・SNS など）を、ブラウザで読むだけの役。クリックも入力もしません。鑑定士が開けなかった出典を読むときにも、呼ばれます。'], ['鑑定士', '成果物を合格基準で判定します。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます（開けないものは、斥候に読んでもらいます）。成果物は直しません。'], ['司書', '依頼が終わったあと、書庫に残す用語・フロー・情報・心得の候補を挙げます。登録はしません。'], ['あなた', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。']])),
       card('guild/ の中身', dl([['board.html', 'この画面。'], ['requests/', '出したばかりで、まだ受け付けられていない依頼。'], ['Q001/…', '依頼ごとのフォルダ。plan.json（計画）、inbox/（あなたの答え）、reports/（役の報告）、output/（成果物）。'], ['archive/', '書庫。用語・業務フロー・業務情報・心得を、種類別のフォルダと索引（index.md）で持つ。'], ['templates/', '納品物のテンプレート。']])))];
 }
 
@@ -1069,16 +1147,17 @@ function helpTab() {
       h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります（動いている間は、新しい依頼を自動で受け付けます）。足りないことは、この画面の「質問」の手紙で聞かれます。'),
       h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられて、「道のり」が出ます。承認はこの1回だけです。'),
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
-      h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。'))),
-    sec('印の見方', h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
+      h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。')),
+      h('p', { class: 'fine', style: 'margin:10px 0 0' }, 'スキル（/guild:init、/guild:quest）の説明は、「ギルド案内」にあります。')),
+    sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（掲示板の一覧・目次・絞り込みで使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', 'Todo ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全 Todo が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
+      h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'Todo の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
     sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['道のり', 'Todo の順序。前提が済んだものから進みます。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['やめる', '失敗した Todo を計画から外すこと。続く Todo もやめるか、進めるかを選べます。'], ['書庫', '用語・業務フロー・業務情報を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
     sec('困ったとき', h('div', { class: 'faq' },
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
       faq('保存できないとき', '送る内容が画面に出て、「コピー」で複写できます。チャットに貼ってください。'),
       faq('間違えて承認した', 'チャットで「計画を直したい」と伝えてください。実行が始まる前なら、計画を作り直せます。'),
-      faq('依頼を取り消したい', '進行中なら、失敗の判断で「この依頼を中止する」を選べます。受付待ちの依頼は、', code('guild/requests/'), ' の該当ファイルを削除してください。'))),
-    sec('コマンド', dl([['/guild:init', '最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面を置きます。'], ['/guild:quest', '受付待ちの依頼を受け付けたり、進行中の依頼を進めたりします。']])));
+      faq('依頼を取り消したい', '進行中なら、失敗の判断で「この依頼を中止する」を選べます。受付待ちの依頼は、', code('guild/requests/'), ' の該当ファイルを削除してください。'))));
 }
 
 function reader() {
@@ -1109,8 +1188,7 @@ function stickyTools() {
 }
 function goNeed() {
   const n = S.model && S.model.needs[0]; if (!n) return;
-  S.tab = 'board'; S.openQ[n.q] = true; S.sel = n.q; S.tq = n.q; render();
-  const el = document.querySelector(`[data-q="${n.q}"]`); if (el) el.scrollIntoView({ block: 'start' });
+  jumpQuest(n.q);
 }
 function goCompose() {
   S.tab = 'board'; render();
@@ -1123,7 +1201,7 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const oldBox = document.querySelector('.rbox'), boxTop = oldBox ? oldBox.scrollTop : 0;
-  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '記録'], ['flow', 'しくみ'], ['help', 'ヘルプ']];
+  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '冒険の書'], ['flow', 'ギルド案内'], ['help', 'ヘルプ']];
   const body = { board: boardTab, deliv: delivTab, know: knowTab, talk: talkTab, flow: flowTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
@@ -1307,7 +1385,6 @@ async function start() {
     if (k && t.type === 'radio') S.form[k] = t.value;
     if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
     if (k && t.type === 'date') S.form[k] = t.value;
-    if (t.dataset && t.dataset.fileKey) { S.files[t.dataset.fileKey] = Array.from(t.files || []); render(); }
   });
   window.__guildBoard = { S, render, refresh, MemFS, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
   if (params.has('demo')) {
