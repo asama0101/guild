@@ -97,6 +97,7 @@ input[type=date]{font:inherit;font-size:14px;min-height:42px;border:1px solid va
 .drop{border:2px dashed var(--brass);border-radius:4px;padding:12px;text-align:center;font-size:13.5px;color:var(--sub);background:var(--surface2)}
 .sec{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:17px;margin:24px 0 10px}
 .tag{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--brass);border-radius:3px;padding:10px 14px;margin-bottom:8px}
+.duerow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
 .tag .row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}
 .tid{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px;background:var(--ink);color:var(--paper);border-radius:3px;padding:0 7px}
 .ttl{font-weight:700;flex:1 1 240px}
@@ -389,7 +390,7 @@ async function loadAll() {
     const output = await listFilesDeep(`${q}/output`, 2);
     const inbox = [];
     for (const f of await S.fs.list(`${q}/inbox`)) {
-      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null, qs: null }); }
+      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null, qs: null, due: j.due === undefined ? undefined : j.due }); }
     }
     if (!plan) for (const f of await S.fs.list(`${q}/inbox/done`)) {
       if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', todo: null, choice: null, qs: j.answers.map((a) => a.q) }); }
@@ -415,6 +416,8 @@ const TSTATE = {
   waiting_user: ['あなたの番', 'sd-turn'], review: ['鑑定中', 'sd-run'], done: ['合格', 'sd-ok'], failed: ['できず', 'sd-ng'], skipped: ['やめた', 'sd-stop']
 };
 const closed = (s) => s === 'done' || s === 'skipped';
+// 期限は日付だけ。その日の終わり（ローカル時刻の 23:59:59.999）を過ぎたら期限切れ。済んだ Todo には付けない
+const overdue = (t, nowMs) => !!t.due && !closed(t.state) && nowMs > new Date(t.due + 'T23:59:59.999').getTime();
 
 function dependents(plan, id) {
   const set = new Set([id]); let grew = true;
@@ -439,7 +442,8 @@ function derive(q) {
   d.todos = p.todos.map((t) => {
     const st = TSTATE[t.state] || [t.state, 'sd-wait'];
     const draft = !p.approved && t.state === 'pending';
-    return { ...t, stamp: draft ? '案' : st[0], cls: draft ? 'sd-draft' : st[1] };
+    const waitDue = q.inbox.filter((x) => x.type === 'due' && x.todo === t.id).slice(-1)[0];
+    return { ...t, stamp: draft ? '案' : st[0], cls: draft ? 'sd-draft' : st[1], dueWait: waitDue ? waitDue.due : undefined };
   });
   d.total = p.todos.length; d.done = p.todos.filter((t) => closed(t.state)).length;
   d.allDone = d.total > 0 && d.done === d.total;
@@ -748,11 +752,26 @@ function infoLetter(qd) {
   return null;
 }
 
+function dueRow(qd, t) {
+  const p = qd.q.plan, key = `due:${qd.id}:${t.id}`, over = overdue(t, Date.now());
+  const reqDue = qd.q.request && qd.q.request.due;
+  const pick = S.form[key] !== undefined ? S.form[key] : (t.due || '');
+  const inp = h('input', { type: 'date', 'aria-label': `${t.id} の期限` }); inp.value = pick; bindKey(inp, key);
+  inp.addEventListener('change', () => { S.form[key] = inp.value; render(); });
+  const editable = p.status === 'active' || p.status === undefined;
+  return h('div', { class: 'duerow' },
+    h('span', { class: 'fine' }, '期限：', t.due ? t.due : 'なし'), over ? [' ', stampEl('期限切れ', 'sd-ng')] : null,
+    t.dueWait !== undefined ? [' ', stampEl(t.dueWait ? `反映待ち（${t.dueWait}）` : '反映待ち（解除）', 'sd-turn')] : null,
+    editable ? [' ', inp,
+      h('button', { type: 'button', class: 'btn ghost', style: 'min-height:34px', disabled: S.conn !== 'ok' || pick === (t.due || ''), onclick: async () => { await send(qd.id, { type: 'due', todo: t.id, due: pick || null }, key); delete S.form[key]; render(); } }, pick || !t.due ? '期限を設定' : '期限を解除')] : null,
+    pick && reqDue && pick > reqDue ? h('p', { class: 'fine', style: 'margin:4px 0 0;color:var(--warn)' }, `依頼の期限（${reqDue}）より後の日付です。`) : null);
+}
 function todoTags(qd) {
   return qd.todos.map((t) => h('article', { class: 'tag' },
     h('div', { class: 'row' }, h('span', { class: 'tid' }, t.id), h('span', { class: 'ttl' }, t.title), stampEl(t.stamp, t.cls)),
     h('div', { class: 'kind' }, (t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動で実行（実行前に確認）' : '自動で実行') + '　前提：' + ((t.deps || []).join('・') || 'なし')),
     t.confirm ? h('div', { class: 'lock' }, '実行の直前に、もう一度お聞きします') : null,
+    dueRow(qd, t),
     t.instruction && t.kind === 'human' ? h('p', { class: 'fine', style: 'white-space:pre-wrap;margin:6px 0' }, t.instruction) : null,
     (() => { const c = t.criteria || {}; const d = h('details', { open: !!S.open['c:' + qd.id + t.id] }, h('summary', null, '合格基準を見る'),
       h('dl', { class: 'c' }, h('dt', null, '観点'), h('dd', null, c.viewpoint || ''), h('dt', null, '合格ライン'), h('dd', null, c.pass_line || ''), h('dt', null, '確かめ方'), h('dd', null, c.check || '')));

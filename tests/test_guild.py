@@ -716,7 +716,7 @@ class BoardContractTest(unittest.TestCase):
 
     def test_board_source_writes_the_same_shapes(self):
         board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
-        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how", "type: 'retype'"):
+        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how", "type: 'due'", "type: 'retype'"):
             self.assertIn(needle, board)
 
 
