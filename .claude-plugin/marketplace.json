@@ -1,6 +1,6 @@
 {
   "name": "guild-local",
-  "owner": {"name": "asama0101"},
+  "owner": {"name": "Guild Authors"},
   "metadata": {"description": "guild：依頼を Todo に分解し、自動実行と依頼主の実行待ちを分けて解決まで進めるプラグイン"},
   "plugins": [
     {

@@ -102,4 +102,4 @@ python -m unittest tests.test_guild
 
 ## ライセンス
 
-未設定です。
+MIT ライセンスです。詳細は [LICENSE](LICENSE) を参照してください。
