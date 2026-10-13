@@ -70,17 +70,24 @@ disable-model-invocation: true
 1. **到着を取り込む**：`guild.py arrivals <root>` を見る。
    - 受付待ちの依頼（`kind` が `request`）→ 手順1で受け付け、手順2へ。
    - 書庫への入力（`kind` が `archive`。依頼主がボードで書庫に直接登録・昇格・廃止・種類の付け替えをしたもの）→ `guild.py archive-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
+   - 外部アクセスの答え（`kind` が `web`。依頼主がボードで、冒険者の WebFetch の許可・不許可や、許可リストの変更をしたもの）→ `guild.py web-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
    - `inbox`（計画あり。登録候補への答え `archive` も含む）→ `guild.py ingest <dir>/plan.json`。拒否された入力があれば、理由を短くチャットで伝える。
    - `inbox`（計画なし）→ `guild.py answers <dir>` で回答を取り出し、手順2の3へ。
 2. **進める**：計画のある依頼ごとに、`guild.py sync <plan>`、続けて `guild.py next <plan>` を実行する。`next` の各グループを次のように扱う。
 
    | グループ | 対応 |
    |---|---|
-   | `ready` | 冒険者を呼ぶ（`guild:adventurer`）。ただし `plan.json` でその Todo に `needs_browser: true` があれば、斥候（`guild:scout`）を呼ぶ。互いに独立な冒険者は同時に呼んでよい。**斥候は、ブラウザが1つなので、同時に1人まで**（複数あれば1人ずつ）。メッセージに、依頼のフォルダ、Todo の `id`、`criteria`、やり直しなら鑑定士の指摘の場所を書く。返ってきたら `guild.py advance <plan> <id> submitted` |
+   | `ready` | 冒険者を呼ぶ（`guild:adventurer`）。ただし `plan.json` でその Todo に `needs_browser: true` があれば、斥候（`guild:scout`）を呼ぶ。互いに独立な冒険者は同時に呼んでよい。**斥候は、ブラウザが1つなので、同時に1人まで**（複数あれば1人ずつ）。メッセージに、依頼のフォルダ、Todo の `id`、`criteria`、やり直しなら鑑定士の指摘の場所を書く。返ってきたら、下の「外部アクセスの確認」を済ませてから `guild.py advance <plan> <id> submitted` |
    | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の Todo なら冒険者の `reports/<id>-adventurer.md`（斥候なら `reports/<id>-scout.md`）、「あなたの実行」の Todo なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる）。`needs_scout`（開けない出典の確認待ち）のときは `advance` を送らず、下の「出典の確認」を行う |
    | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える |
 
    **出典の確認**（鑑定士が `needs_scout` を返したとき）：斥候（`guild:scout`）を**確認モード**で1人呼ぶ。メッセージに、依頼のフォルダ、`id`、鑑定士の報告（`reports/<id>-appraiser.md`。「斥候に確認してほしいこと」）の場所、「確認モード」と書く。返ってきたら、鑑定士をもう一度呼ぶ（メッセージに、斥候の報告 `reports/<id>-verify-scout.md` の場所と「再鑑定」を足す）。再鑑定は `needs_scout` を返さないので、確認は1回で終わる。その結果（`passed` か `rejected`）で `advance` を送る。
+
+   **外部アクセスの確認**（冒険者が返ってくるたび）：`guild.py web-pending <root>` を実行する。冒険者の WebFetch は、依頼主が許可したドメイン（`guild/web/access.json`）しか開けない。許可のないドメインは、フックが止めて `pending` に残す。
+   - 空なら、何もしない。`submitted` を送る。
+   - 空でなければ、**その Todo には `submitted` を送らず**、`running` のままにする。ボードに「外部サイトを開く許可」の手紙が出る（あなたは何もしない）。`pending` が残っている間は、`ready` の冒険者を新しく呼ばない（答えを待つ）。答えが届いたら（`kind` が `web`）`web-ingest` で反映し、`ready` の Todo の冒険者を呼び直す。やり直しの回数には数えない。
+   - 依頼主が「許可しない」と答えたドメインは、以後フックが黙って止める（`pending` に戻らない）。呼び直された冒険者は、そのドメインを開かずに進め、「未確認」に書く。
+   - 「今回だけ」の許可と「許可しない」の記録は、依頼が `complete` か `aborted` になった時点で、`guild.py web-reset <root>` で空にする（下の手順4）。許可リストに足したドメインは残る。
 
    冒険者（斥候も同じ）が成果物を書き込めず、全文を返り値で返してきたときは、その全文を**手を加えずに**、指定されたファイル名で `<dir>/output/<id>/` に保存してから `submitted` を送る。保存したことを、鑑定士へのメッセージにも書く。
 
@@ -89,7 +96,7 @@ disable-model-invocation: true
    冒険者が「できなかった」と返したり、報告ファイルがなかったりしても、`submitted` を送って鑑定に進める（鑑定士が `rejected` にして、やり直しになる）。ギルドマスターが成否を判断して分岐しない。
 3. **何か進めたら**、手順1に戻る。
 4. **何も進められないとき**：
-   - `complete`（全 Todo が済み、依頼主が受け取った）、または `status` が `aborted`（`next` の出力に `status` と `approved` がある）になった依頼で、`<dir>/archive.json` がまだないものは、手順5・6を行う（進めたことになるので、手順1に戻る）。
+   - `complete`（全 Todo が済み、依頼主が受け取った）、または `status` が `aborted`（`next` の出力に `status` と `approved` がある）になった依頼で、`<dir>/archive.json` がまだないものは、`guild.py web-reset <root>` を実行してから、手順5・6を行う（進めたことになるので、手順1に戻る）。
    - すべての依頼が `complete` か `aborted` で、どれも `archive.json` の `status` が `done`（書庫の登録候補の確認が済んでいる）なら、終える。`archive.json` の `status` が `proposed` のもの（依頼主が登録候補に答えていない）は、終わりにしない。**`awaiting_accept`（全 Todo は済んだが、依頼主が受け取っていない）は、終わりにしない。** ボードの「受け取りの確認」の手紙に依頼主が答えるのを待つ。ギルドマスターが勝手に完了にしない。`replan` のものは、手順2の4で地図師を呼んでいる最中なので、終わりにしない。
    - そうでなければ（依頼主の答えを待っている）、`guild.py wait <root> 43200`（12時間）を、**バックグラウンドで実行する**（Bash の `run_in_background: true`）。待っている間は、会話は止まり、トークンを使わない。答えが届くと `wait` が1秒ほどで終わり、終了の通知が来る。通知が来たら、出力（`arrived`）を読み、手順1へ。
      - 実行したら、チャットに「ボードで答えを待っています」と**1回だけ**書いて、手を止める。ほかの命令を重ねて出さない。通知が来る前に、結果を推測して進めない。

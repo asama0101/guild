@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import re
 import subprocess
 import sys
@@ -10,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "skills" / "quest"))
 import guild  # noqa: E402
+import webaccess  # noqa: E402
 
 TR = guild.load_transitions()
 CRIT = {"viewpoint": "v", "pass_line": "p", "check": "c"}
@@ -717,7 +719,7 @@ class BoardContractTest(unittest.TestCase):
 
     def test_board_source_writes_the_same_shapes(self):
         board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
-        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how", "type: 'due'", "type: 'retype'"):
+        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how", "type: 'due'", "type: 'retype'", "type: 'web', decisions:", "type: 'web', remove:", "type: 'web', add:"):
             self.assertIn(needle, board)
 
 
@@ -774,7 +776,7 @@ class DueTest(unittest.TestCase):
 
 
 class RoleModelsTest(unittest.TestCase):
-    """ギルド案内に書く各役のモデルが、agents/*.md の model と一致する。"""
+    """ヘルプに書く各役のモデルが、agents/*.md の model と一致する。"""
 
     def test_board_matches_agents(self):
         board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
@@ -1159,6 +1161,152 @@ class ArchiveTest(unittest.TestCase):
         self.assertEqual(json.loads(out.stdout)["pending"], ["C1"])
         out = subprocess.run([sys.executable, script, "archive-ingest", str(self.root)], capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(out.returncode, 0, out.stderr)
+
+
+class WebAccessTest(unittest.TestCase):
+    """冒険者の WebFetch の許可（許可リスト・今回だけ・不許可・止めた URL の手紙）。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        guild.init_guild(self.root)
+        self.gdir = self.root / "guild"
+
+    def send(self, name, obj):
+        d = self.gdir / "web" / "inbox"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_text(json.dumps(obj), encoding="utf-8")
+
+    def test_unknown_domain_is_denied_and_queued(self):
+        v, reason = webaccess.gate(self.gdir, "https://Example.go.jp/a")
+        self.assertEqual(v, "deny")
+        self.assertIn("許可待ち：https://Example.go.jp/a", reason)
+        self.assertEqual([p["domain"] for p in webaccess.pending(self.gdir)], ["example.go.jp"])
+
+    def test_same_domain_is_queued_once_with_urls(self):
+        webaccess.gate(self.gdir, "https://a.example.jp/1")
+        webaccess.gate(self.gdir, "https://a.example.jp/2")
+        webaccess.gate(self.gdir, "https://a.example.jp/2")
+        p = webaccess.pending(self.gdir)
+        self.assertEqual(len(p), 1)
+        self.assertEqual(p[0]["urls"], ["https://a.example.jp/1", "https://a.example.jp/2"])
+
+    def test_non_http_url_is_denied_without_queue(self):
+        for u in ("file:///etc/passwd", "ftp://a.example.jp/", "", "not a url"):
+            self.assertEqual(webaccess.gate(self.gdir, u)[0], "deny")
+        self.assertEqual(webaccess.pending(self.gdir), [])
+
+    def test_allow_covers_subdomains_but_not_lookalikes(self):
+        self.send("1.json", {"type": "web", "add": ["go.jp"]})
+        self.assertEqual(webaccess.ingest(self.gdir)["rejected"], [])
+        self.assertEqual(webaccess.gate(self.gdir, "https://www.go.jp/x")[0], "allow")
+        self.assertEqual(webaccess.gate(self.gdir, "https://go.jp/x")[0], "allow")
+        self.assertEqual(webaccess.gate(self.gdir, "https://evilgo.jp/x")[0], "deny")
+        self.assertEqual(webaccess.gate(self.gdir, "https://go.jp.evil.com/x")[0], "deny")
+
+    def test_decisions_allow_once_deny_clear_pending(self):
+        for d in ("a.example.jp", "b.example.jp", "c.example.jp"):
+            webaccess.gate(self.gdir, f"https://{d}/")
+        self.send("1.json", {"type": "web", "decisions": {"a.example.jp": "allow", "b.example.jp": "once", "c.example.jp": "deny"}})
+        self.assertEqual(webaccess.ingest(self.gdir)["rejected"], [])
+        self.assertEqual(webaccess.pending(self.gdir), [])
+        self.assertEqual(webaccess.gate(self.gdir, "https://a.example.jp/")[0], "allow")
+        self.assertEqual(webaccess.gate(self.gdir, "https://b.example.jp/")[0], "allow")
+        v, reason = webaccess.gate(self.gdir, "https://c.example.jp/")
+        self.assertEqual(v, "deny")
+        self.assertIn("許可しませんでした", reason)
+        self.assertEqual(webaccess.pending(self.gdir), [])  # 不許可のドメインは、また手紙にならない
+
+    def test_reset_clears_once_and_denied_only(self):
+        self.send("1.json", {"type": "web", "add": ["keep.example.jp"], "decisions": {"b.example.jp": "once", "c.example.jp": "deny"}})
+        webaccess.ingest(self.gdir)
+        webaccess.reset(self.gdir)
+        self.assertEqual(webaccess.gate(self.gdir, "https://keep.example.jp/")[0], "allow")
+        self.assertEqual(webaccess.gate(self.gdir, "https://b.example.jp/")[0], "deny")
+        self.assertEqual([p["domain"] for p in webaccess.pending(self.gdir)], ["b.example.jp"])
+
+    def test_remove_and_bad_input_is_rejected_with_reason(self):
+        self.send("1.json", {"type": "web", "add": ["x.example.jp"]})
+        self.send("2.json", {"type": "web", "remove": ["x.example.jp"]})
+        self.send("3.json", {"type": "web", "add": ["bad domain"]})
+        self.send("4.json", {"type": "web", "decisions": {"y.example.jp": "maybe"}})
+        self.send("5.json", {"type": "other"})
+        r = webaccess.ingest(self.gdir)
+        self.assertEqual(len(r["applied"]), 2)
+        self.assertEqual([x["file"] for x in r["rejected"]], ["3.json", "4.json", "5.json"])
+        self.assertEqual(webaccess.load(self.gdir)["allow"], [])
+        self.assertTrue((self.gdir / "web" / "inbox" / "rejected" / "3.json.reason.txt").is_file())
+        self.assertEqual(list((self.gdir / "web" / "inbox").glob("*.json")), [])
+
+    def test_arrivals_include_web_inbox(self):
+        self.assertFalse([a for a in guild.arrivals(self.root) if a["kind"] == "web"])
+        self.send("1.json", {"type": "web", "add": ["a.example.jp"]})
+        self.assertEqual([a["file"] for a in guild.arrivals(self.root) if a["kind"] == "web"], ["1.json"])
+
+    def test_cli_commands(self):
+        script = str(ROOT / "skills" / "quest" / "guild.py")
+        webaccess.gate(self.gdir, "https://a.example.jp/")
+        out = subprocess.run([sys.executable, script, "web-pending", str(self.root)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(json.loads(out.stdout)[0]["domain"], "a.example.jp")
+        self.send("1.json", {"type": "web", "decisions": {"a.example.jp": "once"}})
+        out = subprocess.run([sys.executable, script, "web-ingest", str(self.root)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        out = subprocess.run([sys.executable, script, "web-reset", str(self.root)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(json.loads(out.stdout)["once"], ["a.example.jp"])
+
+
+class WebGateHookTest(unittest.TestCase):
+    """hooks/web_gate.py: 冒険者の WebFetch だけを判定し、止めるときは deny を返す。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        guild.init_guild(self.root)
+
+    def run_hook(self, payload):
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.root))
+        return subprocess.run([sys.executable, "-I", str(ROOT / "hooks" / "web_gate.py")], input=json.dumps(payload), capture_output=True, text=True, encoding="utf-8", env=env, cwd=str(self.root))
+
+    def test_adventurer_unknown_domain_is_denied(self):
+        r = self.run_hook({"agent_type": "guild:adventurer", "tool_input": {"url": "https://a.example.jp/"}})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)["hookSpecificOutput"]
+        self.assertEqual((out["hookEventName"], out["permissionDecision"]), ("PreToolUse", "deny"))
+        self.assertIn("許可待ち", out["permissionDecisionReason"])
+        self.assertEqual(webaccess.pending(self.root / "guild")[0]["domain"], "a.example.jp")
+
+    def test_adventurer_allowed_domain_passes_silently(self):
+        webaccess.save(self.root / "guild", dict(webaccess.load(self.root / "guild"), allow=["example.jp"]))
+        r = self.run_hook({"agent_type": "guild:adventurer", "tool_input": {"url": "https://a.example.jp/"}})
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+
+    def test_other_callers_are_not_judged(self):
+        for payload in ({"tool_input": {"url": "https://a.example.jp/"}},
+                        {"agent_type": "guild:appraiser", "tool_input": {"url": "https://a.example.jp/"}},
+                        {"agent_type": "other:adventurer-x", "tool_input": {"url": "https://a.example.jp/"}}):
+            r = self.run_hook(payload)
+            self.assertEqual((r.returncode, r.stdout), (0, ""))
+        self.assertEqual(webaccess.pending(self.root / "guild"), [])
+
+    def test_no_guild_folder_or_bad_input_is_silent(self):
+        with tempfile.TemporaryDirectory() as other:
+            env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+            r = subprocess.run([sys.executable, "-I", str(ROOT / "hooks" / "web_gate.py")], input=json.dumps({"agent_type": "guild:adventurer", "cwd": other, "tool_input": {"url": "https://a.example.jp/"}}), capture_output=True, text=True, encoding="utf-8", env=env, cwd=other)
+            self.assertEqual((r.returncode, r.stdout), (0, ""))
+        r = self.run_hook("not a dict")
+        self.assertEqual(r.returncode, 0)
+
+    def test_shell_wrapper_runs_the_hook(self):
+        import shutil
+        sh = shutil.which("sh")
+        if not sh:
+            self.skipTest("sh がありません")
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.root))
+        r = subprocess.run([sh, str(ROOT / "hooks" / "web_gate.sh")], input=json.dumps({"agent_type": "guild:adventurer", "tool_input": {"url": "https://a.example.jp/"}}), capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
 
 
 class PiledLettersTest(unittest.TestCase):

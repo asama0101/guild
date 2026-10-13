@@ -431,8 +431,13 @@ async function loadAll() {
   for (const f of (await S.fs.list('archive/inbox/rejected')).filter((x) => x.kind === 'file' && x.name.endsWith('.reason.txt')).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 5)) {
     archiveRejected.push({ file: f.name.replace(/\.reason\.txt$/, ''), reason: (await S.fs.readText(`archive/inbox/rejected/${f.name}`)) || '' });
   }
+  // 冒険者の WebFetch の許可（フックと guild.py が書く）。答えの JSON が web/inbox/ に残っている間は「送信済み」
+  const wa = (await readJSON('web/access.json')) || {};
+  const webList = (k) => (Array.isArray(wa[k]) ? wa[k] : []);
+  const webWait = (await S.fs.list('web/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
+  const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), wait: webWait };
   const templates = (await S.fs.list('templates')).filter((e) => e.kind === 'file').map((e) => e.name).sort();
-  return { requests, quests, archive, archiveWait, archiveRejected, templates, root: (cfg && cfg.root) || '' };
+  return { requests, quests, archive, archiveWait, archiveRejected, web, templates, root: (cfg && cfg.root) || '' };
 }
 
 // ============================================================ 読み解き
@@ -501,7 +506,7 @@ function derive(q) {
 
 function buildModel(raw) {
   const quests = raw.quests.map(derive);
-  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
@@ -973,10 +978,58 @@ function ledger(m) {
   return h('div', { class: 'ledger' + (focusing ? ' focusing' : ''), role: 'table', 'aria-label': '依頼の一覧' }, rows);
 }
 
+function sendWeb(obj, key) {
+  return writeOrFallback(`web/inbox/${nowName('web', String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true); });
+}
+function webLetter(m) {
+  const w = m.web;
+  if (!w.pending.length) return null;
+  const k = 'web:letter';
+  if (w.wait) return h('section', { class: 'letter sentbox' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '送信済み'),
+    h('h3', null, '外部サイトを開く許可の答えを送りました'),
+    h('p', null, '/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。'));
+  return h('section', { class: 'letter danger', 'aria-label': '外部サイトを開く許可' }, seal('外', 'ng'),
+    h('div', { class: 'kick' }, 'お願い：外部サイトを開く許可'), h('h3', null, '冒険者が、許可のないサイトを開こうとして止められました'),
+    h('p', null, '許可したサイトだけ、冒険者は読めます。サイトごとに選んでください。「許可しない」を選ぶと、冒険者はそのサイトを開かずに進め、報告の「未確認」に書きます。'),
+    w.pending.map((x, i) => {
+      const ck = `${k}:${x.domain}`;
+      return h('div', { class: 'qa' },
+        h('span', { class: 'lbl' }, `${i + 1}. ${x.domain}`),
+        (x.urls || []).slice(0, 3).map((u) => h('p', { class: 'fine', style: 'margin:0 0 2px;word-break:break-all' }, u)),
+        radio(ck + 'r', ck, 'allow', '許可リストに加える', `${x.domain} と、その下のサイトを、今後の依頼でも自動で開けるようにします。`, '', 'deny'),
+        radio(ck + 'r', ck, 'once', '今回だけ許可', '依頼が完了か中止になるまで、開けるようにします。', '', 'deny'),
+        radio(ck + 'r', ck, 'deny', '許可しない', '', '', 'deny'));
+    }),
+    h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendWeb({ type: 'web', decisions: Object.fromEntries(w.pending.map((x) => [x.domain, S.form[`${k}:${x.domain}`] || 'deny'])) }, k) }, '選んだとおりに送る')),
+    sentNote(k));
+}
+function webCard(m) {
+  const w = m.web, key = 'web:add';
+  const inp = h('input', { type: 'text', id: key, placeholder: '例：go.jp', 'aria-label': '許可するドメイン' }); inp.value = S.form[key] || ''; bindKey(inp, key);
+  const row = (d) => h('li', null, code(d), ' ', h('button', { type: 'button', class: 'linkbtn', disabled: !!w.wait, onclick: () => sendWeb({ type: 'web', remove: [d] }, 'web:rm:' + d) }, '外す'));
+  return h('section', { class: 'card' }, h('h3', null, `許可リスト（${w.allow.length}件）`),
+    h('p', { class: 'fine' }, '冒険者が WebFetch で開けるサイトです。ドメインを許可すると、その下のサイト（www.go.jp など）も開けます。'),
+    w.allow.length ? h('ul', { class: 'flist' }, w.allow.map(row)) : h('p', { class: 'fine' }, 'まだありません。'),
+    w.once.length ? h('p', { class: 'fine' }, '今回だけ許可：' + w.once.join('、')) : null,
+    h('div', { class: 'btns' }, inp, h('button', { type: 'button', class: 'btn', disabled: !!w.wait, onclick: () => { const v = (S.form[key] || '').trim(); if (v) { S.form[key] = ''; sendWeb({ type: 'web', add: [v] }, 'web:add:' + v); } } }, '追加')),
+    w.wait ? h('p', { class: 'fine' }, '送った変更を反映するのを待っています。') : null);
+}
+
+function webTab() {
+  const m = S.model;
+  if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、許可リストが表示されます。');
+  const w = m.web;
+  return [h('h2', { class: 'h2' }, '外部サイト'),
+    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '冒険者が、依頼を進めるなかで読めるウェブサイトを決めます。リストにないサイトを開こうとしたときは、「掲示板」の手紙でお聞きします。'),
+    w.pending.length && !w.wait ? h('div', { class: 'attn', role: 'status' }, h('b', null, `許可待ちが${w.pending.length}件あります`), w.pending.map((x) => code(x.domain)), h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.tab = 'board'; render(); } }, '掲示板の手紙で答える')) : null,
+    webCard(m)];
+}
+
 function boardTab() {
   const m = S.model, out = [];
   if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
     m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text))));
+  if (m) { const wl = webLetter(m); if (wl) out.push(wl); }
   out.push(composer());
   if (m && m.quests.length) out.push(stateFilter('board', m.quests));
   if (m && m.quests.length) out.push(h('div', { class: 'btns', style: 'margin:0 0 8px' },
@@ -1167,7 +1220,7 @@ function spyKn() {
   if (cur && cur !== S.kn.cur) { S.kn.cur = cur; document.querySelectorAll('.tocb[data-kn]').forEach((b) => b.classList.toggle('on', b.dataset.kn === cur)); }
 }
 
-// ---- ギルド案内（処理フローの図とスキルの説明）
+// ---- ヘルプの上半分（処理フローの図と役の説明）
 const ACTOR = { me: ['あなた（ボード）', '--banner', '--banner-ink'], gm: ['ギルドマスター', '--brass', '--on'], cart: ['地図師', '--ok', '--on'], adv: ['冒険者・斥候', '--warn', '--on'], app: ['鑑定士', '--stop', '--on'], lib: ['司書', '--mute', '--on'], sys: ['', '--surface2', '--ink'] };
 function flowSvg() {
   const ns = 'http://www.w3.org/2000/svg';
@@ -1231,7 +1284,7 @@ function flowSvg() {
   return svg;
 }
 
-// ギルド案内の「役」。モデルは ROLE_MODELS（agents/*.md の model と、テストで一致を確かめている）から引く
+// ヘルプの「役」。モデルは ROLE_MODELS（agents/*.md の model と、テストで一致を確かめている）から引く
 const ROLES = [
   ['ギルドマスター', null, '/guild:quest が動いている間、ずっと', '依頼を受け付け、役を呼び、あなたの答えを待ちます。進め方の判断（順序・遷移・やり直し）は guild.py に任せ、自分では判断しません。', '/guild:quest を動かしているセッションのモデル'],
   ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、前提・種別（自動／あなた）・確認の印・合格基準・納品物の形式を決めます。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
@@ -1248,16 +1301,16 @@ function rolesCard() {
     h('p', { class: 'fine', style: 'margin:10px 0 0' }, 'モデルの名前（opus・sonnet）は別名で、提供元の推奨する版に更新されます。変えたいときは、プラグインの agents/ にある各役の定義の model を書き換えます。'));
 }
 
-function flowTab() {
+function flowCards() {
   const card = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
   const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
-  return [h('h2', { class: 'h2' }, 'ギルド案内'),
+  return [h('h2', { class: 'h2' }, 'ヘルプ'),
     h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼を出してから、納品物を受け取るまでの流れと、それぞれの役の説明です。あなたが操作するのは、赤い箱の場所と、「書庫に残す」で登録を選ぶときです。'),
     h('div', { class: 'card', style: 'margin-bottom:16px;overflow:auto' }, flowSvg()),
     rolesCard()];
 }
 
-// 各役のモデル（ギルド案内の役の一覧で使う）。正本は agents/*.md の model（tests/test_guild.py が一致を確かめる）
+// 各役のモデル（ヘルプの役の一覧で使う）。正本は agents/*.md の model（tests/test_guild.py が一致を確かめる）
 const ROLE_MODELS = {
   cartographer: ['地図師', 'opus'],
   adventurer: ['冒険者', 'sonnet'],
@@ -1265,7 +1318,8 @@ const ROLE_MODELS = {
   appraiser: ['鑑定士', 'sonnet'],
   librarian: ['司書', 'sonnet']
 };
-function helpTab() {
+function helpTab() { return [...flowCards(), helpGrid()]; }
+function helpGrid() {
   const sec = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
   const dl = (rows) => h('dl', { class: 'h' }, rows.flatMap(([a, b]) => [h('dt', null, a), h('dd', null, b)]));
   const faq = (q, ...a) => keepOpen('faq:' + q, h('summary', null, q), h('p', null, ...a));
@@ -1328,8 +1382,8 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const oldBox = document.querySelector('.rbox'), boxTop = oldBox ? oldBox.scrollTop : 0;
-  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '冒険の書'], ['flow', 'ギルド案内'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
-  const body = { board: boardTab, deliv: delivTab, know: knowTab, talk: talkTab, flow: flowTab, obs: obsidianTab, help: helpTab }[S.tab]();
+  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '冒険の書'], ['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
+  const body = { board: boardTab, deliv: delivTab, know: knowTab, talk: talkTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox()].filter(Boolean));

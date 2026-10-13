@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {"type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/web_gate.sh\""}
+        ]
+      }
+    ]
+  }
+}

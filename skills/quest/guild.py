@@ -12,6 +12,9 @@ guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いてい�
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
 guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
 guild.py archive-ingest ROOT: archive/inbox/ の入力（entry・promote・deprecate・retype）を書庫に反映する。
+guild.py web-ingest ROOT: web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
+guild.py web-pending ROOT: 冒険者が止められて、依頼主の答え待ちのドメインを一覧する。
+guild.py web-reset ROOT: 「今回だけ」の許可と、許可しなかった記録を空にする（依頼の完了・中止のとき）。
 入力（inbox の JSON）の type の1つに due（Todo の期限の設定・解除）がある。
 エラーは終了コード 1。
 """
@@ -25,6 +28,8 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import webaccess  # noqa: E402
 # 納品物の形式（拡張子）。作れるようになったものから足す
 FORMATS = {"md": ".md"}
 # 納品物のテンプレートとして、中身を読んで使える形式（文字のファイル）
@@ -449,6 +454,10 @@ def arrivals(root):
         if ainbox.is_dir():
             for f in sorted(ainbox.glob("*.json")):
                 out.append({"kind": "archive", "file": f.name})
+        winbox = gdir / "web" / "inbox"
+        if winbox.is_dir():
+            for f in sorted(winbox.glob("*.json")):
+                out.append({"kind": "web", "file": f.name})
     return out
 
 
@@ -781,11 +790,16 @@ def archive_ingest(root):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "wait", "arrivals", "answers", "archive-propose", "archive-ingest"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "wait", "arrivals", "answers", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
     try:
+        if cmd in ("web-ingest", "web-pending", "web-reset"):
+            gdir = Path(path) / "guild"
+            result = {"web-ingest": webaccess.ingest, "web-pending": webaccess.pending, "web-reset": webaccess.reset}[cmd](gdir)
+            print(json.dumps(result, ensure_ascii=False))
+            return 1 if cmd == "web-ingest" and result["rejected"] else 0
         if cmd in ("archive-propose", "archive-ingest"):
             print(json.dumps(archive_propose(path) if cmd == "archive-propose" else archive_ingest(path), ensure_ascii=False))
             return 0
