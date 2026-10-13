@@ -165,7 +165,7 @@ def reset(gdir):
     cleared = {"once": data["once"], "denied": data["denied"]}
     data["once"], data["denied"] = [], []
     save(gdir, data)
-    return cleared
+    return {"cleared": cleared, "allow": data["allow"]}  # cleared は消したもの。残るのは allow（許可リスト）だけ
 
 
 def pending(gdir):

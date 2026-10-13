@@ -1221,7 +1221,8 @@ class WebAccessTest(unittest.TestCase):
     def test_reset_clears_once_and_denied_only(self):
         self.send("1.json", {"type": "web", "add": ["keep.example.jp"], "decisions": {"b.example.jp": "once", "c.example.jp": "deny"}})
         webaccess.ingest(self.gdir)
-        webaccess.reset(self.gdir)
+        r = webaccess.reset(self.gdir)
+        self.assertEqual(r, {"cleared": {"once": ["b.example.jp"], "denied": ["c.example.jp"]}, "allow": ["keep.example.jp"]})
         self.assertEqual(webaccess.gate(self.gdir, "https://keep.example.jp/")[0], "allow")
         self.assertEqual(webaccess.gate(self.gdir, "https://b.example.jp/")[0], "deny")
         self.assertEqual([p["domain"] for p in webaccess.pending(self.gdir)], ["b.example.jp"])
@@ -1253,7 +1254,7 @@ class WebAccessTest(unittest.TestCase):
         out = subprocess.run([sys.executable, script, "web-ingest", str(self.root)], capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(out.returncode, 0, out.stderr)
         out = subprocess.run([sys.executable, script, "web-reset", str(self.root)], capture_output=True, text=True, encoding="utf-8")
-        self.assertEqual(json.loads(out.stdout)["once"], ["a.example.jp"])
+        self.assertEqual(json.loads(out.stdout)["cleared"]["once"], ["a.example.jp"])
 
 
 class WebGateHookTest(unittest.TestCase):
