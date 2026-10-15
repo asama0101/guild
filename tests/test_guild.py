@@ -1700,6 +1700,15 @@ class DocsContractTest(unittest.TestCase):
         self.assertIn(".prompt.md", s)
         self.assertIn("Todo は増やさない。計画の承認は取らない", s)
 
+    def test_agents_use_work_paths(self):
+        self.assertIn("`guild/.work/Q###/reports/plan-draft.json`", self.read("agents", "cartographer.md"))
+        for p in (ROOT / "agents").glob("*.md"):
+            s = p.read_text(encoding="utf-8")
+            if "reports/" in s:
+                self.assertIn(".work/Q###/", s, p.name)
+            for line in s.splitlines():
+                self.assertFalse(line.startswith("###/"), f"{p.name}: 行頭が壊れている: {line[:30]}")
+
     def test_live_docs_have_no_old_layout_terms(self):
         files = ["README.md", "skills/quest/SKILL.md", "skills/init/SKILL.md", "docs/graph-format.md",
                  "docs/board-design.md", "docs/archive-spec.md", "docs/roles-spec.md", "docs/spec.md"]

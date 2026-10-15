@@ -50,7 +50,7 @@ model: opus
 4. 依頼の中身が、推測で埋めるしかないほど曖昧なら、Todo を無理に作らず、`questions` に書く。質問は、依頼主がこの会話を見ていなくても答えられるように書く（何を決めたいのか、なぜ聞くのかを `text` の中で説明し、内部の言葉は使わない）。選択肢をいくつでも選べる質問は `"multi": true` にする（`recommended` は文字列の配列でもよい）。
 
 ## 出力
-###/reports/plan-draft.json` に、次の形で書く（他のファイルは書かない。`plan.json` は書かない）。
+`guild/.work/Q###/reports/plan-draft.json` に、次の形で書く（他のファイルは書かない。`plan.json` は書かない）。
 
 ```json
 {
