@@ -1,11 +1,11 @@
 """冒険者の WebFetch の許可（標準ライブラリだけ）。
 
-許可の状態は guild/web/access.json に置く。フック（hooks/web_gate.py）と guild.py の両方が、このファイルを使う。
+許可の状態は guild/.work/web/access.json に置く。フック（hooks/web_gate.py）と guild.py の両方が、このファイルを使う。
   allow    許可リストのドメイン（サブドメインも通す）
   once     「今回だけ」許可したドメイン。依頼の完了・中止で guild.py web-reset が空にする
   denied   依頼主が許可しなかったドメイン。同じく web-reset で空にする
   pending  冒険者が開こうとして止められ、依頼主の答えを待っているもの
-依頼主の答えは guild/web/inbox/ に JSON で届き、guild.py web-ingest が反映する。
+依頼主の答えは guild/.work/web/inbox/ に JSON で届き、guild.py web-ingest が反映する。
 """
 import datetime
 import json
@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
 
+WORK = ".work"  # 機械用・作業用のフォルダ（guild/ の中。Obsidian に出ない）
 DOMAIN_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$")
 DECISIONS = ("allow", "once", "deny")
 MAX_PENDING = 50
@@ -25,7 +26,7 @@ class WebError(Exception):
 
 
 def access_path(gdir):
-    return Path(gdir) / "web" / "access.json"
+    return Path(gdir) / WORK / "web" / "access.json"
 
 
 def _blank():
@@ -132,8 +133,8 @@ def apply(data, msg):
 
 
 def ingest(gdir):
-    """guild/web/inbox/ の答えを反映する。反映できなかったものは rejected/ に理由つきで移す。"""
-    inbox = Path(gdir) / "web" / "inbox"
+    """guild/.work/web/inbox/ の答えを反映する。反映できなかったものは rejected/ に理由つきで移す。"""
+    inbox = Path(gdir) / WORK / "web" / "inbox"
     report = {"applied": [], "rejected": []}
     if not inbox.is_dir():
         return report

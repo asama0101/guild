@@ -367,7 +367,7 @@ class InitAndNewTest(unittest.TestCase):
         self.assertEqual(Path(b["plan"]), Path(b["dir"]) / "plan.json")
 
     def put_request(self, rid, text, files=()):
-        rdir = self.root / "guild" / "requests"
+        rdir = self.root / "guild" / ".work" / "requests"
         rdir.mkdir(parents=True, exist_ok=True)
         (rdir / f"{rid}.json").write_text(json.dumps({"type": "request", "text": text, "due": None,
                                                       "files": list(files)}), encoding="utf-8")
@@ -376,7 +376,7 @@ class InitAndNewTest(unittest.TestCase):
         guild.init_guild(self.root)
         self.put_request("R20261010-1130", "二つ目")
         self.put_request("R20261010-1100", "一つ目")
-        (self.root / "guild" / "requests" / "R20261010-1200.json").write_text("{壊れた", encoding="utf-8")
+        (self.root / "guild" / ".work" / "requests" / "R20261010-1200.json").write_text("{壊れた", encoding="utf-8")
         r = guild.list_requests(self.root)
         self.assertEqual([x["id"] for x in r], ["R20261010-1100", "R20261010-1130"])
         self.assertEqual(r[0]["text"], "一つ目")
@@ -384,7 +384,7 @@ class InitAndNewTest(unittest.TestCase):
     def test_new_takes_request_and_files(self):
         guild.init_guild(self.root)
         self.put_request("R20261010-1100", "依頼文", files=["memo.txt"])
-        fdir = self.root / "guild" / "requests" / "files" / "R20261010-1100"
+        fdir = self.root / "guild" / ".work" / "requests" / "files" / "R20261010-1100"
         fdir.mkdir(parents=True)
         (fdir / "memo.txt").write_text("素材", encoding="utf-8")
         q = guild.new_quest(self.root, "R20261010-1100")
@@ -402,7 +402,7 @@ class InitAndNewTest(unittest.TestCase):
 
     def test_init_copies_board_and_creates_requests_dir(self):
         r = guild.init_guild(self.root)
-        self.assertTrue((self.root / "guild" / "requests").is_dir())
+        self.assertTrue((self.root / "guild" / ".work" / "requests").is_dir())
         board = ROOT / "skills" / "quest" / "board.html"
         if board.exists():
             self.assertEqual((self.root / "guild" / "board.html").read_bytes(), board.read_bytes())
@@ -433,7 +433,7 @@ class WaitTest(unittest.TestCase):
     def test_arrivals_lists_inbox_and_requests(self):
         self.assertEqual(guild.arrivals(self.root), [])
         self.put_inbox("a.json", {"type": "approve"})
-        (self.root / "guild" / "requests" / "R20261010-1.json").write_text("{}", encoding="utf-8")
+        (self.root / "guild" / ".work" / "requests" / "R20261010-1.json").write_text("{}", encoding="utf-8")
         a = guild.arrivals(self.root)
         self.assertEqual(a, [{"kind": "inbox", "quest": "Q001", "file": "a.json"}, {"kind": "request", "id": "R20261010-1"}])
 
@@ -477,7 +477,7 @@ class WaitTest(unittest.TestCase):
         self.assertEqual(guild.arrivals(self.root), [])
 
     def test_arrivals_ignores_unreadable_requests(self):
-        (self.root / "guild" / "requests" / "R20261010-9.json").write_text("{壊れた", encoding="utf-8")
+        (self.root / "guild" / ".work" / "requests" / "R20261010-9.json").write_text("{壊れた", encoding="utf-8")
         self.assertEqual(guild.arrivals(self.root), [])
 
     def test_cli_wait_and_answers(self):
@@ -651,7 +651,7 @@ class TemplateTest(unittest.TestCase):
     """納品物のテンプレート。guild/templates/ の中だけを指せる。"""
 
     def make(self, d, template):
-        q = Path(d) / "guild" / "Q001"
+        q = Path(d) / "guild" / ".work" / "Q001"
         (q / "reports").mkdir(parents=True)
         (Path(d) / "guild" / "templates").mkdir()
         (Path(d) / "guild" / "templates" / "週次.md").write_text("# 週次", encoding="utf-8")
@@ -884,7 +884,7 @@ class ArchiveTest(unittest.TestCase):
         return json.loads((self.q / "archive.json").read_text(encoding="utf-8"))
 
     def put_inbox(self, name, data):
-        d = self.adir / "inbox"
+        d = self.root / "guild" / ".work" / "archive-inbox"
         d.mkdir(exist_ok=True)
         (d / name).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
@@ -894,7 +894,7 @@ class ArchiveTest(unittest.TestCase):
         return e
 
     def test_init_makes_archive_and_keeps_items(self):
-        for sub in ("terms", "flows", "facts", "personal", "lessons", "inbox"):
+        for sub in ("terms", "flows", "facts", "personal", "lessons"):
             self.assertTrue((self.adir / sub).is_dir(), sub)
         self.assertTrue((self.adir / "index.md").is_file())
         self.assertFalse((self.root / "guild" / "knowledge").exists())
@@ -1128,11 +1128,12 @@ class ArchiveTest(unittest.TestCase):
         rel = guild.write_entry(self.adir, self.entry(name="A", summary="s"))
         r = self.retype(rel, "term")  # 同じ種類
         self.assertEqual(len(r["rejected"]), 1)
-        reason = (self.adir / "inbox" / "rejected" / "20261011-retype.json.reason.txt").read_text(encoding="utf-8")
+        reason = (self.root / "guild" / ".work" / "archive-inbox" / "rejected" / "20261011-retype.json.reason.txt").read_text(encoding="utf-8")
         self.assertIn("同じ種類", reason)
 
     def test_archive_ingest_rejects_bad_input_without_stopping(self):
-        d = self.adir / "inbox"
+        d = self.root / "guild" / ".work" / "archive-inbox"
+        d.mkdir(parents=True, exist_ok=True)
         (d / "0-broken.json").write_text("{not json", encoding="utf-8")
         self.put_inbox("1-unknown.json", {"type": "nanika"})
         self.put_inbox("2-escape.json", {"type": "promote", "path": "../../config.json"})
@@ -1174,7 +1175,7 @@ class WebAccessTest(unittest.TestCase):
         self.gdir = self.root / "guild"
 
     def send(self, name, obj):
-        d = self.gdir / "web" / "inbox"
+        d = self.gdir / ".work" / "web" / "inbox"
         d.mkdir(parents=True, exist_ok=True)
         (d / name).write_text(json.dumps(obj), encoding="utf-8")
 
@@ -1237,8 +1238,8 @@ class WebAccessTest(unittest.TestCase):
         self.assertEqual(len(r["applied"]), 2)
         self.assertEqual([x["file"] for x in r["rejected"]], ["3.json", "4.json", "5.json"])
         self.assertEqual(webaccess.load(self.gdir)["allow"], [])
-        self.assertTrue((self.gdir / "web" / "inbox" / "rejected" / "3.json.reason.txt").is_file())
-        self.assertEqual(list((self.gdir / "web" / "inbox").glob("*.json")), [])
+        self.assertTrue((self.gdir / ".work" / "web" / "inbox" / "rejected" / "3.json.reason.txt").is_file())
+        self.assertEqual(list((self.gdir / ".work" / "web" / "inbox").glob("*.json")), [])
 
     def test_arrivals_include_web_inbox(self):
         self.assertFalse([a for a in guild.arrivals(self.root) if a["kind"] == "web"])
@@ -1363,3 +1364,40 @@ class McpContractTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkDirTest(unittest.TestCase):
+    """機械用のファイルは guild/.work/ に置く（Obsidian に出さない）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.g = self.root / "guild"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_init_and_new_use_work(self):
+        self.assertTrue((self.g / ".work" / "requests").is_dir())
+        self.assertFalse((self.g / "requests").exists())
+        q = guild.new_quest(self.root)
+        self.assertEqual(Path(q["dir"]), self.g / ".work" / "Q001")
+        self.assertEqual(guild.gdir_of(q["dir"]), self.g)
+        self.assertFalse((self.g / "Q001").exists())
+
+    def test_arrivals_read_work(self):
+        q = Path(guild.new_quest(self.root)["dir"])
+        (q / "inbox" / "a.json").write_text("{}", encoding="utf-8")
+        (self.g / ".work" / "requests" / "R20261010-1.json").write_text("{}", encoding="utf-8")
+        (self.g / ".work" / "archive-inbox").mkdir()
+        (self.g / ".work" / "archive-inbox" / "b.json").write_text("{}", encoding="utf-8")
+        (self.g / ".work" / "web" / "inbox").mkdir(parents=True)
+        (self.g / ".work" / "web" / "inbox" / "c.json").write_text("{}", encoding="utf-8")
+        kinds = sorted((a["kind"], a.get("file") or a.get("id")) for a in guild.arrivals(self.root))
+        self.assertEqual(kinds, [("archive", "b.json"), ("inbox", "a.json"), ("request", "R20261010-1"), ("web", "c.json")])
+
+    def test_web_access_lives_in_work(self):
+        webaccess.save(self.g, dict(webaccess.load(self.g), allow=["example.jp"]))
+        self.assertTrue((self.g / ".work" / "web" / "access.json").is_file())
+        self.assertFalse((self.g / "web").exists())

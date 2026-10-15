@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""冒険者（guild:adventurer）の WebFetch を、許可リスト（guild/web/access.json）で判定するフック（PreToolUse）。
+"""冒険者（guild:adventurer）の WebFetch を、許可リスト（guild/.work/web/access.json）で判定するフック（PreToolUse）。
 
 許可リストにあるドメインは通す。ないものは止めて、止めた URL を pending に残す（ボードの手紙になる）。
 冒険者以外（ギルドマスター自身や他のサブエージェント）の呼び出しには、何も言わない。

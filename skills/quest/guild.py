@@ -5,14 +5,14 @@ plan.json を書けるのはこのファイルだけ。遷移は transitions.jso
 使い方: guild.py {adopt|validate|sync|next|ingest} PLAN / guild.py advance PLAN ID EVENT
 adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を作る（承認前の状態で）。
 guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
-guild.py new ROOT [R…]: ROOT/guild/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む。
+guild.py new ROOT [R…]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む。
 guild.py requests ROOT: 受付待ちの依頼を一覧する。
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
 guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
-guild.py archive-ingest ROOT: archive/inbox/ の入力（entry・promote・deprecate・retype）を書庫に反映する。
-guild.py web-ingest ROOT: web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
+guild.py archive-ingest ROOT: .work/archive-inbox/ の入力（entry・promote・deprecate・retype）を書庫に反映する。
+guild.py web-ingest ROOT: .work/web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
 guild.py web-pending ROOT: 冒険者が止められて、依頼主の答え待ちのドメインを一覧する。
 guild.py web-reset ROOT: 「今回だけ」の許可と、許可しなかった記録を空にする（依頼の完了・中止のとき）。
 入力（inbox の JSON）の type の1つに due（Todo の期限の設定・解除）がある。
@@ -30,6 +30,19 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import webaccess  # noqa: E402
+
+WORK = webaccess.WORK
+
+
+def work_dir(gdir):
+    """機械用・作業用のフォルダ。依頼（Q###）、受付待ちの依頼、外部サイトの許可、書庫の入力、インプットのバックアップを置く。"""
+    return Path(gdir) / WORK
+
+
+def gdir_of(qdir):
+    """依頼のフォルダ（guild/.work/Q001）から guild/ を返す。"""
+    return Path(qdir).parent.parent
+
 # 納品物の形式（拡張子）。作れるようになったものから足す
 FORMATS = {"md": ".md"}
 # 納品物のテンプレートとして、中身を読んで使える形式（文字のファイル）
@@ -319,7 +332,7 @@ def adopt(plan_path, tr):
     if template:
         # テンプレートは guild/templates/ の中のファイルだけ（外を指せない）
         parts = str(template).replace("\\", "/").split("/")
-        tpl = plan_path.parent.parent / str(template)
+        tpl = gdir_of(plan_path.parent) / str(template)
         if len(parts) != 2 or parts[0] != "templates" or parts[1] in ("", ".", "..") or not tpl.is_file():
             raise GuildError(f"template が不正か、見つかりません: {template}")
         if not str(template).lower().endswith(TEMPLATE_READABLE):
@@ -374,7 +387,7 @@ def init_guild(root):
     gdir = Path(root) / "guild"
     gdir.mkdir(parents=True, exist_ok=True)
     init_archive(gdir / "archive")
-    (gdir / "requests").mkdir(exist_ok=True)
+    (work_dir(gdir) / "requests").mkdir(parents=True, exist_ok=True)
     board = HERE / "board.html"
     if board.exists():
         shutil.copy2(board, gdir / "board.html")  # ボードはプラグイン側が正本。init のたびに最新に置き換える
@@ -392,8 +405,8 @@ REQUEST_ID = re.compile(r"^R[0-9][0-9-]*$")
 
 
 def list_requests(root):
-    """ROOT/guild/requests/ にある、受付待ちの依頼（ボードが保存したもの）を古い順に返す。"""
-    rdir = Path(root) / "guild" / "requests"
+    """ROOT/guild/.work/requests/ にある、受付待ちの依頼（ボードが保存したもの）を古い順に返す。"""
+    rdir = work_dir(Path(root) / "guild") / "requests"
     out = []
     if rdir.is_dir():
         for f in sorted(rdir.glob("R*.json")):
@@ -406,26 +419,28 @@ def list_requests(root):
 
 
 def new_quest(root, request_id=None):
-    """ROOT/guild/ に次の依頼のフォルダ（Q001, Q002, …）を作る。request_id があれば、その受付待ちの依頼を取り込む。"""
+    """ROOT/guild/.work/ に次の依頼のフォルダ（Q001, Q002, …）を作る。request_id があれば、その受付待ちの依頼を取り込む。"""
     gdir = Path(root) / "guild"
     if not (gdir / "config.json").exists():
         raise GuildError(f"{gdir} がありません（/guild:init を先に実行してください）")
+    wdir = work_dir(gdir)
+    wdir.mkdir(exist_ok=True)
     src = None
     if request_id is not None:
         if not REQUEST_ID.match(request_id):
             raise GuildError(f"依頼の ID が不正です: {request_id}")
-        src = gdir / "requests" / f"{request_id}.json"
+        src = wdir / "requests" / f"{request_id}.json"
         if not src.exists():
             raise GuildError(f"{src} がありません")
-    nums = [int(p.name[1:]) for p in gdir.iterdir() if p.is_dir() and p.name[:1] == "Q" and p.name[1:].isdigit()]
-    qdir = gdir / f"Q{max(nums, default=0) + 1:03d}"
+    nums = [int(p.name[1:]) for p in wdir.iterdir() if p.is_dir() and p.name[:1] == "Q" and p.name[1:].isdigit()]
+    qdir = wdir / f"Q{max(nums, default=0) + 1:03d}"
     for sub in ("reports", "output", "inbox"):
         (qdir / sub).mkdir(parents=True)
     out = {"quest": qdir.name, "dir": str(qdir), "plan": str(qdir / "plan.json")}
     if src is not None:
         out["request"] = load_json(src)
         shutil.move(str(src), str(qdir / "request.json"))
-        files = gdir / "requests" / "files" / request_id
+        files = wdir / "requests" / "files" / request_id
         if files.is_dir():
             shutil.move(str(files), str(qdir / "inputs"))
             out["inputs"] = str(qdir / "inputs")
@@ -435,14 +450,15 @@ def new_quest(root, request_id=None):
 def arrivals(root):
     """依頼主がボードから送ったが、まだ取り込んでいないものを返す（inbox の JSON と、受付待ちの依頼）。"""
     gdir = Path(root) / "guild"
+    wdir = work_dir(gdir)
     out = []
-    if gdir.is_dir():
-        for q in sorted(gdir.glob("Q[0-9]*")):
+    if wdir.is_dir():
+        for q in sorted(wdir.glob("Q[0-9]*")):
             inbox = q / "inbox"
             if inbox.is_dir():
                 for f in sorted(inbox.glob("*.json")):
                     out.append({"kind": "inbox", "quest": q.name, "file": f.name})
-        req = gdir / "requests"
+        req = wdir / "requests"
         if req.is_dir():
             for f in sorted(req.glob("R*.json")):
                 try:
@@ -450,11 +466,11 @@ def arrivals(root):
                 except GuildError:
                     continue  # 読めない依頼は数えない（list_requests と同じ）
                 out.append({"kind": "request", "id": f.stem})
-        ainbox = gdir / "archive" / "inbox"
+        ainbox = wdir / "archive-inbox"
         if ainbox.is_dir():
             for f in sorted(ainbox.glob("*.json")):
                 out.append({"kind": "archive", "file": f.name})
-        winbox = gdir / "web" / "inbox"
+        winbox = wdir / "web" / "inbox"
         if winbox.is_dir():
             for f in sorted(winbox.glob("*.json")):
                 out.append({"kind": "web", "file": f.name})
@@ -504,9 +520,9 @@ FILE_BAD = re.compile(r'[\\/:*?"<>|\s]+')
 
 
 def init_archive(adir):
-    """archive/ と種類別のフォルダ、手入力の受け皿（inbox/）、索引を作る。既存の項目は消さない。"""
+    """archive/ と種類別のフォルダ、索引を作る。既存の項目は消さない。"""
     adir = Path(adir)
-    for sub in (*ARCHIVE_DIRS.values(), "inbox"):
+    for sub in ARCHIVE_DIRS.values():
         (adir / sub).mkdir(parents=True, exist_ok=True)
     if not (adir / "index.md").exists():
         rebuild_index(adir)
@@ -671,7 +687,7 @@ def apply_candidate(adir, c, quest):
 def archive_propose(qdir):
     """司書の候補を検査する。心得はそのまま登録、ほかは依頼主の確認待ち（archive.json）。同名・別名は更新の候補にする。"""
     qdir = Path(qdir)
-    adir = qdir.parent / "archive"
+    adir = gdir_of(qdir) / "archive"
     init_archive(adir)
     draft = qdir / "reports" / "archive-draft.json"
     cands = load_json(draft).get("candidates", []) if draft.exists() else []
@@ -707,7 +723,7 @@ def archive_decide(qdir, data):
     decisions = data.get("decisions")
     if not isinstance(decisions, dict):
         raise GuildError("decisions がありません")
-    adir = qdir.parent / "archive"
+    adir = gdir_of(qdir) / "archive"
     for c in state["candidates"]:
         if decisions.get(c["id"]) == "register":
             state["registered"].append(apply_candidate(adir, c, qdir.name))
@@ -768,9 +784,9 @@ def archive_apply(adir, data):
 
 
 def archive_ingest(root):
-    """archive/inbox/ の入力を反映する。entry（新規・編集）、promote（確認済みにする）、deprecate（廃止にする）、retype（種類の付け替え）。"""
+    """`.work/archive-inbox/` の入力を反映する。entry（新規・編集）、promote（確認済みにする）、deprecate（廃止にする）、retype（種類の付け替え）。"""
     adir = Path(root) / "guild" / "archive"
-    inbox = adir / "inbox"
+    inbox = work_dir(Path(root) / "guild") / "archive-inbox"
     report = {"applied": [], "rejected": []}
     if not inbox.is_dir():
         return report
