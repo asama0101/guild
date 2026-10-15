@@ -11,7 +11,7 @@
 | 名前 | 種類 | 受け持ち | 道具 | モデル（提案） |
 |---|---|---|---|---|
 | ギルドマスター | スキル本体（`/guild:quest`。サブエージェントではない） | 依頼の受け付け、`guild.py` の呼び出し、役の呼び出し、入力の到着の待機（質問・承認・確認・結果・判断はボードの手紙。チャットでは聞かない）、依頼の完了後に司書を呼び、候補の確認を待つ | 全部 | 利用者のモデル |
-| 地図師（`cartographer`） | サブエージェント | 依頼を Todo に分解する。前提関係（`deps`）・種別（`auto`/`human`）・確認の印（`confirm`）・合格基準を決め、書庫（`archive/`）の関係する項目を引く。曖昧な点は『聞くべきこと』として返す | `Read, Glob, Grep, Write` | `opus` |
+| 地図師（`cartographer`） | サブエージェント | 依頼を Todo に分解する。前提関係（`deps`）・種別（`auto`/`human`）・確認の印（`confirm`）・合格基準・予定日を決め、書庫（`archive/`）の関係する項目を引く。`guild.py inputs-list` の出力（`guild/inputs/` の一覧と書庫のヒント）から、使うインプットを理由つきで選ぶ（迷ったものは候補）。曖昧な点は『聞くべきこと』として返す | `Read, Glob, Grep, Write` | `opus` |
 | 冒険者（`adventurer`） | サブエージェント | `auto` の Todo を実行する（調べる・書く）。報告を `reports/` に、成果物を `output/` に書く | `Read, Glob, Grep, WebSearch, WebFetch, Write, Edit` | `sonnet` |
 | 斥候（`scout`） | サブエージェント | 動的ページ（JavaScript で中身が出るページ）をブラウザで読み、文字を取って成果物にする。読むだけ（クリック・入力・ログインはしない）。地図師が `needs_browser: true` を付けた `auto` の Todo のときだけ、ギルドマスターが冒険者の代わりに呼ぶ。ブラウザが1つなので同時に1人まで | `Read, Glob, Grep, Write` と、利用者が導入した Playwright MCP（`playwright` の名前。`/guild:init` が確認する）の読み取り系だけ：`browser_navigate, browser_snapshot, browser_wait_for, browser_press_key, browser_take_screenshot, browser_tabs, browser_close` | `sonnet` |
 | 鑑定士（`appraiser`） | サブエージェント | Todo の成果物を合格基準で判定し、`passed`/`rejected` と指摘を返す。出典の URL は WebFetch で開いて実在と内容を照合する。開けない出典が残り、出典が合格基準で求められているときは `needs_scout` を返し、ギルドマスターが斥候を確認モードで呼んでから再鑑定する（再鑑定は1回だけ）。成果物は直さない | `Read, Glob, Grep, WebFetch, Write` | `sonnet` |
@@ -56,7 +56,7 @@
 
 ## 受入条件
 
-1. `agents/` に `cartographer.md` `adventurer.md` `scout.md` `appraiser.md` の4ファイルがあり、各ファイルに `name` `description` `tools` `model` がある。
+1. `agents/` に `cartographer.md` `adventurer.md` `scout.md` `appraiser.md` `librarian.md` の5ファイル（司書は書庫の導入で追加：`docs/archive-spec.md`）があり、各ファイルに `name` `description` `tools` `model` がある。
 2. 各役の `tools` が上の表のとおりで、鑑定士・地図師に `Edit` がなく、地図師に Web 系のツールがない（鑑定士は WebFetch のみ）。
 3. 役は進め方の判断（順序・遷移・リトライ）をしない。判断は `guild.py` の出力に従う。
 4. 各役の報告が `reports/<Todo ID>-<役>.md` に固定の見出しで残る。

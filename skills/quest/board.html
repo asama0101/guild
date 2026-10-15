@@ -695,11 +695,16 @@ function fileField(key, label, multiple) {
 const fld = (cap, ...ctrl) => h('div', { class: 'fld' }, h('span', { class: 'cap' }, cap), ...ctrl);
 function seal(ch, cls) { return h('div', { class: `seal ${cls || ''}`, 'aria-hidden': 'true' }, ch); }
 
-// 失敗の判断の手紙に出す、鑑定士の指摘（reports/<Todo>-appraiser.md の、空でない最初の6行）。報告がなければ出さない
+// 報告の中の「## <title>」の節（次の「## 」の見出しまで）の本文。見出しがないか、中身が空なら null
+function reportSection(text, title) {
+  const m = String(text || '').match(new RegExp(`^##[ \\t]*${title}[ \\t]*\\r?\\n([\\s\\S]*?)(?=^##[ \\t]|(?![\\s\\S]))`, 'm'));
+  return m && m[1].trim() ? m[1] : null;
+}
+// 失敗の判断の手紙に出す、鑑定士の指摘（reports/<Todo>-appraiser.md の「## 指摘」の節の、空でない最初の6行。節がなければ報告の冒頭6行）。報告がなければ出さない
 function appraiserNote(qd, t) {
   const name = `${t.id}-appraiser.md`;
   if (!qd.q.reports.includes(name)) return null;
-  const txt = reportText(qd.id, name), lines = txt ? excerpt(txt, 6) : [];
+  const txt = reportText(qd.id, name), lines = txt ? excerpt(reportSection(txt, '指摘') || txt, 6) : [];
   return h('div', { class: 'apnote', role: 'note', 'aria-label': '鑑定士の指摘' },
     h('div', null, h('b', null, '鑑定士の指摘'), '　', h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(qd.id, `reports/${name}`); } }, name)),
     txt === null ? h('p', { class: 'fine', style: 'margin:4px 0 0' }, '読み込み中…')

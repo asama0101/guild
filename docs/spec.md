@@ -26,6 +26,7 @@
 - 作業中のプロジェクトのフォルダ内に `guild/` を作り、書庫（`archive/`）・納品物（`deliverables/`）・共通のインプット（`inputs/`）を置き、依頼ごとのフォルダや作業用のものは `.work/` に置く（Obsidian に出ない）。
 - 依頼主とのやりとり（計画の承認、依頼主の実行結果の入力）は、ボード（HTML）で行う。
 - 依頼主が見るファイル（納品物など）は、Obsidian の Markdown 記法で書く（`[[リンク]]`、フロントマター、コールアウトなど）。
+- 個別の仕様の正本：データの形と `guild.py` のコマンドは `docs/graph-format.md`、ボードは `docs/board-design.md`、書庫は `docs/archive-spec.md`、役は `docs/roles-spec.md`。
 
 ## 受入条件
 

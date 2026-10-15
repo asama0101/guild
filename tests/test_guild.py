@@ -1845,6 +1845,36 @@ class DocsContractTest(unittest.TestCase):
         for needle in ("## インプットへの紐づけ", "存在は検査しない", "書庫の用語『KGI』→ このファイル"):
             self.assertIn(needle, a)
 
+    def test_every_cli_command_is_documented(self):
+        """guild.py の main() の許可リストにあるコマンドは、docs/graph-format.md のコマンド表のどこかに出てくる。"""
+        src = (ROOT / "skills" / "quest" / "guild.py").read_text(encoding="utf-8")
+        m = re.search(r'argv\[1\] not in \(([^)]*)\)', src)
+        cmds = re.findall(r'"([a-z-]+)"', m.group(1))
+        self.assertGreater(len(cmds), 15)
+        doc = self.read("docs", "graph-format.md")
+        for c in cmds:
+            with self.subTest(command=c):
+                self.assertTrue(re.search(rf"`{re.escape(c)}[ `]", doc), c)
+
+    def test_readme_lists_the_seven_tabs_and_no_adventure_book(self):
+        readme = self.read("README.md")
+        for tab in ("クエスト掲示板", "クエスト進捗", "納品物", "書庫", "外部サイト", "Obsidian", "ヘルプ"):
+            self.assertIn(tab, readme)
+        self.assertNotIn("冒険の書", readme)
+        board = self.read("docs", "board-design.md")
+        self.assertNotIn("冒険の書", board)
+        for key in ("guild.board.listOpen", "guild.progress.sel"):
+            self.assertIn(key, board)
+
+    def test_no_stale_terms_in_live_docs(self):
+        files = [self.read("README.md"), self.read("skills", "quest", "SKILL.md"), self.read("skills", "init", "SKILL.md")]
+        files += [p.read_text(encoding="utf-8") for p in sorted((ROOT / "agents").glob("*.md"))]
+        files += [self.read("docs", n) for n in ("spec.md", "graph-format.md", "board-design.md", "archive-spec.md", "roles-spec.md")]
+        text = "\n".join(files)
+        for stale in ("冒険の書", "納品物のテンプレート", "guild/templates", "`template`", ".mcp.json", "plugin_guild_browser", "Node.js"):
+            with self.subTest(term=stale):
+                self.assertNotIn(stale, text)
+
 
 class NoTemplateTest(unittest.TestCase):
     """納品物のテンプレートは廃止した。guild.py は templates/ を作らず、plan.json に template を持たない。"""
@@ -2312,6 +2342,15 @@ class InputsInputTest(unittest.TestCase):
         p = plan(todo("T1"))
         self.assertEqual(self.send(p, {"type": "inputs", "add": ["a.txt"]})["rejected"], [])
         self.assertEqual(p["inputs"], [{"name": "a.txt", "source": "user", "reason": "依頼主が追加"}])
+
+
+class AppraiserNoteTest(unittest.TestCase):
+    """失敗の判断の手紙の鑑定士の指摘は、報告の「## 指摘」の節を優先して抜き出す（見出し行で6行を使い切らない）。"""
+
+    def test_note_prefers_the_findings_section(self):
+        board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
+        for needle in ("function reportSection(text, title)", "excerpt(reportSection(txt, '指摘') || txt, 6)"):
+            self.assertIn(needle, board)
 
 
 if __name__ == "__main__":
