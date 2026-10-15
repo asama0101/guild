@@ -16,7 +16,7 @@ guild.py archive-ingest ROOT: .work/archive-inbox/ の入力（entry・promote�
 guild.py web-ingest ROOT: .work/web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
 guild.py web-pending ROOT: 冒険者が止められて、依頼主の答え待ちのドメインを一覧する。
 guild.py web-reset ROOT: 「今回だけ」の許可と、許可しなかった記録を空にする（依頼の完了・中止のとき）。
-入力（inbox の JSON）の type の1つに due（Todo の期限の設定・解除）がある。
+入力（inbox の JSON）の type の1つに due（依頼の開始日・締切、Todo の予定日・締切の設定。Todo の締切だけ解除できる）がある。
 エラーは終了コード 1。
 """
 import datetime
@@ -53,17 +53,21 @@ CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def check_due(v):
-    """期限は YYYY-MM-DD の日付（実在する日）か None。"""
+def check_date(v, label):
+    """日付は YYYY-MM-DD の実在する日か None。"""
     if v is None:
         return None
     if not isinstance(v, str) or not DATE_RE.match(v):
-        raise GuildError(f"due は YYYY-MM-DD の日付か null にしてください: {v!r}")
+        raise GuildError(f"{label} は YYYY-MM-DD の日付か null にしてください: {v!r}")
     try:
         datetime.date.fromisoformat(v)
     except ValueError:
-        raise GuildError(f"due が実在しない日付です: {v}")
+        raise GuildError(f"{label} が実在しない日付です: {v}")
     return v
+
+
+def check_due(v):
+    return check_date(v, "due")
 
 
 class GuildError(Exception):
@@ -135,6 +139,11 @@ def validate(plan, tr):
         return ["todos がありません"]
     if plan.get("format", "md") not in FORMATS:
         errs.append(f"format が未対応です: {plan.get('format')}（対応: {', '.join(FORMATS)}）")
+    for k in ("start", "due"):
+        try:
+            check_date(plan.get(k), k)
+        except GuildError as e:
+            errs.append(str(e))
     ids = [t.get("id") for t in todos]
     if len(set(ids)) != len(ids) or None in ids:
         errs.append("id が重複しているか、欠けています")
@@ -150,10 +159,11 @@ def validate(plan, tr):
                 errs.append(f"{i}: criteria.{k} が空です")
         if t.get("confirm") and t.get("kind") != "auto":
             errs.append(f"{i}: confirm は auto の Todo だけに付けられます")
-        try:
-            check_due(t.get("due"))
-        except GuildError as e:
-            errs.append(f"{i}: {e}")
+        for k in ("scheduled", "due"):
+            try:
+                check_date(t.get(k), k)
+            except GuildError as e:
+                errs.append(f"{i}: {e}")
         for d in t.get("deps", []):
             if d not in ids:
                 errs.append(f"{i}: deps の {d} がありません")
@@ -282,13 +292,12 @@ def apply_input(plan, data, tr):
             plan["approved"] = False
         note(plan, event="decision", choice=data["choice"], comment=data.get("comment", ""))
         return
+    if kind == "due":
+        apply_dates(plan, data)
+        return
     t = tm.get(data.get("todo"))
     if t is None:
         raise GuildError(f"todo がありません: {data.get('todo')}")
-    if kind == "due":
-        t["due"] = check_due(data.get("due"))
-        note(plan, event="due", todo=t["id"], due=t["due"])
-        return
     if kind == "confirm":
         apply_event(t, "confirmed" if data["ok"] else "declined", tr, plan)
     elif kind == "result":
@@ -312,6 +321,37 @@ def apply_input(plan, data, tr):
                 u["state"] = "skipped"
     else:
         raise GuildError(f"入力が不正です: {kind} {data.get('choice', '')}")
+
+
+def apply_dates(plan, data):
+    """日付の設定。todo があれば Todo の scheduled / due、なければ依頼の start / due。"""
+    keys = [k for k in ("start", "due", "scheduled") if k in data]
+    todo = None
+    if data.get("todo") is not None:
+        todo = todo_map(plan).get(data["todo"])
+        if todo is None:
+            raise GuildError(f"todo がありません: {data.get('todo')}")
+    allowed = ("scheduled", "due") if todo is not None else ("start", "due")
+    if not keys or any(k not in allowed for k in keys):
+        raise GuildError(f"日付の入力が不正です: {keys or '日付なし'}")
+    new = {}
+    for k in keys:
+        v = check_date(data[k], k)
+        if v is None and not (k == "due" and todo is not None):  # 解除できるのは Todo の締切だけ
+            raise GuildError(f"{k} は解除できません")
+        new[k] = v
+    (todo if todo is not None else plan).update(new)
+    note(plan, event="due", **({"todo": todo["id"]} if todo is not None else {}), **new)
+
+
+def quest_dates(qdir, old=None):
+    """依頼の開始日・締切。作り直し（replan）のときは旧計画の値、なければ request.json の値、なければ今日。締切が未定なら開始日。"""
+    req_path = Path(qdir) / "request.json"
+    req = load_json(req_path) if req_path.exists() else {}
+    old = old or {}
+    start = old.get("start") or req.get("start") or today()
+    due = old.get("due") or req.get("due") or start
+    return {"start": start, "due": due}
 
 
 def adopt(plan_path, tr):
@@ -341,10 +381,13 @@ def adopt(plan_path, tr):
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
             "status": "active", "format": draft.get("format", "md"), **({"template": template} if template else {}),
             **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
+    plan.update(quest_dates(plan_path.parent, old))
     for t in todos:
         if not isinstance(t, dict):
             raise GuildError("todos の要素が不正です")
         item = dict(t, deps=list(t.get("deps", [])), state=tr["initial"], retries=0, output=None)
+        item["scheduled"] = item.get("scheduled") or plan["start"]
+        item["due"] = item.get("due") or plan["due"]
         plan["todos"].append(item)
     errs = validate(plan, tr)
     if errs:

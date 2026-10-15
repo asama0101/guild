@@ -701,6 +701,8 @@ class BoardContractTest(unittest.TestCase):
         ({"type": "decision", "choice": "abort"}, lambda: plan(todo("T2", state="failed")), None),
         ({"type": "due", "todo": "T1", "due": "2026-10-20"}, lambda: plan(todo("T1", state="running")), {"T1": "running"}),
         ({"type": "due", "todo": "T1", "due": None}, lambda: plan(todo("T1"), approved=False), {"T1": "pending"}),
+        ({"type": "due", "todo": "T1", "scheduled": "2026-10-20", "due": "2026-10-22"}, lambda: plan(todo("T1", state="running")), {"T1": "running"}),
+        ({"type": "due", "start": "2026-10-16", "due": "2026-10-30"}, lambda: plan(todo("T1")), {"T1": "pending"}),
     ]
 
     def test_every_input_the_board_writes_is_accepted(self):
@@ -760,6 +762,85 @@ class DueTest(unittest.TestCase):
         self.assertEqual(len(self.ingest(p, {"type": "due", "todo": "T9", "due": "2026-10-20"})["rejected"]), 1)
         p["status"] = "aborted"
         self.assertEqual(len(self.ingest(p, {"type": "due", "todo": "T1", "due": "2026-10-20"})["rejected"]), 1)
+
+    def test_set_todo_scheduled_and_due_together(self):
+        p = plan(todo("T1", state="running"))
+        r = self.ingest(p, {"type": "due", "todo": "T1", "scheduled": "2026-10-20", "due": "2026-10-22"})
+        self.assertEqual(r["rejected"], [])
+        self.assertEqual((p["todos"][0]["scheduled"], p["todos"][0]["due"]), ("2026-10-20", "2026-10-22"))
+        self.assertEqual(p["history"][-1]["scheduled"], "2026-10-20")
+        self.assertNotIn("id", p["history"][-1])
+
+    def test_scheduled_cannot_be_cleared_or_malformed(self):
+        for bad in (None, "", "2026-02-30", 20261020):
+            with self.subTest(bad=bad):
+                p = plan(todo("T1", scheduled="2026-10-20"))
+                self.assertEqual(len(self.ingest(p, {"type": "due", "todo": "T1", "scheduled": bad})["rejected"]), 1)
+                self.assertEqual(p["todos"][0]["scheduled"], "2026-10-20")
+
+    def test_set_quest_start_and_due(self):
+        p = plan(todo("T1"))
+        p["start"], p["due"] = "2026-10-15", "2026-10-15"
+        r = self.ingest(p, {"type": "due", "start": "2026-10-16", "due": "2026-10-30"})
+        self.assertEqual(r["rejected"], [])
+        self.assertEqual((p["start"], p["due"]), ("2026-10-16", "2026-10-30"))
+        self.assertNotIn("todo", p["history"][-1])
+        for bad in ({"type": "due", "due": None}, {"type": "due", "start": None}, {"type": "due", "scheduled": "2026-10-20"}, {"type": "due"}):
+            with self.subTest(bad=bad):
+                self.assertEqual(len(self.ingest(p, bad)["rejected"]), 1)
+        self.assertEqual((p["start"], p["due"]), ("2026-10-16", "2026-10-30"))
+
+    def test_order_mismatch_is_not_an_error(self):
+        p = plan(todo("T1", scheduled="2026-11-01", due="2026-10-01"))
+        p["start"], p["due"] = "2026-10-15", "2026-10-20"
+        self.assertEqual(guild.validate(p, TR), [])  # 矛盾はボードの警告表示だけ
+
+    def test_validate_checks_new_date_fields(self):
+        p = plan(todo("T1", scheduled="10/20"))
+        self.assertTrue(any("T1" in e and "scheduled" in e for e in guild.validate(p, TR)))
+        p = plan(todo("T1"))
+        p["start"] = "2026-13-01"
+        self.assertTrue(any("start" in e for e in guild.validate(p, TR)))
+
+
+class AdoptDatesTest(unittest.TestCase):
+    def adopt(self, request=None, todos=None, old=None):
+        with tempfile.TemporaryDirectory() as d:
+            q = Path(d) / "guild" / ".work" / "Q001"
+            (q / "reports").mkdir(parents=True)
+            if request is not None:
+                (q / "request.json").write_text(json.dumps(request), encoding="utf-8")
+            if old is not None:
+                (q / "plan.json").write_text(json.dumps(old), encoding="utf-8")
+            draft = {"quest": "Q001", "title": "t", "todos": todos or [
+                {"id": "T1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT}]}
+            (q / "reports" / "plan-draft.json").write_text(json.dumps(draft), encoding="utf-8")
+            guild.adopt(q / "plan.json", TR)
+            return json.loads((q / "plan.json").read_text(encoding="utf-8"))
+
+    def test_unspecified_dates_become_today_everywhere(self):
+        today = guild.today()
+        p = self.adopt()
+        self.assertEqual((p["start"], p["due"]), (today, today))
+        self.assertEqual((p["todos"][0]["scheduled"], p["todos"][0]["due"]), (today, today))
+
+    def test_request_dates_are_taken_and_draft_todo_dates_are_kept(self):
+        p = self.adopt(request={"start": "2026-10-15", "due": "2026-10-30"}, todos=[
+            {"id": "T1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT, "scheduled": "2026-10-16", "due": "2026-10-18"},
+            {"id": "T2", "title": "b", "kind": "human", "deps": ["T1"], "criteria": CRIT, "instruction": "x"}])
+        self.assertEqual((p["start"], p["due"]), ("2026-10-15", "2026-10-30"))
+        self.assertEqual((p["todos"][0]["scheduled"], p["todos"][0]["due"]), ("2026-10-16", "2026-10-18"))
+        self.assertEqual((p["todos"][1]["scheduled"], p["todos"][1]["due"]), ("2026-10-15", "2026-10-30"))
+
+    def test_start_only_request_gets_due_equal_to_start(self):
+        p = self.adopt(request={"start": "2026-10-15", "due": None})
+        self.assertEqual((p["start"], p["due"]), ("2026-10-15", "2026-10-15"))
+
+    def test_replan_keeps_the_old_plan_dates(self):
+        old = {"quest": "Q001", "title": "t", "approved": True, "status": "replan", "start": "2026-10-16", "due": "2026-11-05",
+               "todos": [dict(todo("T1"), state="done")], "history": []}
+        p = self.adopt(request={"start": "2026-10-15", "due": "2026-10-30"}, old=old)
+        self.assertEqual((p["start"], p["due"]), ("2026-10-16", "2026-11-05"))
 
     def test_validate_checks_due(self):
         self.assertEqual(guild.validate(plan(todo("T1", due="2026-10-20"), todo("T2", due=None)), TR), [])
