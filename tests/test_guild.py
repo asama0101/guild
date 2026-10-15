@@ -1721,6 +1721,14 @@ class BoardPathsTest(unittest.TestCase):
         rest = self.board.replace("window.localStorage.getItem", "").replace("window.localStorage.setItem", "")
         self.assertNotIn("localStorage", rest)
 
+    def test_detail_tabs_and_way_rows(self):
+        for needle in ("const DTABS = [['way', '道のり'], ['dates', '日付'], ['inputs', 'インプット']]", "function detailTabs(", "function wayTab(",
+                       "function todoRow(", "function reportsOf(", "function reportText(", "function excerpt(", "function appraiserNote(",
+                       "'verify-scout'", "role: 'tablist'", "@container (min-width:860px)", "S.rcache = {}", "appraiserNote(qd, t),"):
+            self.assertIn(needle, self.board)
+        for gone in ("function ganttBlock(", "function ganttOf(", "const BARKIND", "function todoTags(", ".bar2{", ".nowline{", ".way{", ".gx{"):
+            self.assertNotIn(gone, self.board)
+
 
 class DocsContractTest(unittest.TestCase):
     def read(self, *p):

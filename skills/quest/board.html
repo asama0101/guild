@@ -36,23 +36,7 @@ body{margin:0;background:var(--bg)}
 .qopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 20px;align-items:start;margin-top:10px}
 .saved{margin:8px 0 0;font-size:13.5px;color:var(--ok);font-weight:700}
 .toastfix{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);margin:0;z-index:40;background:var(--surface);border:1px solid var(--brass);border-radius:6px;padding:8px 16px;box-shadow:0 2px 10px rgba(0,0,0,.25);max-width:90vw}
-.legend2{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--sub);margin:0 0 12px}
-.legend2 .sw{display:inline-block;width:22px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 .gantt{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 18px 16px;margin-bottom:16px}
-.gantt h3{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:16px;margin:0 0 8px}
-.gx{display:flex;align-items:center;gap:10px;min-height:42px}
-.glab{flex:0 0 140px;line-height:1.35}
-.glab b{display:block;font-size:13.5px}
-.gtrack{position:relative;flex:1 1 auto;height:28px;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(12.5% - 1px),var(--grid) calc(12.5% - 1px),var(--grid) 12.5%);border-radius:3px}
-.gtrack.axis{height:20px;background:none}
-.tick{position:absolute;top:0;transform:translateX(-50%);font-size:11px;color:var(--sub);font-family:'JetBrains Mono',Consolas,'Courier New',monospace;white-space:nowrap}
-.bar2{position:absolute;top:2px;height:24px;border-radius:3px;font-size:11.5px;line-height:24px;color:#fff;text-align:center;overflow:hidden;white-space:nowrap;box-sizing:border-box;font-weight:700;min-width:4px}
-.s-adv{background:#6B5A3E}.s-cart{background:#4F6A70}.s-app{background:#5B4A6B}
-.s-me{background:var(--warn-bg);color:var(--warn);border:2px solid var(--warn);line-height:20px}
-.s-conf{background:var(--surface);color:var(--ng);border:2px dashed var(--ng);line-height:20px}
-.s-ng{background:var(--ng)}
-.s-blk{background:repeating-linear-gradient(45deg,var(--stripe1) 0 6px,var(--stripe2) 6px 12px);color:var(--stop);border:1px solid var(--stop-line);line-height:22px}
-.nowline{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ng)}
 .stamp{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800;font-size:13px;border:2px solid;border-radius:4px;padding:0 9px;display:inline-block;white-space:nowrap;transform:rotate(-2deg)}
 .sd-ok{color:var(--ok);border-color:var(--ok);background:var(--ok-bg)}
 .sd-ng{color:var(--ng);border-color:var(--ng)}
@@ -103,9 +87,6 @@ summary{cursor:pointer;color:var(--sub);min-height:28px}
 dl.c{display:grid;grid-template-columns:84px 1fr;gap:4px 12px;margin:6px 0 0;padding:10px 12px;background:var(--surface2);border-radius:3px}
 dl.c dt{color:var(--sub);font-size:12.5px}
 dl.c dd{margin:0}
-.way{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px;font-size:13px}
-.way .n{border:1px solid var(--brass);border-radius:3px;padding:3px 10px;background:var(--surface)}
-.way .n.h{border-style:dashed}
 code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px}
 .kn-h{scroll-margin-top:70px}
 .tree{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border:1px solid var(--line);border-left:4px solid var(--brass);border-radius:3px;padding:12px 14px;font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12.5px;line-height:1.7;margin:6px 0}
@@ -237,6 +218,39 @@ svg.humbars{min-width:0;max-width:100%}
   .qhide,.hidebar{display:none}
   .qback{display:inline-flex}
 }
+/* 詳細パネルのタブ（道のり／日付／インプット）と、道のりの行。パネルが広いとき（一覧を隠したときなど）は、選んだ Todo の合格基準を右に出す */
+.dtabs{display:flex;gap:4px;margin:18px 0 0;border-bottom:2px solid var(--brass)}
+.dtabs button{font:inherit;font-weight:700;font-size:14px;min-height:40px;padding:4px 18px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--paper2);color:var(--sub);cursor:pointer;margin-bottom:-2px}
+.dtabs button[aria-selected="true"]{background:var(--paper);color:var(--ink);border-color:var(--line)}
+.dtabs .n{margin-left:6px;font-size:12px;font-weight:400}
+.dpanel{background:var(--paper);border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;padding:14px 16px 18px}
+.td{border:1px solid var(--line);border-left:6px solid var(--brass);border-radius:3px;background:var(--surface);margin-bottom:6px}
+.td.over{border-left-color:var(--ng)}
+.td.open{border-color:var(--brass)}
+.tdrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto 18px;gap:4px 12px;align-items:center;width:100%;box-sizing:border-box;padding:8px 12px;border:0;background:transparent;text-align:left;font:inherit;font-size:13.5px;color:inherit;cursor:pointer}
+.tdt{min-width:0}.tdt .kind{display:block;font-size:12px}.tdt b{display:block;overflow:hidden;text-overflow:ellipsis}
+.tdd{font-size:12.5px;color:var(--sub);white-space:nowrap}
+.tdd.late{color:var(--ng);font-weight:700}
+.caret{font-size:11px;color:var(--sub)}
+.tdwarn{margin:0;padding:0 12px 8px;font-size:12.5px;color:var(--warn)}
+.tdbody{padding:4px 14px 12px;border-top:1px dotted var(--brass)}
+.tdbody .cap{display:block;font-size:13px;margin:8px 0 2px}
+.rep{padding:6px 0;border-bottom:1px dotted var(--line)}
+.rep:last-child{border-bottom:0}
+.reph{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.reph a{color:var(--gold);font-weight:700;word-break:break-all}
+.reph .acts{margin-left:auto;display:flex;gap:6px}
+.repx{margin:2px 0 0;font-size:12.5px;color:var(--sub)}
+.critside{display:none}
+.apnote{background:var(--surface2);border-left:4px solid var(--ng);border-radius:3px;padding:8px 12px;margin:0 0 12px;font-size:13.5px}
+.apnote a{color:var(--gold);font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12.5px}
+.apnote ul{margin:4px 0 0;padding-left:20px}
+@container (min-width:860px){
+  .waygrid{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:16px;align-items:start}
+  .critside{display:block;position:sticky;top:80px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-size:13.5px}
+  .td .tdcrit{display:none}
+}
+@media (max-width:620px){.tdrow{grid-template-columns:auto minmax(0,1fr) auto 18px}.tdrow .tdd{display:none}}
 </style>
 </head>
 <body>
@@ -392,7 +406,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, kn: { cur: null },
+  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', openTodo: null, rcache: {}, kn: { cur: null },
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -550,38 +564,6 @@ function askText(x, a) {
   return `${a.todo.id} ができなかったため、進め方の判断`;
 }
 
-// ---- タイムラインの帯
-
-const BARKIND = { running: ['adv', '作業'], review: ['app', '鑑定'], waiting_user: ['me', 'あなたの番'], awaiting_confirm: ['conf', '確認待ち'], blocked: ['blk', '止まり'], failed: ['ng', 'できず'] };
-function ganttOf(q) {
-  const p = q.q.plan; if (!p || !(p.history || []).length) return null;
-  const now = Date.now(), hist = p.history.map((e) => ({ ...e, ms: new Date(e.t).getTime() })).filter((e) => !isNaN(e.ms));
-  const rows = [];
-  const adopted = hist.find((e) => e.event === 'adopted'), approved = hist.find((e) => e.event === 'approved');
-  let lo = hist[0].ms, hi = hist[hist.length - 1].ms, open = false;
-  if (adopted) {
-    const end = approved ? approved.ms : now; if (!approved) open = true;
-    rows.push({ label: '分解・承認', sub: '地図師／あなた', bars: [{ kind: 'me', text: '承認待ち', a: adopted.ms, b: end }] });
-    hi = Math.max(hi, end);
-  }
-  for (const t of p.todos) {
-    const ev = hist.filter((e) => e.id === t.id && e.to);
-    const bars = [];
-    ev.forEach((e, i) => {
-      const k = BARKIND[e.to]; if (!k) return;
-      const nxt = ev[i + 1]; const end = nxt ? nxt.ms : now; if (!nxt) open = true;
-      bars.push({ kind: k[0], text: k[1], a: e.ms, b: end }); hi = Math.max(hi, end);
-    });
-    rows.push({ label: t.id, sub: t.title.length > 14 ? t.title.slice(0, 14) + '…' : t.title, bars });
-  }
-  if (open) hi = Math.max(hi, now);
-  const span = Math.max(hi - lo, 60000), pad2 = span * 0.04; lo -= 0; hi += pad2;
-  const steps = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].map((m) => m * 60000);
-  const step = steps.find((s) => (hi - lo) / s <= 8) || steps[steps.length - 1];
-  const ticks = []; for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) ticks.push(v);
-  return { rows, lo, hi, ticks, now: open ? now : null, long: hi - lo > 86400000 };
-}
-
 // ============================================================ 描画（部品）
 function stampEl(label, cls) { return h('span', { class: `stamp ${cls}` }, label); }
 
@@ -672,6 +654,17 @@ function fileField(key, label, multiple) {
 const fld = (cap, ...ctrl) => h('div', { class: 'fld' }, h('span', { class: 'cap' }, cap), ...ctrl);
 function seal(ch, cls) { return h('div', { class: `seal ${cls || ''}`, 'aria-hidden': 'true' }, ch); }
 
+// 失敗の判断の手紙に出す、鑑定士の指摘（reports/<Todo>-appraiser.md の、空でない最初の6行）。報告がなければ出さない
+function appraiserNote(qd, t) {
+  const name = `${t.id}-appraiser.md`;
+  if (!qd.q.reports.includes(name)) return null;
+  const txt = reportText(qd.id, name), lines = txt ? excerpt(txt, 6) : [];
+  return h('div', { class: 'apnote', role: 'note', 'aria-label': '鑑定士の指摘' },
+    h('div', null, h('b', null, '鑑定士の指摘'), '　', h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(qd.id, `reports/${name}`); } }, name)),
+    txt === null ? h('p', { class: 'fine', style: 'margin:4px 0 0' }, '読み込み中…')
+      : lines.length ? h('ul', null, lines.map((l) => h('li', null, l))) : h('p', { class: 'fine', style: 'margin:4px 0 0' }, '報告を読めませんでした。ファイル名を押して開いてください。'));
+}
+
 function letterFor(qd, a) {
   const k = a.key;
   if (a.sent) return h('section', { class: 'letter sentbox' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '送信済み'),
@@ -724,7 +717,7 @@ function letterFor(qd, a) {
   if (a.kind === 'approve') {
     return h('section', { class: 'letter', 'aria-label': '計画の承認' }, seal('印'),
       h('div', { class: 'kick' }, 'お願い：承認'), h('h3', null, 'この計画で進めてよいですか'),
-      h('p', null, `地図師が、依頼を ${qd.total} つの Todo に分けました。下の「道のり」を確かめて、承認してください。日付（予定日・締切）も、下で確かめて直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
+      h('p', null, `地図師が、依頼を ${qd.total} つの Todo に分けました。下の「道のり」タブで Todo と合格基準を確かめて、承認してください。日付は「日付」タブで直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
       h('label', { class: 'lbl', for: k + 'fix' }, '直してほしいこと（直す場合だけ）'),
       (() => { const t = textarea(k + ':fix', { id: k + 'fix', placeholder: '例：T2 の前に、資料を共有する Todo を足してほしい' }); return t; })(),
       h('div', { class: 'btns' },
@@ -762,6 +755,7 @@ function letterFor(qd, a) {
   return h('section', { class: 'letter danger', 'aria-label': '失敗の判断' }, seal('急', 'ng'),
     h('div', { class: 'kick' }, `困りごと：${t.id} ができませんでした`), h('h3', null, 'どう進めるか、選んでください'),
     h('p', null, `${t.id}「${t.title}」ができませんでした。` + (deps.length ? `これに続く ${names} は止まっています。` : '')),
+    appraiserNote(qd, t),
     radio(k + 'h', hk, 'drop', deps.length ? `${t.id} と、それに続く ${names} もやめる` : `${t.id} をやめる`, deps.length ? `${names} は実行しません。ほかの Todo の成果物は残ります。` : 'この Todo を計画から外します。', '', 'drop'),
     deps.length ? radio(k + 'h', hk, 'skip', `${t.id} だけやめて、${names} は進める`, `${names} を実行します。`, `注意：${names} は ${t.id} が前提です。${t.id} の結果がないまま進みます。`, 'drop') : null,
     radio(k + 'h', hk, 'replan', '計画を直す', 'たとえば「修正をもらってから、もう一度やる」Todo を足します。', '', 'drop'),
@@ -829,16 +823,82 @@ function questDatesRow(qd) {
   return h('div', { class: 'duerow' }, h('span', { class: 'dl' }, '依頼の開始日'), h('span', null, p.start || 'なし'), h('span', { class: 'dl' }, '締切'), h('span', null, p.due || 'なし'),
     editable ? [st, du, btn] : null);
 }
-function todoTags(qd) {
-  return qd.todos.map((t) => h('article', { class: 'tag' + (overdue(t, Date.now()) ? ' over' : '') },
-    h('div', { class: 'row' }, h('span', { class: 'tid' }, t.id), h('span', { class: 'ttl' }, t.title), stampEl(t.stamp, t.cls)),
-    h('div', { class: 'kind' }, (t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動で実行（実行前に確認）' : '自動で実行') + '　前提：' + ((t.deps || []).join('・') || 'なし')),
-    t.confirm ? h('div', { class: 'lock' }, '実行の直前に、もう一度お聞きします') : null,
-    dueRow(qd, t),
-    t.instruction && t.kind === 'human' ? h('p', { class: 'fine', style: 'white-space:pre-wrap;margin:6px 0' }, t.instruction) : null,
-    (() => { const c = t.criteria || {}; const d = h('details', { open: !!S.open['c:' + qd.id + t.id] }, h('summary', null, '合格基準を見る'),
-      h('dl', { class: 'c' }, h('dt', null, '観点'), h('dd', null, c.viewpoint || ''), h('dt', null, '合格ライン'), h('dd', null, c.pass_line || ''), h('dt', null, '確かめ方'), h('dd', null, c.check || '')));
-      d.addEventListener('toggle', () => { S.open['c:' + qd.id + t.id] = d.open; }); return d; })()));
+// ---- 詳細パネルのタブ（道のり／日付／インプット）と、報告の読み込み
+const DTABS = [['way', '道のり'], ['dates', '日付'], ['inputs', 'インプット']];
+// 報告のファイル（reports/<Todo>-<役>.md）。道のりの行に、この順で並べる
+const REPORT_ROLES = [['adventurer', '冒険者'], ['scout', '斥候'], ['verify-scout', '斥候（出典の確認）'], ['user', 'あなた'], ['appraiser', '鑑定士']];
+function reportsOf(qd, tid) { return REPORT_ROLES.map(([r, label]) => ({ name: `${tid}-${r}.md`, label })).filter((x) => qd.q.reports.includes(x.name)); }
+// 報告の中身は、行を開いたとき・判断の手紙を出すときだけ読む（S.rcache に覚える。null は読み込み中、'' は読めなかった）
+function reportText(qid, name) {
+  const path = `${qid}/reports/${name}`;
+  if (!(path in S.rcache)) {
+    S.rcache[path] = null;
+    Promise.resolve(S.fs.readText(path)).then((t) => { S.rcache[path] = t == null ? '' : t; }, () => { S.rcache[path] = ''; }).then(() => { if (!S.composing) render(); });
+  }
+  return S.rcache[path];
+}
+// 報告の抜粋：フロントマターを除いた、空でない最初の n 行（見出し・箇条書きの記号は外す）
+function excerpt(text, n) {
+  const body = String(text || '').replace(/^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+  return body.split(/\r?\n/).map((l) => l.replace(/^\s*(?:#+|[-*>]|\d+\.)\s*/, '').trim()).filter(Boolean).slice(0, n);
+}
+function critList(t) {
+  const c = t.criteria || {};
+  return h('dl', { class: 'c' }, h('dt', null, '観点'), h('dd', null, c.viewpoint || ''), h('dt', null, '合格ライン'), h('dd', null, c.pass_line || ''), h('dt', null, '確かめ方'), h('dd', null, c.check || ''));
+}
+function reportLine(qd, r) {
+  const rel = `${qd.id}/reports/${r.name}`, txt = reportText(qd.id, r.name), lines = txt ? excerpt(txt, 3) : [];
+  return h('div', { class: 'rep' },
+    h('div', { class: 'reph' }, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(qd.id, `reports/${r.name}`); } }, r.name), h('span', { class: 'fine' }, r.label),
+      h('span', { class: 'acts' },
+        h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${r.name} のパスをコピー`, onclick: () => copyPath(rel) }, 'パスをコピー'))),
+    txt === null ? h('p', { class: 'fine', style: 'margin:2px 0 0' }, '読み込み中…') : lines.length ? h('p', { class: 'repx' }, lines.join(' ／ ')) : null);
+}
+function todoRow(qd, t) {
+  const key = `${qd.id}:${t.id}`, open = S.openTodo === key, over = overdue(t, Date.now()), warns = dateIssues(qd.q.plan, t), reps = open ? reportsOf(qd, t.id) : [];
+  return h('div', { class: 'td' + (open ? ' open' : '') + (over ? ' over' : '') },
+    h('button', { type: 'button', class: 'tdrow', 'aria-expanded': String(open), 'aria-controls': `td-${key}`, 'data-key': 'td:' + key, onclick: () => { S.openTodo = open ? null : key; render(); } },
+      h('span', { class: 'tid' }, t.id),
+      h('span', { class: 'tdt' }, h('span', { class: 'kind' }, t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動（実行前に確認）' : '自動'), h('b', null, t.title)),
+      h('span', { class: 'tdd' }, '予定 ', t.scheduled || '—'),
+      h('span', { class: 'tdd' + (over ? ' late' : '') }, '締切 ', t.due || '—'),
+      h('span', { class: 'tds' }, stampEl(t.stamp, t.cls)), h('span', { class: 'caret', 'aria-hidden': 'true' }, open ? '▲' : '▼')),
+    warns.length ? h('p', { class: 'tdwarn' }, warns.join(' ')) : null,
+    open ? h('div', { class: 'tdbody', id: `td-${key}` },
+      h('div', { class: 'tdcrit' }, h('b', { class: 'cap' }, '合格基準'), critList(t)),
+      t.kind === 'human' && t.instruction ? h('p', { class: 'fine', style: 'white-space:pre-wrap;margin:6px 0' }, t.instruction) : null,
+      t.confirm ? h('p', { class: 'lock' }, '実行の直前に、もう一度お聞きします') : null,
+      h('div', { class: 'tdrep' }, h('b', { class: 'cap' }, '報告'),
+        reps.length ? reps.map((r) => reportLine(qd, r)) : h('p', { class: 'fine', style: 'margin:4px 0 0' }, 'まだ報告はありません。'))) : null);
+}
+function wayTab(qd) {
+  if (!qd.todos.length) return h('p', { class: 'sub' }, 'Todo はありません。');
+  const cur = qd.todos.find((t) => S.openTodo === `${qd.id}:${t.id}`);
+  return h('div', { class: 'waygrid' },
+    h('div', { class: 'waylist' }, h('p', { class: 'fine', style: 'margin:0 0 6px' }, '行を開くと、合格基準と報告が読めます。日付を直すときは「日付」タブへ。'), qd.todos.map((t) => todoRow(qd, t))),
+    h('aside', { class: 'critside', 'aria-label': '選んだ Todo の合格基準' },
+      cur ? [h('b', null, `${cur.id} の合格基準`), critList(cur)] : h('p', { class: 'fine', style: 'margin:0' }, '行を開くと、ここに合格基準が出ます。')));
+}
+// 日付タブ（Task 9 で、このクエストのガントと日付の表に置き換える）。今は、依頼と Todo ごとの日付の欄を並べる
+function datesTab(qd) {
+  return [questDatesRow(qd), qd.todos.map((t) => h('div', { class: 'tag' }, h('div', { class: 'row' }, h('span', { class: 'tid' }, t.id), h('span', { class: 'ttl' }, t.title)), dueRow(qd, t)))];
+}
+// インプットタブ（Task 10 で、追加・外す・既存から選ぶを足す）。今は、計画のインプットを読むだけ
+function inputsTab(qd) {
+  if (!qd.inputs.length) return h('p', { class: 'sub' }, 'このクエストのインプットはありません。');
+  return h('ul', { class: 'flist' }, qd.inputs.map((x) => h('li', null, h('span', null, h('b', null, x.name), ' ', stampEl(x.source === 'user' ? '指定' : '自動', x.source === 'user' ? 'sd-ok sm' : 'sd-run sm'),
+    x.reason ? h('span', { class: 'fine', style: 'display:block' }, x.reason) : null))));
+}
+function detailTabs(qd) {
+  if (!DTABS.some(([k]) => k === S.dtab)) S.dtab = 'way';
+  const badge = { way: qd.total, dates: 0, inputs: qd.inputs.length };
+  const pick = (k) => { S.dtab = k; render(); const b = document.getElementById('dtab-' + k); if (b) b.focus(); };
+  const keys = (e, i) => { const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (d) { e.preventDefault(); pick(DTABS[(i + d + DTABS.length) % DTABS.length][0]); } };
+  const body = S.dtab === 'dates' ? datesTab(qd) : S.dtab === 'inputs' ? inputsTab(qd) : wayTab(qd);
+  return [h('div', { class: 'dtabs', role: 'tablist', 'aria-label': `${qd.id} の詳細` }, DTABS.map(([k, l], i) =>
+      h('button', { type: 'button', role: 'tab', id: 'dtab-' + k, 'aria-selected': String(S.dtab === k), 'aria-controls': 'dtab-panel', tabindex: S.dtab === k ? '0' : '-1', onclick: () => pick(k), onkeydown: (e) => keys(e, i) },
+        l, badge[k] ? h('span', { class: 'n' }, badge[k]) : null))),
+    h('div', { class: 'dpanel', role: 'tabpanel', id: 'dtab-panel', 'aria-labelledby': 'dtab-' + S.dtab }, body)];
 }
 
 function abortBlock(qd) {
@@ -855,13 +915,7 @@ function abortBlock(qd) {
 }
 
 function questDetail(qd) {
-  return h('div', { class: 'qbody' },
-    qd.asks.map((a) => letterFor(qd, a)), infoLetter(qd),
-    qd.todos.length ? [h('h3', { class: 'sec' }, '道のり'), questDatesRow(qd),
-      h('div', { class: 'way', 'aria-label': 'Todo の順序' }, qd.todos.flatMap((t, i) => [i ? h('span', { 'aria-hidden': 'true' }, '→') : null, h('span', { class: 'n' + (t.kind === 'human' ? ' h' : '') }, `${t.id} ${t.title.length > 12 ? t.title.slice(0, 12) + '…' : t.title}`)])),
-      h('h3', { class: 'sec' }, 'タイムライン'), ganttBlock(qd),
-      todoTags(qd)] : null,
-    abortBlock(qd));
+  return h('div', { class: 'qbody' }, qd.asks.map((a) => letterFor(qd, a)), infoLetter(qd), qd.q.plan ? detailTabs(qd) : null, abortBlock(qd));
 }
 
 // ============================================================ クエスト進捗（ガント）
@@ -1051,7 +1105,7 @@ function boardList(m) {
   return { q, f, counts, open, closed, nav: S.showClosed ? [...open, ...closed] : open };
 }
 function selectQuest(id) {
-  S.sel = id; S.pane = 'detail'; render();
+  S.sel = id; S.pane = 'detail'; S.openTodo = null; render();
   const el = document.querySelector('.qpanel'), bar = document.querySelector('.tabs');
   if (el) { const top = el.getBoundingClientRect().top - (bar ? bar.offsetHeight : 0) - 8; if (top < 0 || top > window.innerHeight * 0.6) window.scrollTo(0, window.scrollY + top); }
 }
@@ -1191,21 +1245,6 @@ function boardTab() {
   const L = boardList(m);
   out.push(h('div', { class: `qb${S.listOpen ? '' : ' nolist'} pane-${S.pane}` }, questListPane(m, L), questPanel(m, L)));
   return out;
-}
-
-function ganttBlock(x) {
-  const g = ganttOf(x);
-  if (!g) return h('p', { class: 'sub' }, '記録がまだありません（計画ができて、動き出すと表示されます）。');
-  const pc = (v) => ((v - g.lo) / (g.hi - g.lo) * 100).toFixed(2) + '%';
-  const lab = (ms) => { const d = new Date(ms); return (g.long ? `${d.getMonth() + 1}/${d.getDate()} ` : '') + `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-  return h('section', { class: 'gantt', 'aria-label': `${x.id} のタイムライン` },
-    h('div', { class: 'legend2', 'aria-label': '凡例' }, [['adv', '冒険者が作業中'], ['app', '鑑定中'], ['me', 'あなたの番（待ち）'], ['conf', '実行前の確認待ち'], ['ng', 'できず'], ['blk', '止まっている']].map(([k, l]) => h('span', null, h('i', { class: `sw s-${k}` }), l))),
-    h('div', { class: 'gx' }, h('div', { class: 'glab' }), h('div', { class: 'gtrack axis' }, g.ticks.map((v) => h('span', { class: 'tick', style: `left:${pc(v)}` }, lab(v))))),
-    g.rows.map((r) => h('div', { class: 'gx' }, h('div', { class: 'glab' }, h('b', null, r.label), h('span', { class: 'sub' }, r.sub)),
-      h('div', { class: 'gtrack' }, r.bars.map((b) => { const w = (b.b - b.a) / (g.hi - g.lo) * 100;
-        return h('span', { class: `bar2 s-${b.kind}`, style: `left:${pc(b.a)};width:${Math.max(w, 0.6).toFixed(2)}%`, title: `${b.text}　${lab(b.a)}〜${lab(b.b)}` }, w >= 9 ? b.text : ''); }),
-        g.now != null ? h('span', { class: 'nowline', style: `left:${pc(g.now)}` }) : null))),
-    g.now != null ? h('p', { class: 'sub', style: 'margin:6px 0 0;padding-left:150px' }, '赤い線が「いま」です。') : null);
 }
 
 function searchBox(key, placeholder) {
@@ -1625,7 +1664,7 @@ async function refresh(force) {
     // 資料を開いている間も作り直さない（読んでいる位置が上に戻ってしまう）。閉じたあとの次の更新で反映する
     if (!force && key !== S.dataKey && (isEditing() || S.reader || S.fallback)) return;
     if (force || key !== S.dataKey) {
-      S.dataKey = key; S.model = buildModel(raw);
+      S.dataKey = key; S.model = buildModel(raw); S.rcache = {};  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
       const ids = S.model.quests.map((x) => x.id);
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
       render();
@@ -1687,7 +1726,7 @@ function demoTree(scene) {
   if (scene === 'human') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' });
   if (scene === 'confirm' || isDone) h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(59), id: 'T2', event: 'passed', from: 'review', to: 'done' }, { t: at(59), id: 'T3', event: 'deps_done', from: 'pending', to: 'awaiting_confirm' });
   if (isDone) h1.push({ t: at(55), id: 'T3', event: 'confirmed', from: 'awaiting_confirm', to: 'running' }, { t: at(54), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(53), id: 'T3', event: 'passed', from: 'review', to: 'done' });
-  if (scene === 'failed') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'reported_failed', from: 'waiting_user', to: 'failed' }, { t: at(60), id: 'T3', event: 'dep_failed', from: 'pending', to: 'blocked' });
+  if (scene === 'failed') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(62), id: 'T2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(60), id: 'T2', event: 'rejected', from: 'review', to: 'failed' }, { t: at(60), id: 'T3', event: 'dep_failed', from: 'pending', to: 'blocked' });
   const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', approved, status: 'active', accepted: scene === 'done' || scene === 'archive', history: h1,
     todos: [mk('T1', 'notes.txt を読み、要点を3行にまとめた digest.md を作る', 'auto', [], S3[0][0], t1c), mk('T2', '上司に口頭で内容を共有し、了承をもらう', 'human', ['T1'], S3[1][0], t2c), mk('T3', 'digest.md を publish フォルダにコピーして公開する', 'auto', ['T2'], S3[2][0], t3c, { confirm: true })] };
   const day = 24 * 60, p2 = { quest: 'Q002', title: '議事録のテンプレートを3種類比べる', approved: true, status: 'active', accepted: true,
@@ -1701,6 +1740,7 @@ function demoTree(scene) {
   p2.start = d0(-10); p2.due = d0(-3); p2.todos.forEach((t, i) => { t.scheduled = d0(-9 + i * 2); t.due = d0(-8 + i * 2); });
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
+  if (scene === 'failed') { rep['T2-user.md'] = T('# T2 の結果\nできた：上司に口頭で共有した\nメモ：返事は「検討する」だった'); rep['T2-appraiser.md'] = T('---\ntodo: T2\n---\n# T2 の鑑定\n## 判定\n不合格\n## 指摘\n- 合格ラインの「了承する」という返事が、報告にない\n- 返事は「検討する」で、了承ではない\n- やり直しの回数（1回）を超えた\n## 未確認\n- なし'); }
   return {
     'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
     deliverables: { 'Q001_report.md': T('見本'), 'Q001_スライド.prompt.md': T('---\ntype: prompt\n---\n# PowerPoint 5枚を作って…'), 'Q002_comparison.md': T('見本') },
