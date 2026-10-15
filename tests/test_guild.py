@@ -1661,6 +1661,10 @@ class BoardPathsTest(unittest.TestCase):
         self.assertNotIn("guild/${path}", self.board)
         self.assertNotIn("guild/${qid}", self.board)
 
+    def test_board_sends_the_date_inputs(self):
+        for needle in ("type: 'due', todo: t.id, scheduled:", "type: 'due', start:", "function questDatesRow(", "function dateIssues("):
+            self.assertIn(needle, self.board)
+
 
 if __name__ == "__main__":
     unittest.main()

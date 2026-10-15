@@ -452,6 +452,15 @@ const TSTATE = {
 const closed = (s) => s === 'done' || s === 'skipped';
 // 期限は日付だけ。その日の終わり（ローカル時刻の 23:59:59.999）を過ぎたら期限切れ。済んだ Todo には付けない
 const overdue = (t, nowMs) => !!t.due && !closed(t.state) && nowMs > new Date(t.due + 'T23:59:59.999').getTime();
+// 日付の矛盾は警告にとどめる（遷移には使わない）。YYYY-MM-DD は文字列のまま比べられる
+function dateIssues(plan, t) {
+  const out = [], s = t.scheduled, d = t.due;
+  if (s && plan.start && s < plan.start) out.push(`予定日が依頼の開始日（${plan.start}）より前です。`);
+  if (s && d && s > d) out.push('予定日が締切より後です。');
+  if (d && plan.due && d > plan.due) out.push(`締切が依頼の締切（${plan.due}）より後です。`);
+  for (const id of t.deps || []) { const u = plan.todos.find((x) => x.id === id); if (u && u.scheduled && s && u.scheduled > s) out.push(`前提 ${id} の予定日（${u.scheduled}）より前です。`); }
+  return out;
+}
 
 function dependents(plan, id) {
   const set = new Set([id]); let grew = true;
@@ -476,8 +485,7 @@ function derive(q) {
   d.todos = p.todos.map((t) => {
     const st = TSTATE[t.state] || [t.state, 'sd-wait'];
     const draft = !p.approved && t.state === 'pending';
-    const waitDue = q.inbox.filter((x) => x.type === 'due' && x.todo === t.id).slice(-1)[0];
-    return { ...t, stamp: draft ? '案' : st[0], cls: draft ? 'sd-draft' : st[1], dueWait: waitDue ? waitDue.due : undefined };
+    return { ...t, stamp: draft ? '案' : st[0], cls: draft ? 'sd-draft' : st[1] };
   });
   d.total = p.todos.length; d.done = p.todos.filter((t) => closed(t.state)).length;
   d.allDone = d.total > 0 && d.done === d.total;
@@ -716,7 +724,7 @@ function letterFor(qd, a) {
   if (a.kind === 'approve') {
     return h('section', { class: 'letter', 'aria-label': '計画の承認' }, seal('印'),
       h('div', { class: 'kick' }, 'お願い：承認'), h('h3', null, 'この計画で進めてよいですか'),
-      h('p', null, `地図師が、依頼を ${qd.total} つの Todo に分けました。下の「道のり」を確かめて、承認してください。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
+      h('p', null, `地図師が、依頼を ${qd.total} つの Todo に分けました。下の「道のり」を確かめて、承認してください。日付（予定日・締切）も、下で確かめて直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
       h('label', { class: 'lbl', for: k + 'fix' }, '直してほしいこと（直す場合だけ）'),
       (() => { const t = textarea(k + ':fix', { id: k + 'fix', placeholder: '例：T2 の前に、資料を共有する Todo を足してほしい' }); return t; })(),
       h('div', { class: 'btns' },
@@ -784,22 +792,42 @@ function infoLetter(qd) {
 
 function dueRow(qd, t) {
   const p = qd.q.plan, key = `due:${qd.id}:${t.id}`, over = overdue(t, Date.now());
-  const reqDue = qd.q.request && qd.q.request.due;
-  const pick = S.form[key] !== undefined ? S.form[key] : (t.due || '');
-  const inp = h('input', { type: 'date', 'aria-label': `${t.id} の期限` }); inp.value = pick; bindKey(inp, key);
   const editable = p.status === 'active' || p.status === undefined;
+  const cur = (f) => (S.form[`${key}:${f}`] !== undefined ? S.form[`${key}:${f}`] : (t[f] || ''));
+  const mk = (f, label) => { const i = h('input', { type: 'date', 'aria-label': `${t.id} の${label}` }); i.value = cur(f); bindKey(i, `${key}:${f}`); return i; };
+  const sch = mk('scheduled', '予定日'), due = mk('due', '締切');
   const warn = h('p', { class: 'dwarn' });
-  const btn = h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => { await send(qd.id, { type: 'due', todo: t.id, due: (S.form[key] !== undefined ? S.form[key] : (t.due || '')) || null }, key); delete S.form[key]; render(); } });
+  const btn = h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => {
+    const body = { type: 'due', todo: t.id, scheduled: sch.value || t.scheduled, due: due.value || null };
+    await send(qd.id, body, key); delete S.form[`${key}:scheduled`]; delete S.form[`${key}:due`]; render(); } });
   // 入力中に描き直すと、日付の欄の入力位置が先頭に戻る。ボタンと注意文だけをその場で直す
-  const sync = (v) => { btn.disabled = S.conn !== 'ok' || v === (t.due || ''); btn.textContent = v || !t.due ? '期限を設定' : '期限を解除';
-    warn.textContent = v && reqDue && v > reqDue ? `依頼の期限（${reqDue}）より後の日付です。` : ''; warn.hidden = !warn.textContent; };
-  inp.addEventListener('change', () => { S.form[key] = inp.value; sync(inp.value); });
-  sync(pick);
+  const sync = () => {
+    const probe = { ...t, scheduled: sch.value || t.scheduled, due: due.value || null };
+    btn.disabled = S.conn !== 'ok' || (probe.scheduled === t.scheduled && probe.due === (t.due || null));
+    btn.textContent = '日付を設定';
+    warn.textContent = dateIssues(p, probe).join(' '); warn.hidden = !warn.textContent;
+  };
+  for (const i of [sch, due]) i.addEventListener('change', () => { S.form[`${key}:${i === sch ? 'scheduled' : 'due'}`] = i.value; sync(); });
+  sync();
+  const pend = qd.q.inbox.filter((x) => x.type === 'due' && x.todo === t.id).slice(-1)[0];
   return h('div', { class: 'duerow' },
-    h('span', { class: 'dl' }, '期限'), h('span', null, t.due ? t.due : 'なし'), over ? stampEl('期限切れ', 'sd-ng') : null,
-    t.dueWait !== undefined ? [stampEl(t.dueWait ? `反映待ち（${t.dueWait}）` : '反映待ち（解除）', 'sd-turn')] : null,
-    editable ? [inp, btn] : null,
-    editable ? warn : null);
+    h('span', { class: 'dl' }, '予定日'), h('span', null, t.scheduled || 'なし'), h('span', { class: 'dl' }, '締切'), h('span', null, t.due || 'なし'),
+    over ? stampEl('期限切れ', 'sd-ng') : null, pend ? stampEl('反映待ち', 'sd-turn') : null,
+    editable ? [sch, due, btn] : null, editable ? warn : null);
+}
+function questDatesRow(qd) {
+  const p = qd.q.plan, key = `qdates:${qd.id}`;
+  const editable = p.status === 'active' || p.status === undefined;
+  const cur = (f) => (S.form[`${key}:${f}`] !== undefined ? S.form[`${key}:${f}`] : (p[f] || ''));
+  const mk = (f, label) => { const i = h('input', { type: 'date', 'aria-label': `依頼の${label}` }); i.value = cur(f); bindKey(i, `${key}:${f}`); return i; };
+  const st = mk('start', '開始日'), du = mk('due', '締切');
+  const btn = h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => {
+    await send(qd.id, { type: 'due', start: st.value || p.start, due: du.value || p.due }, key); delete S.form[`${key}:start`]; delete S.form[`${key}:due`]; render(); } });
+  const sync = () => { btn.disabled = S.conn !== 'ok' || ((st.value || p.start) === p.start && (du.value || p.due) === p.due); btn.textContent = '依頼の日付を設定'; };
+  for (const i of [st, du]) i.addEventListener('change', () => { S.form[`${key}:${i === st ? 'start' : 'due'}`] = i.value; sync(); });
+  sync();
+  return h('div', { class: 'duerow' }, h('span', { class: 'dl' }, '依頼の開始日'), h('span', null, p.start || 'なし'), h('span', { class: 'dl' }, '締切'), h('span', null, p.due || 'なし'),
+    editable ? [st, du, btn] : null);
 }
 function todoTags(qd) {
   return qd.todos.map((t) => h('article', { class: 'tag' + (overdue(t, Date.now()) ? ' over' : '') },
@@ -833,7 +861,7 @@ function questDetail(qd) {
   return h('div', { class: 'detail' },
     h('div', { class: 'bar', role: 'img', 'aria-label': `${qd.done} / ${qd.total}` }, h('span', { style: `width:${pct}%` })),
     letters, info,
-    qd.todos.length ? [h('h3', { class: 'sec' }, '道のり'),
+    qd.todos.length ? [h('h3', { class: 'sec' }, '道のり'), questDatesRow(qd),
       h('div', { class: 'way', 'aria-label': 'Todo の順序' }, qd.todos.flatMap((t, i) => [i ? h('span', { 'aria-hidden': 'true' }, '→') : null, h('span', { class: 'n' + (t.kind === 'human' ? ' h' : '') }, `${t.id} ${t.title.length > 12 ? t.title.slice(0, 12) + '…' : t.title}`)])),
       h('h3', { class: 'sec' }, 'タイムライン'), ganttBlock(qd),
       todoTags(qd)] : null,
@@ -1573,6 +1601,9 @@ function demoTree(scene) {
       { t: at(day + 79), id: 'T3', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 60), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 58), id: 'T3', event: 'passed', from: 'review', to: 'done' }],
     todos: [mk('T1', 'テンプレートを3種類集める', 'auto', [], 'done', t1c), mk('T2', '観点表をつくって比べる', 'auto', ['T1'], 'done', t1c), mk('T3', '比較表にまとめる', 'auto', ['T2'], 'done', t1c)] };
   p1.todos[0].due = '2026-10-01'; p1.todos[1].due = '2026-12-31'; p1.todos[2].deliverable = true; p2.todos[2].deliverable = true;
+  const d0 = (n) => new Date(now + n * 86400000).toISOString().slice(0, 10);
+  p1.start = d0(-2); p1.due = d0(5); p1.todos.forEach((t, i) => { t.scheduled = d0(i); t.due = t.due || d0(i + 1); });
+  p2.start = d0(-10); p2.due = d0(-3); p2.todos.forEach((t, i) => { t.scheduled = d0(-9 + i * 2); t.due = d0(-8 + i * 2); });
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   return {
