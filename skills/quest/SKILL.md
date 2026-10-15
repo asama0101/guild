@@ -76,7 +76,7 @@ disable-model-invocation: true
    - 受付待ちの依頼（`kind` が `request`）→ 手順1で受け付け、手順2へ。
    - 書庫への入力（`kind` が `archive`。依頼主がボードで書庫に直接登録・昇格・廃止・種類の付け替えをしたもの）→ `guild.py archive-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
    - 外部アクセスの答え（`kind` が `web`。依頼主がボードで、冒険者の WebFetch の許可・不許可や、許可リストの変更をしたもの）→ `guild.py web-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
-   - `inbox`（計画あり。登録候補への答え `archive` も含む）→ `guild.py ingest <dir>/plan.json`。拒否された入力があれば、理由を短くチャットで伝える。
+   - `inbox`（計画あり。登録候補への答え `archive` も含む）→ `guild.py ingest <dir>/plan.json`。拒否された入力があれば、理由を短くチャットで伝える。戻りの `warnings`（納品物の置き直しの失敗など）があれば、内容を伝えて `publish <dir>` を再実行する。
    - `inbox`（計画なし）→ `guild.py answers <dir>` で回答を取り出し、手順2の4へ。
 2. **進める**：計画のある依頼ごとに、`guild.py sync <plan>`、続けて `guild.py next <plan>` を実行する。`next` の各グループを次のように扱う。
 
