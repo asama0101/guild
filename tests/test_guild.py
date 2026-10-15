@@ -902,15 +902,16 @@ class ArchiveTest(unittest.TestCase):
         self.assertTrue((self.adir / "料金.md").is_file())
 
     def test_an_entry_named_index_does_not_overwrite_the_index(self):
-        rel = guild.write_entry(self.adir, self.entry(name="index", summary="s"))
-        self.assertNotEqual(rel, "index.md")
+        for nm in ("index", "Index"):
+            rel = guild.write_entry(self.adir, self.entry(name=nm, summary="s"))
+            self.assertNotEqual(rel.lower(), "index.md")
         guild.rebuild_index(self.adir)
         self.assertIn("書庫の索引", (self.adir / "index.md").read_text(encoding="utf-8"))
 
     def test_entry_path_accepts_only_flat_md_names(self):
         guild.write_entry(self.adir, self.entry(name="KPI", summary="s"))
         self.assertEqual(guild.entry_path(self.adir, "KPI.md"), self.adir / "KPI.md")
-        for bad in ("terms/KPI.md", "../x.md", "index.md", "KPI.txt", "ない.md"):
+        for bad in ("terms/KPI.md", "../x.md", "index.md", "INDEX.md", "Index.md", "KPI.txt", "ない.md"):
             with self.assertRaises(guild.GuildError):
                 guild.entry_path(self.adir, bad)
 
@@ -1096,7 +1097,7 @@ class ArchiveTest(unittest.TestCase):
             self.assertEqual(new[k], old[k], k)
         idx = (self.adir / "index.md").read_text(encoding="utf-8")
         self.assertIn("[[料金]]", idx)
-        self.assertNotIn("type: term", idx)
+        self.assertEqual(idx.count("[[料金]]"), 1)
 
     def test_retype_rejects_a_same_name_item_in_the_target(self):
         guild.write_entry(self.adir, self.entry(type="fact", name="料金", summary="別", confidence="guess"))

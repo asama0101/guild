@@ -619,7 +619,7 @@ def write_entry(adir, e, path=None):
 def entry_path(adir, rel):
     """archive/ の中の項目（フォルダなしの 名前.md）だけを指せる。索引や、外は指せない。"""
     name = str(rel).replace("\\", "/")
-    ok = "/" not in name and name.endswith(".md") and name != INDEX_NAME and ".." not in name
+    ok = "/" not in name and name.endswith(".md") and name.lower() != INDEX_NAME and ".." not in name
     p = Path(adir) / name
     if not ok or not p.is_file():
         raise GuildError(f"項目が見つかりません: {rel}")
