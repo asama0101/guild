@@ -1632,5 +1632,29 @@ class DeliverablesTest(unittest.TestCase):
         self.assertEqual(json.loads(r.stdout)["published"], ["Q001_a.md"])
 
 
+class BoardPathsTest(unittest.TestCase):
+    """ボードは、論理パスを .work/ の物理パスに写して読み書きする（画面の中のパス文字列は変えない）。"""
+
+    def setUp(self):
+        self.board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
+
+    def test_path_map_is_defined_and_used(self):
+        self.assertIn("function physical(", self.board)
+        self.assertIn("class PathMap", self.board)
+        self.assertIn("new PathMap(new RealFS(", self.board)
+        self.assertIn("new PathMap(new MemFS(", self.board)
+        for needle in (".work/archive-inbox", "'.work/$1'"):
+            self.assertIn(needle, self.board)
+
+    def test_no_format_or_unreadable_template_machinery(self):
+        for gone in ("const FORMATS", "TEMPLATE_READABLE", "tplReadable", "new:format", "納品物の形式"):
+            self.assertNotIn(gone, self.board)
+
+    def test_flat_archive_and_deliverables_are_read(self):
+        self.assertNotIn("archive/${dir}", self.board)
+        self.assertIn("S.fs.list('deliverables')", self.board)
+        self.assertIn("S.fs.list('inputs')", self.board)
+
+
 if __name__ == "__main__":
     unittest.main()

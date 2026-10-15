@@ -327,6 +327,18 @@ class MemFS {
   async remove(path) { const i = path.lastIndexOf('/'); const d = this._node(path.slice(0, i), false); if (d) delete d[path.slice(i + 1)]; }
 }
 
+// 論理パス（画面の中で使う Q001/… requests/… web/… archive/inbox/…）を、guild/ の中の物理パスに写す。
+// 機械用のファイルは guild/.work/ にある（Obsidian に出ない）。archive/ の項目、deliverables/、inputs/、templates/ はそのまま。
+const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1']];
+function physical(p) { for (const [re, to] of PHYS) if (re.test(p)) return p.replace(re, to); return p; }
+class PathMap {
+  constructor(fs) { this.fs = fs; }
+  list(p) { return this.fs.list(physical(p)); }
+  readText(p) { return this.fs.readText(physical(p)); }
+  writeText(p, t) { return this.fs.writeText(physical(p), t); }
+  writeBlob(p, b) { return this.fs.writeBlob(physical(p), b); }
+  remove(p, r) { return this.fs.remove(physical(p), r); }
+}
 const DB = {
   // 前に作られた同名のデータベースに、必要な入れ物（object store）が無いことがある。そのときは作り直す。
   async open() {
@@ -343,18 +355,8 @@ const DB = {
   async put(v) { const db = await DB.open(); return new Promise((res, rej) => { const tx = db.transaction('h', 'readwrite'); tx.objectStore('h').put(v, 'dir'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
 };
 
-// 納品物の形式。available が false のものは、まだ作れない（選べない）
-const FORMATS = [
-  { key: 'md', label: 'Markdown', ext: '.md', available: true },
-  { key: 'docx', label: 'Word', ext: '.docx', available: false },
-  { key: 'xlsx', label: 'Excel', ext: '.xlsx', available: false },
-  { key: 'pptx', label: 'PowerPoint', ext: '.pptx', available: false }
-];
-// テンプレートは、どんな形式でも追加できる。今、中身を読んで使えるのは、文字のファイルだけ
-const TEMPLATE_READABLE = ['.md', '.markdown', '.txt', '.csv'];
-const tplReadable = (n) => TEMPLATE_READABLE.some((e) => String(n).toLowerCase().endsWith(e));
-// 書庫の種類。[type, フォルダ, 見出し]
-const ARCH_TYPES = [['term', 'terms', '用語'], ['flow', 'flows', '業務フロー'], ['fact', 'facts', '業務情報'], ['personal', 'personal', '個人'], ['lesson', 'lessons', '心得']];
+// 書庫の種類。[type, 見出し]（フォルダは分けない。種類は項目の type で持つ）
+const ARCH_TYPES = [['term', '用語'], ['flow', '業務フロー'], ['fact', '業務情報'], ['personal', '個人'], ['lesson', '心得']];
 const CONF = { confirmed: ['確認済み', 'sd-ok'], sourced: ['出典あり', 'sd-run'], guess: ['推測', 'sd-draft'] };
 function parseEntry(path, text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text || '');
@@ -390,16 +392,17 @@ async function listFilesDeep(path, depth) {
 
 async function loadAll() {
   const cfg = await readJSON('config.json');
-  const top = await S.fs.list('');
+  const top = await S.fs.list('.work');
   const requests = [];
   for (const e of await S.fs.list('requests')) {
     if (e.kind === 'file' && /^R[0-9][0-9-]*\.json$/.test(e.name)) {
       const r = await readJSON(`requests/${e.name}`);
-      if (r) requests.push({ id: e.name.slice(0, -5), text: r.text || '', due: r.due || null, files: r.files || [], created: r.created || '', format: r.format || 'md', template: r.template || null });
+      if (r) requests.push({ id: e.name.slice(0, -5), text: r.text || '', due: r.due || null, files: r.files || [], created: r.created || '', template: r.template || null });
     }
   }
   requests.sort((a, b) => a.id.localeCompare(b.id));
   const quests = [];
+  const delivFiles = (await S.fs.list('deliverables')).filter((x) => x.kind === 'file' && x.name.endsWith('.md')).map((x) => x.name).sort();
   for (const e of top) {
     if (e.kind !== 'dir' || !/^Q\d+$/.test(e.name)) continue;
     const q = e.name;
@@ -416,13 +419,13 @@ async function loadAll() {
       if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', todo: null, choice: null, qs: j.answers.map((a) => a.q) }); }
     }
     const archive = await readJSON(`${q}/archive.json`);
-    quests.push({ id: q, plan, request, draft, reports, output, inbox, archive });
+    quests.push({ id: q, plan, request, draft, reports, output, inbox, archive, published: delivFiles.filter((n) => n.startsWith(q + '_')) });
   }
   quests.sort((a, b) => b.id.localeCompare(a.id));
   const archive = [];
-  for (const [, dir] of ARCH_TYPES) for (const f of await S.fs.list(`archive/${dir}`)) {
-    if (f.kind !== 'file' || !f.name.endsWith('.md')) continue;
-    const e = parseEntry(`${dir}/${f.name}`, await S.fs.readText(`archive/${dir}/${f.name}`));
+  for (const f of await S.fs.list('archive')) {
+    if (f.kind !== 'file' || !f.name.endsWith('.md') || f.name === 'index.md') continue;
+    const e = parseEntry(f.name, await S.fs.readText(`archive/${f.name}`));
     if (e) archive.push(e);
   }
   const archiveWait = (await S.fs.list('archive/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
@@ -437,7 +440,8 @@ async function loadAll() {
   const webWait = (await S.fs.list('web/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
   const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), wait: webWait };
   const templates = (await S.fs.list('templates')).filter((e) => e.kind === 'file').map((e) => e.name).sort();
-  return { requests, quests, archive, archiveWait, archiveRejected, web, templates, root: (cfg && cfg.root) || '' };
+  const inputs = (await S.fs.list('inputs')).filter((e) => e.kind === 'file').map((e) => e.name).sort();
+  return { requests, quests, archive, archiveWait, archiveRejected, web, templates: templates.filter((n) => n.toLowerCase().endsWith('.md')), inputs, root: (cfg && cfg.root) || '' };
 }
 
 // ============================================================ 読み解き
@@ -506,7 +510,7 @@ function derive(q) {
 
 function buildModel(raw) {
   const quests = raw.quests.map(derive);
-  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, templates: raw.templates, quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, templates: raw.templates, inputs: raw.inputs || [], quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
@@ -614,16 +618,13 @@ function partialOutputs(qd) {
   const ok = p ? p.todos.filter((t) => t.state === 'done').map((t) => t.id) : [];
   return all.filter((f) => ok.some((i) => f.startsWith(`${qd.id}/output/${i}/`)));
 }
-// 納品物は、依頼主に渡す資料（地図師が deliverable の印を付けた Todo の成果物）。途中の成果物は材料
+// 納品物は、全 Todo が済んだ時に guild.py が guild/deliverables/ に置いたもの（Q###_…）。output/ の中のファイルは材料
 function deliverables(qd) {
-  const p = qd.q.plan, all = qd.q.output;
-  const ids = p ? p.todos.filter((t) => t.deliverable).map((t) => t.id) : [];
-  if (!ids.length) return { main: all, rest: [] };
-  const mine = (f) => ids.some((i) => f.startsWith(`${qd.id}/output/${i}/`));
-  return { main: all.filter(mine), rest: all.filter((f) => !mine(f)) };
+  const main = (qd.q.published || []).map((n) => 'deliverables/' + n);
+  return { main, rest: qd.q.output };
 }
 function fileRow(f, label) {
-  return h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, label || f.replace(/^Q\d+\/output\//, '')),
+  return h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, label || f.replace(/^(Q\d+\/output\/|deliverables\/)/, '')),
     h('span', { class: 'acts' },
       h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} を開く`, onclick: () => openFile(f) }, '開く'),
       h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} のパスをコピー`, onclick: () => copyPath(f) }, 'パスをコピー')));
@@ -635,11 +636,10 @@ function keepOpen(key, ...kids) {
   return d;
 }
 function deliverableBlock(qd) {
-  const d = deliverables(qd), fmt = FORMATS.find((x) => x.key === ((qd.q.plan && qd.q.plan.format) || 'md'));
+  const d = deliverables(qd);
   return [
-    d.main.length ? h('ul', { class: 'flist' }, d.main.map(fileRow)) : h('p', null, '納品物のファイルはありません（報告だけです）。'),
-    fmt ? h('p', { class: 'fine', style: 'margin:0 0 8px' }, `形式：${fmt.label}（${fmt.ext}）　「パスをコピー」は、フルパスでコピーします。`) : null,
-    d.rest.length ? keepOpen('rest:' + qd.id, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map(fileRow))) : null];
+    d.main.length ? h('ul', { class: 'flist' }, d.main.map((f) => fileRow(f))) : h('p', null, qd.allDone ? '納品物は準備中です（数秒で出ます）。' : '納品物のファイルはありません（報告だけです）。'),
+    d.rest.length ? keepOpen('rest:' + qd.id, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map((f) => fileRow(f)))) : null];
 }
 function fileField(key, label, multiple) {
   const inp = h('input', { type: 'file', 'aria-label': label }); if (multiple) inp.multiple = true;
@@ -683,7 +683,7 @@ function letterFor(qd, a) {
       sentNote(k));
   }
   if (a.kind === 'archive') {
-    const typeName = (t) => (ARCH_TYPES.find((x) => x[0] === t) || [t, t, t])[2];
+    const typeName = (t) => (ARCH_TYPES.find((x) => x[0] === t) || [t, t])[1];
     return h('section', { class: 'letter', 'aria-label': '書庫の登録候補' }, seal('書'),
       h('div', { class: 'kick' }, 'お願い：書庫に残すもの'), h('h3', null, '次の依頼で役に立てるものを、選んでください'),
       h('p', null, '司書が、この依頼から書庫に残す候補を挙げました。「登録」を選んだものだけが、書庫に入ります。推測のものは、はじめ「不要」になっています。'),
@@ -876,21 +876,20 @@ function connectBox() {
 function composer() {
   const key = 'new:text', ta = textarea(key, { id: 'qreq', rows: '2', placeholder: '困りごとや、やってほしいことを書いて、「依頼」を押してください（Ctrl + Enter でも送れます）' });
   ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendRequest(); } });
-  const due = h('input', { type: 'date', 'aria-label': '期限' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
-  const fmt = h('select', { 'aria-label': '納品物の形式' }, FORMATS.map((f) => { const o = h('option', { value: f.key }, f.available ? `${f.label}（${f.ext}）` : `${f.label}（${f.ext}）：対応予定`); if (!f.available) o.disabled = true; return o; }));
-  fmt.value = S.form['new:format'] || 'md'; bindKey(fmt, 'new:format');
-  const tplSel = h('select', { 'aria-label': '納品物のテンプレート' }, h('option', { value: '' }, 'なし'), ((S.model && S.model.templates) || []).map((n) => { const o = h('option', { value: 'templates/' + n }, tplReadable(n) ? n : `${n}（今は使えません）`); if (!tplReadable(n)) o.disabled = true; return o; }));
+  const start = h('input', { type: 'date', 'aria-label': '開始日' }); start.value = S.form['new:start'] || ''; bindKey(start, 'new:start');
+  const due = h('input', { type: 'date', 'aria-label': '締切' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
+  const tplSel = h('select', { 'aria-label': '納品物のテンプレート' }, h('option', { value: '' }, 'なし'), ((S.model && S.model.templates) || []).map((n) => h('option', { value: 'templates/' + n }, n)));
   tplSel.value = S.form['new:template'] || ''; bindKey(tplSel, 'new:template');
   const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・テンプレートをつける（任意）'),
     h('div', { class: 'qopts' },
       h('div', { class: 'fld wide' }, h('span', { class: 'cap' }, '素材ファイル'), fileField('new', '素材ファイル', true)),
       h('div', { class: 'fld wide' }, h('span', { class: 'cap' }, '納品物のテンプレート'), h('div', { class: 'trow' }, tplSel, h('span', { class: 'fine' }, 'または、新しく追加：'), fileField('newtpl', 'テンプレートを追加', false)),
-        h('span', { class: 'fine' }, (S.files.newtpl || []).length && !tplReadable(S.files.newtpl[0].name) ? '今は読めない形式です。保存だけして、この依頼では使いません。' : 'Word・Excel・PowerPoint なども追加できます（今は文字のファイルだけ使えます）。'))));
+        h('span', { class: 'fine' }, 'Markdown（.md）のテンプレートだけ追加できます。'))));
   more.addEventListener('toggle', () => { S.open.qmore = more.open; });
   return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
     h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼'),
     h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '依頼')),
-    h('div', { class: 'qopts qmain' }, fld('期限', due), fld('納品物の形式', fmt)),
+    h('div', { class: 'qopts qmain' }, fld('開始日（未指定なら登録日）', start), fld('締切（未定なら登録日）', due)),
     more,
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
     S.newNote ? h('p', { class: 'saved', role: 'status' }, S.newNote) : null,
@@ -1105,7 +1104,7 @@ function delivTab() {
   }
   out.push(h('h3', { class: 'sec' }, 'テンプレート'), h('p', { class: 'sub', style: 'margin:0 0 8px' }, '納品物の型です。新しい依頼で選ぶと、納品物はこの型に沿ってまとめられます。追加は、「掲示板」の「新しい依頼」からできます。'));
   const tpls = (m.templates || []).filter((n) => hit(q, n));
-  out.push(tpls.length ? h('ul', { class: 'flist' }, tpls.map((n) => [fileRow('templates/' + n, n + (tplReadable(n) ? '' : '（今は使えません）'))])) : h('p', { class: 'sub' }, 'テンプレートはまだありません。'));
+  out.push(tpls.length ? h('ul', { class: 'flist' }, tpls.map((n) => [fileRow('templates/' + n, n)])) : h('p', { class: 'sub' }, 'テンプレートはまだありません。'));
   return out;
 }
 
@@ -1114,7 +1113,7 @@ function sendArchive(obj, key) {
 }
 function archiveForm() {
   const edit = S.form['a:edit'] || '', key = 'a:form';
-  const sel = h('select', { id: 'a:type', 'aria-label': '種類', disabled: !!edit }, ARCH_TYPES.filter((x) => x[0] !== 'lesson').map(([t, , l]) => h('option', { value: t }, l)));
+  const sel = h('select', { id: 'a:type', 'aria-label': '種類', disabled: !!edit }, ARCH_TYPES.filter((x) => x[0] !== 'lesson').map(([t, l]) => h('option', { value: t }, l)));
   sel.value = S.form['a:type'] || 'term'; bindKey(sel, 'a:type');
   const inp = (k, ph, id) => { const e = h('input', { type: 'text', id, placeholder: ph }); e.value = S.form[k] || ''; return bindKey(e, k); };
   const reset = () => { for (const f of ['a:edit', 'a:name', 'a:aliases', 'a:summary', 'a:body', 'a:source']) S.form[f] = ''; };
@@ -1168,8 +1167,8 @@ function archiveCard(e) {
       h('div', { class: 'btns' },
         h('button', { type: 'button', class: 'btn wax', onclick: async () => { S.confirm[k] = false; await sendArchive({ type: 'deprecate', path: e.path, reason: (S.form[why] || '').trim() }, k + ':d'); } }, '廃止する'),
         h('button', { type: 'button', class: 'btn', onclick: () => { S.confirm[k] = false; render(); } }, 'やめておく'))) : null,
-    retyping ? h('div', { class: 'qa', style: 'margin-top:10px' }, h('span', { class: 'lbl' }, `いまの種類：${(ARCH_TYPES.find((x) => x[0] === e.type) || [0, 0, e.type])[2]}　→　移す先`),
-      h('div', { class: 'btns' }, ARCH_TYPES.filter(([t]) => t !== e.type && t !== 'lesson').map(([t, , l]) =>
+    retyping ? h('div', { class: 'qa', style: 'margin-top:10px' }, h('span', { class: 'lbl' }, `いまの種類：${(ARCH_TYPES.find((x) => x[0] === e.type) || [0, e.type])[1]}　→　移す先`),
+      h('div', { class: 'btns' }, ARCH_TYPES.filter(([t]) => t !== e.type && t !== 'lesson').map(([t, l]) =>
         h('button', { type: 'button', class: 'btn', onclick: async () => { S.confirm[k + ':t'] = false; await sendArchive({ type: 'retype', path: e.path, to: t }, k + ':t:' + t); } }, `${l}にする`)),
         h('button', { type: 'button', class: 'btn ghost', onclick: () => { S.confirm[k + ':t'] = false; render(); } }, 'やめておく')),
       h('p', { class: 'fine' }, '確度・出典・本文はそのままです。同じ名前の項目が移す先にあると、反映されず、元の場所のままです。')) : null);
@@ -1187,7 +1186,7 @@ function knowTab() {
     h('ul', { style: 'margin:6px 0 0' }, m.archiveRejected.map((r) => h('li', { class: 'fine' }, code(r.file), '：', r.reason)))));
   out.push(archiveForm());
   const cmp = (a, b) => String(a.name).localeCompare(String(b.name));
-  const groups = ARCH_TYPES.map(([type, , title]) => ({ type, title,
+  const groups = ARCH_TYPES.map(([type, title]) => ({ type, title,
     list: all.filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort(cmp) }));
   for (const { type, title, list } of groups) {
     const head = type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title;
@@ -1287,7 +1286,7 @@ function flowSvg() {
 // ヘルプの「役」。モデルは ROLE_MODELS（agents/*.md の model と、テストで一致を確かめている）から引く
 const ROLES = [
   ['ギルドマスター', null, '/guild:quest が動いている間、ずっと', '依頼を受け付け、役を呼び、あなたの答えを待ちます。進め方の判断（順序・遷移・やり直し）は guild.py に任せ、自分では判断しません。', '/guild:quest を動かしているセッションのモデル'],
-  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、前提・種別（自動／あなた）・確認の印・合格基準・納品物の形式を決めます。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
+  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる Todo を決めます。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
   ['冒険者', 'adventurer', '自動でできる Todo ごと', '調べる・書き写す・整理する・書く。最後のまとめの Todo では、納品物の資料を作ります。報告は reports/、成果物は output/ に書きます。'],
   ['斥候', 'scout', '動的ページを読む Todo。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
   ['鑑定士', 'appraiser', 'Todo ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、斥候に読んでもらいます。成果物は直しません。'],
@@ -1437,26 +1436,28 @@ async function sendResult(qid, t, key) {
   } catch (e) { S.fallback = { path: `guild/${qid}/inbox/files/`, text: '添付ファイルを保存できませんでした。', err: `${e.name}：${e.message}` }; render(); return; }
   await send(qid, { type: 'result', todo: t.id, ok: (S.form[key + ':ok'] || 'yes') === 'yes', note: (S.form[key + ':memo'] || '').trim(), files: names }, key);
 }
+// ローカルの今日（YYYY-MM-DD）。依頼の開始日の既定
+function localToday() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 async function sendRequest() {
   const text = (S.form['new:text'] || '').trim();
   S.newError = ''; S.newSaved = ''; S.newNote = '';
   if (!text) { S.newError = '依頼の内容を書いてください。'; render(); return; }
   if (S.conn !== 'ok') { S.newError = '保存先につながっていません。上の「フォルダを選ぶ」から選んでください。'; render(); return; }
   const id = 'R' + stamp14(new Date()).replace(/^(\d{8})/, '$1-'), files = S.files.new || [], names = [];
-  const fmtKey = S.form['new:format'] || 'md';
   const tfile = (S.files.newtpl || [])[0];
   let template = S.form['new:template'] || null;
+  const start = S.form['new:start'] || localToday();
   try {
     if (tfile) {
+      if (!tfile.name.toLowerCase().endsWith('.md')) { S.newError = 'テンプレートは Markdown（.md）だけ追加できます。'; render(); return; }
       const have = (S.model && S.model.templates) || [];
       let tn = tfile.name; if (have.includes(tn)) tn = tn.replace(/(\.[^.]*)?$/, `-${stamp14(new Date())}$1`);
-      await S.fs.writeBlob(`templates/${tn}`, tfile); template = tplReadable(tn) ? `templates/${tn}` : null;
-      if (!template) S.newNote = `テンプレート ${tn} を保存しました。形式が今は読めないため、この依頼では使いません。`;
+      await S.fs.writeBlob(`templates/${tn}`, tfile); template = `templates/${tn}`;
     }
     for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
-    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, due: S.form['new:due'] || null, format: fmtKey, template, files: names, created: new Date().toISOString() }, null, 2));
+    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due: S.form['new:due'] || null, template, files: names, created: new Date().toISOString() }, null, 2));
   } catch (e) { S.newError = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); return; }
-  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:template'] = ''; S.files.new = []; S.files.newtpl = []; S.newSaved = id;
+  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.form['new:template'] = ''; S.files.new = []; S.files.newtpl = []; S.newSaved = id;
   await refresh(true);
 }
 async function openFile(full) {
@@ -1466,9 +1467,9 @@ async function openFile(full) {
 // パスは、プロジェクトのフォルダ（config.json の root）からのフルパスにする。root がなければ、guild/ からの位置になる
 function fullPath(rel) {
   const root = S.model && S.model.root;
-  if (!root) return { text: 'guild/' + rel, full: false };
+  if (!root) return { text: 'guild/' + physical(rel), full: false };
   const sep = root.includes('\\') ? '\\' : '/';
-  return { text: [root.replace(/[\\/]+$/, ''), 'guild', ...rel.split('/')].join(sep), full: true };
+  return { text: [root.replace(/[\\/]+$/, ''), 'guild', ...physical(rel).split('/')].join(sep), full: true };
 }
 function copyPath(rel) {
   const p = fullPath(rel);
@@ -1515,7 +1516,7 @@ async function useHandle(handle) {
     try { dir = await handle.getDirectoryHandle('guild'); }
     catch (e) { S.conn = 'none'; S.connMsg = `選んだフォルダに guild/ がありません。チャットで /guild:init を先に実行してください。（選んだ場所：${handle.name}）`; render(); return false; }
   }
-  S.fs = new RealFS(dir); S.conn = 'ok'; S.connMsg = ''; S.dataKey = ''; await refresh(true); return true;
+  S.fs = new PathMap(new RealFS(dir)); S.conn = 'ok'; S.connMsg = ''; S.dataKey = ''; await refresh(true); return true;
 }
 async function pickFolder() {
   try {
@@ -1534,6 +1535,14 @@ async function reconnect() {
 }
 
 // ============================================================ 見本
+// 見本の木（論理パスの形）を、物理パスの形（.work/ の下）に並べ替える
+function toPhysicalTree(t) {
+  const out = { ...t }, w = {};
+  for (const k of Object.keys(t)) if (/^(Q\d+|requests|web)$/.test(k)) { w[k] = t[k]; delete out[k]; }
+  if (t.archive && t.archive.inbox) { w['archive-inbox'] = t.archive.inbox; out.archive = { ...t.archive }; delete out.archive.inbox; }
+  out['.work'] = w;
+  return out;
+}
 function demoTree(scene) {
   const now = Date.now(), at = (min) => new Date(now - min * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
   const J = (o) => ({ __t: JSON.stringify(o), __m: now }), T = (s) => ({ __t: s, __m: now });
@@ -1567,7 +1576,8 @@ function demoTree(scene) {
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   return {
-    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, archive: { terms: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。') }, flows: {}, facts: {}, personal: { '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。') }, lessons: {}, inbox: {} },
+    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
+    deliverables: { 'Q002_comparison.md': T('見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
     Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md' }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }
@@ -1594,7 +1604,7 @@ async function start() {
     S.lastInput = Date.now();
     const k = e.target.dataset && e.target.dataset.key;
     if (k && e.target.type !== 'radio' && e.target.type !== 'checkbox') S.form[k] = e.target.value;
-    if (k === 'new:format' || (k && k.startsWith('f:') && !S.composing)) render();
+    if ((k && k.startsWith('f:') && !S.composing)) render();
   });
   document.addEventListener('change', (e) => {
     const t = e.target, k = t.dataset && t.dataset.key;
@@ -1602,9 +1612,9 @@ async function start() {
     if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
     if (k && t.type === 'date') S.form[k] = t.value;
   });
-  window.__guildBoard = { S, render, refresh, MemFS, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
+  window.__guildBoard = { S, render, refresh, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
   if (params.has('demo')) {
-    S.demo = true; S.fs = new MemFS(demoTree(params.get('demo') || 'human')); S.conn = 'ok'; await refresh(true); return;
+    S.demo = true; S.fs = new PathMap(new MemFS(toPhysicalTree(demoTree(params.get('demo') || 'human')))); S.conn = 'ok'; await refresh(true); return;
   }
   if (!window.showDirectoryPicker) { S.conn = 'unsupported'; render(); return; }
   render();
