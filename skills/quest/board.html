@@ -19,30 +19,14 @@ body{margin:0;background:var(--bg)}
 .tabs .tools{margin-left:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-bottom:4px}
 .tabs .tools button{margin-bottom:0;min-height:38px;padding:4px 14px;border:1px solid var(--brass);border-radius:6px;background:var(--surface);color:var(--ink)}
 .tabs .tools button.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
-.lr,.quick{scroll-margin-top:70px}
-.qitem{transition:opacity .5s,background .5s}
-/* 集中表示：目次などから選んだ依頼の票（行と中身）は明るいまま、ほかの票を暗く保つ。解除するまで残る */
-.ledger.focusing .qitem:not(.hit){opacity:.22}
-.ledger.focusing .qitem:not(.hit):hover{opacity:.6}
-.qitem.hit{position:relative;z-index:2;background:var(--surface)}.qitem.hit .lr:focus-visible{outline:0}
-@media (prefers-reduced-motion:reduce){.qitem{transition:none}}
+.quick{scroll-margin-top:70px}
 .tabs button{font:inherit;font-weight:700;min-height:44px;padding:6px 22px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--banner);color:var(--banner-ink);cursor:pointer;margin-bottom:-2px}
 .tabs button.on{background:var(--paper);color:var(--ink);border-color:var(--line)}
 .panel{background:var(--paper);border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;padding:22px 26px 30px}
 .attn{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;background:var(--warn-bg);border:1px solid var(--warn);border-radius:6px;padding:8px 16px;margin-bottom:16px;font-size:14px}
 .attn b{color:var(--warn)}
 .id{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px;color:var(--sub)}
-.topline{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
-.topline .attn{flex:1 1 320px;margin:0}
 .newbtn{background:var(--seal);border-color:var(--seal-edge);color:var(--on);margin-left:auto}
-.ledger{background:var(--paper2);border:1px solid var(--line);font-size:14px}
-.lh,.lr{display:grid;grid-template-columns:86px minmax(0,1fr) 112px 70px 130px;gap:0 12px;padding:9px 14px;align-items:start;box-sizing:border-box;width:100%}
-.lh{font-size:12px;color:var(--sub);background:var(--head);border-bottom:1px solid var(--line)}
-.lr{border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;font:inherit;color:inherit;cursor:pointer}
-.lr.plain{cursor:default}
-.lr.sel{background:var(--surface);font-weight:700;box-shadow:inset 6px 0 0 var(--seal);border-bottom:0}
-.lr:not(.plain):not(.sel):hover{background:var(--surface)}
-.detail{padding:6px 24px 26px 30px;background:var(--surface);border-bottom:2px solid var(--seal)}
 .quick{background:var(--paper2);border:2px solid var(--brass);border-radius:6px;padding:14px 18px 12px;margin-bottom:16px}
 .qrow{display:flex;gap:10px;align-items:stretch}
 .qrow textarea{flex:1 1 auto;min-height:60px;margin:0}
@@ -69,7 +53,6 @@ body{margin:0;background:var(--bg)}
 .s-ng{background:var(--ng)}
 .s-blk{background:repeating-linear-gradient(45deg,var(--stripe1) 0 6px,var(--stripe2) 6px 12px);color:var(--stop);border:1px solid var(--stop-line);line-height:22px}
 .nowline{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ng)}
-@media (max-width:760px){.lh{display:none}.lr{grid-template-columns:70px 1fr}}
 .stamp{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800;font-size:13px;border:2px solid;border-radius:4px;padding:0 9px;display:inline-block;white-space:nowrap;transform:rotate(-2deg)}
 .sd-ok{color:var(--ok);border-color:var(--ok);background:var(--ok-bg)}
 .sd-ng{color:var(--ng);border-color:var(--ng)}
@@ -126,7 +109,6 @@ dl.c dd{margin:0}
 code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px}
 .kn-h{scroll-margin-top:70px}
 .tree{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border:1px solid var(--line);border-left:4px solid var(--brass);border-radius:3px;padding:12px 14px;font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12.5px;line-height:1.7;margin:6px 0}
-.filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
 .bwrap{display:grid;grid-template-columns:190px minmax(0,1fr);gap:0 20px;align-items:start}
 .bmain{min-width:0}
 .toc{position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto;border:1px solid var(--line);background:var(--paper2);font-size:13px}
@@ -142,11 +124,6 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 @media (max-width:900px){.bwrap{display:block}.toc{display:none}}
 /* 画面が広いとき（本文1100px＋左右の余白に目次が入る幅）は、目次を本文の外の左の余白に固定する */
 @media (min-width:1540px){.bwrap{display:block}.toc{position:fixed;top:70px;left:calc(50% - 760px);width:190px;max-height:calc(100vh - 90px)}}
-.fchk{display:inline-flex;align-items:center;gap:6px;font-size:13px;min-height:36px;border:1px solid var(--brass);border-radius:999px;padding:2px 12px;cursor:pointer;background:transparent}
-.fchk.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-.morebtn{min-height:34px}
-.filters button{font:inherit;font-size:13px;min-height:36px;border:1px solid var(--brass);border-radius:999px;padding:2px 14px;background:transparent;color:var(--ink);cursor:pointer}
-.filters button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .grid2{column-count:2;column-gap:16px}
 .grid2>.card{break-inside:avoid;margin:0 0 16px}
 @media (max-width:900px){.grid2{column-count:1}}
@@ -216,6 +193,50 @@ svg.gantt{display:block;min-width:720px;max-width:100%}
 svg.gantt:not(.humbars){width:100%}
 svg.humbars{min-width:0;max-width:100%}
 .plegend .lg{margin-right:12px;font-size:13px;white-space:nowrap}
+/* クエスト掲示板：左に一覧、右に詳細パネル。狭い画面（760px 未満）では、一覧と詳細を切り替える（S.pane） */
+.wrap.wide{max-width:1400px}
+.qb{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:18px;align-items:start}
+.qb.nolist{grid-template-columns:minmax(0,1fr)}
+.qb.nolist .qlist{display:none}
+.qlist{display:flex;flex-direction:column;gap:10px;min-width:0;position:sticky;top:70px;max-height:calc(100vh - 90px)}
+.qlhead{display:flex;align-items:center;gap:10px}
+.qsearch{width:100%;box-sizing:border-box;min-height:40px;padding:6px 12px;font:inherit;font-size:14px;border:1px solid var(--brass);border-radius:4px;background:var(--surface);color:var(--ink)}
+.chipbar{display:flex;flex-wrap:wrap;gap:6px}
+.chipbar button{font:inherit;font-size:13px;min-height:34px;border:1px solid var(--brass);border-radius:999px;padding:2px 12px;background:var(--paper2);color:var(--ink);cursor:pointer}
+.chipbar button[aria-pressed="true"]{background:var(--seal);border-color:var(--seal);color:var(--on)}
+.chipbar .n{margin-left:6px;font-size:12px;opacity:.85}
+.qrows{flex:1 1 auto;min-height:0;overflow:auto;border:1px solid var(--line);border-radius:4px;background:var(--paper2)}
+.qli{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:2px 10px;width:100%;box-sizing:border-box;padding:8px 12px;border:0;border-bottom:1px solid var(--line);border-left:4px solid transparent;background:transparent;text-align:left;font:inherit;font-size:13.5px;line-height:1.5;color:inherit;cursor:pointer}
+.qli:hover{background:var(--surface)}
+.qli[aria-current="true"]{background:var(--surface);border-left-color:var(--seal)}
+.qli[aria-current="true"] .tt{font-weight:700}
+.qli .id{grid-column:1;grid-row:1}
+.qli .tt{grid-column:2;grid-row:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qli .st{grid-column:3;grid-row:1;text-align:right}
+.qli .pg{grid-column:2;grid-row:2;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+.qli .pg .bar{flex:1 1 auto;margin:0;max-width:160px}
+.qli .du{grid-column:3;grid-row:2;font-size:12px;color:var(--sub);text-align:right;white-space:nowrap}
+.qli .du.late{color:var(--ng);font-weight:700}
+.qli.req{cursor:default;background:var(--surface2)}
+.qfold{display:block;width:100%;font:inherit;font-size:13px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--sub);padding:8px 12px;cursor:pointer;text-align:left}
+.qpanel{min-width:0;container-type:inline-size;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 20px 24px}
+.qtool{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-bottom:10px;border-bottom:1px dotted var(--brass);margin-bottom:12px}
+.hidebar{display:flex;flex:1 1 auto;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.hidebar .qsearch{width:auto;flex:0 1 240px;min-height:36px}
+.qhead h3{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:20px;margin:4px 0}
+.qhl{display:flex;align-items:center;gap:10px}
+.qmeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:13px;color:var(--sub)}
+.qmeta .bar{width:160px;margin:0}
+.qback{display:none}
+@media (max-width:760px){
+  .qb,.qb.nolist{grid-template-columns:minmax(0,1fr)}
+  .qlist{position:static;max-height:none}
+  .qb.pane-list .qlist{display:flex}
+  .qb.pane-list .qpanel{display:none}
+  .qb.pane-detail .qlist{display:none}
+  .qhide,.hidebar{display:none}
+  .qback{display:inline-flex}
+}
 </style>
 </head>
 <body>
@@ -371,7 +392,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, openQ: {}, openInit: false, stf: { board: {} }, kn: { cur: null }, limit: { board: 20 },
+  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, kn: { cur: null },
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -834,12 +855,8 @@ function abortBlock(qd) {
 }
 
 function questDetail(qd) {
-  const pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
-  const letters = qd.asks.map((a) => letterFor(qd, a));
-  const info = infoLetter(qd);
-  return h('div', { class: 'detail' },
-    h('div', { class: 'bar', role: 'img', 'aria-label': `${qd.done} / ${qd.total}` }, h('span', { style: `width:${pct}%` })),
-    letters, info,
+  return h('div', { class: 'qbody' },
+    qd.asks.map((a) => letterFor(qd, a)), infoLetter(qd),
     qd.todos.length ? [h('h3', { class: 'sec' }, '道のり'), questDatesRow(qd),
       h('div', { class: 'way', 'aria-label': 'Todo の順序' }, qd.todos.flatMap((t, i) => [i ? h('span', { 'aria-hidden': 'true' }, '→') : null, h('span', { class: 'n' + (t.kind === 'human' ? ' h' : '') }, `${t.id} ${t.title.length > 12 ? t.title.slice(0, 12) + '…' : t.title}`)])),
       h('h3', { class: 'sec' }, 'タイムライン'), ganttBlock(qd),
@@ -990,8 +1007,7 @@ function composer() {
     h('div', { class: 'qopts qmain' }, fld('開始日（未指定なら登録日）', start), fld('締切（未定なら登録日）', due)),
     more,
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
-    S.newNote ? h('p', { class: 'saved', role: 'status' }, S.newNote) : null,
-    S.newSaved ? h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。下の一覧に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`) : null);
+    S.newNote ? h('p', { class: 'saved', role: 'status' }, S.newNote) : null);
 }
 
 function cancelCell(r) {
@@ -1006,73 +1022,115 @@ async function cancelRequest(id) {
   S.confirm[id + ':cancel'] = false; S.newSaved = ''; await refresh(true);
 }
 
-// ---- 状態で絞る・件数を区切る・目次から飛ぶ
-const STATES = ['承認待ち', '進行中', '要判断', '受け取り待ち', '完了', '中止'];
-const PAGE = 20;
-function filterQuests(tab, quests) {
-  const on = STATES.filter((x) => S.stf[tab][x]);
-  return on.length ? quests.filter((x) => on.includes(x.label)) : quests;
+// ============================================================ クエスト掲示板（左に一覧、右に詳細パネル）
+// ブラウザの保存領域（Web Storage）は、使えない環境（プライベートウィンドウ、file:// の制限、保存の拒否）がある。使えなければ既定値で動く
+function lsGet(key, fallback) {
+  try { const v = window.localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch (e) { return fallback; }
 }
-function stateFilter(tab, quests) {
-  const on = STATES.filter((x) => S.stf[tab][x]);
-  return h('div', { class: 'filters sf', role: 'group', 'aria-label': '状態で絞る' }, h('span', { class: 'sub', style: 'align-self:center' }, '状態：'),
-    STATES.map((st) => { const n = quests.filter((x) => x.label === st).length;
-      const c = h('input', { type: 'checkbox' }); c.checked = !!S.stf[tab][st];
-      c.addEventListener('change', () => { S.stf[tab][st] = c.checked; S.limit[tab] = PAGE; render(); });
-      return h('label', { class: 'fchk' + (c.checked ? ' on' : '') }, c, `${st} ${n}`); }),
-    on.length ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:34px', onclick: () => { S.stf[tab] = {}; S.limit[tab] = PAGE; render(); } }, '解除') : null);
+function lsSet(key, value) {
+  try { window.localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
 }
-// 一覧は新しい依頼が先頭。先頭から limit 件を出し、残り（古い側）は「さらに古い依頼を表示」で足す
-function pageOf(tab, list) {
-  const hidden = Math.max(0, list.length - S.limit[tab]);
-  return { shown: list.slice(0, S.limit[tab]), hidden, more: hidden ? h('button', { type: 'button', class: 'btn ghost morebtn', onclick: () => { S.limit[tab] += PAGE; render(); } }, `さらに古い依頼を表示（残り ${hidden} 件）`) : null };
+const LS_LIST = 'guild.board.listOpen';
+const BOARD_CHIPS = [['all', 'すべて'], ['turn', 'あなたの番'], ['run', '進行中'], ['wait', '受け取り待ち'], ['done', '完了']];
+// 一覧の区分（1つの依頼は1つの区分）。受け取り待ち → あなたの番（答えていない手紙がある）→ 完了・中止 → 進行中 の順に決める
+function boardBucket(qd) {
+  if (qd.label === '受け取り待ち') return 'wait';
+  if (qd.asks.some((a) => !a.sent)) return 'turn';
+  if (qd.label === '完了' || qd.label === '中止') return 'done';
+  return 'run';
 }
+// 一覧に出す依頼。検索（番号・題名）と区分で絞る。「すべて」では完了・中止を畳み、S.showClosed のときだけ出す。
+// nav は「‹ ›」と「N件中M件目」が使う順番（一覧に見えている順）。1回の描画で1度だけ呼ぶ（O(n)）
+function boardList(m) {
+  const q = (S.form['f:bq'] || '').trim().toLowerCase(), f = S.bfilter || 'all';
+  const counts = { all: 0, turn: 0, run: 0, wait: 0, done: 0 };
+  const found = m.quests.filter((x) => hit(q, x.id, x.title)).map((x) => [x, boardBucket(x)]);
+  for (const [, b] of found) { counts.all++; counts[b]++; }
+  const open = found.filter(([, b]) => (f === 'all' ? b !== 'done' : b === f)).map(([x]) => x);
+  const closed = f === 'all' ? found.filter(([, b]) => b === 'done').map(([x]) => x) : [];
+  return { q, f, counts, open, closed, nav: S.showClosed ? [...open, ...closed] : open };
+}
+function selectQuest(id) {
+  S.sel = id; S.pane = 'detail'; render();
+  const el = document.querySelector('.qpanel'), bar = document.querySelector('.tabs');
+  if (el) { const top = el.getBoundingClientRect().top - (bar ? bar.offsetHeight : 0) - 8; if (top < 0 || top > window.innerHeight * 0.6) window.scrollTo(0, window.scrollY + top); }
+}
+// 「あなたの番」の帯・納品物タブなどから、その依頼を開く。一覧で見えないとき（区分・検索・畳んだ完了）は、見えるように戻す
 function jumpQuest(id) {
+  const qd = S.model && S.model.quests.find((x) => x.id === id); if (!qd) return;
+  const b = boardBucket(qd);
   S.tab = 'board';
-  const all = S.model ? S.model.quests : [], me = all.find((x) => x.id === id);
-  if (me && !filterQuests('board', [me]).length) S.stf.board = {};
-  const list = filterQuests('board', all), i = list.findIndex((x) => x.id === id);
-  if (i >= 0 && i >= S.limit.board) S.limit.board = i + 1;
-  S.openQ[id] = true; S.sel = id; S.focusQ = id; render();
-  const el = document.querySelector(`[data-q="${id}"]`);
-  if (el) {
-    const bar = document.querySelector('.tabs'), top = bar ? bar.offsetHeight : 0;  // 固定されたときのタブの高さ（スクロール前の位置ではなく）
-    window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - top - 8);
-    el.focus({ preventScroll: true });
-  }
+  if (S.bfilter !== 'all' && S.bfilter !== b) S.bfilter = 'all';
+  if (!hit((S.form['f:bq'] || '').trim().toLowerCase(), qd.id, qd.title)) S.form['f:bq'] = '';
+  if (b === 'done') S.showClosed = true;
+  selectQuest(id);
 }
-// 依頼の目次。押した依頼へ飛ぶ
-function questToc(list, o = {}) {
-  if (!list.length) return null;
-  const pick = o.pick || jumpQuest, cur = o.pick ? o.cur : S.sel;
-  return h('aside', { class: 'toc', 'aria-label': '依頼の目次' }, h('div', { class: 'toch' }, '依頼の目次'),
-    o.allLabel ? h('button', { type: 'button', class: 'tocb' + (cur === 'all' ? ' on' : ''), onclick: () => pick('all') }, h('span', { class: 'tt' }, o.allLabel)) : null,
-    list.map((x) => { const need = x.asks.some((a) => !a.sent);
-      return h('button', { type: 'button', class: 'tocb' + (need ? ' need' : '') + (cur === x.id ? ' on' : ''), onclick: () => pick(x.id) },
-        h('span', { class: 'id' }, x.id), h('span', { class: 'tt' }, x.title),
-        h('span', { class: 'st' }, h('span', { class: `stamp sm ${x.cls}` }, x.label), need ? h('span', { class: 'stamp sm sd-turn' }, 'あなたの番') : null)); }));
+function openNew() {
+  S.tab = 'board'; S.newOpen = true; S.newSaved = ''; render();
+  const ta = document.getElementById('qreq'); if (ta) { ta.scrollIntoView({ block: 'center' }); ta.focus(); }
 }
-
-function ledger(m) {
-  const sel = S.sel;
-  const rows = [h('div', { class: 'lh', role: 'row' }, h('span', null, 'ID'), h('span', null, '依頼'), h('span', null, '状態'), h('span', null, '進み'), h('span', null, 'あなたの番'))];
-  for (const r of m.requests) rows.push(h('div', { class: 'lr plain', role: 'row' }, h('span', { class: 'id' }, r.id),
-    h('span', null, r.text.split('\n')[0].slice(0, 80), h('span', { class: 'sub', style: 'display:block' }, '/guild:quest が動いていれば受け付けます。動いていなければ、チャットで /guild:quest と送ってください。')),
-    h('span', null, stampEl('受付待ち', 'sd-wait')), h('span', null, '—'), cancelCell(r)));
-  const pg = pageOf('board', filterQuests('board', m.quests));
-  for (const qd of pg.shown) {
-    const on = S.focusQ === qd.id;
-    const row = h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => { const was = S.focusQ === qd.id; S.focusQ = null; S.openQ[qd.id] = was ? false : !S.openQ[qd.id]; S.sel = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
-      h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me));
-    const kids = [row];
-    if (S.openQ[qd.id]) kids.push(questDetail(qd));
-    rows.push(h('div', { class: 'qitem' + (on ? ' hit' : ''), role: 'rowgroup' }, kids));
-  }
-  if (!m.requests.length && !m.quests.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, 'まだ依頼はありません。上の欄に書いて「依頼」を押してください。')));
-  if (pg.more) rows.push(h('div', { class: 'lr plain' }, h('span'), pg.more));
-  if (m.quests.length && !m.requests.length && !pg.shown.length) rows.push(h('div', { class: 'lr plain' }, h('span'), h('span', { class: 'sub' }, '選んだ状態の依頼はありません。')));
-  const focusing = !!S.focusQ && pg.shown.some((x) => x.id === S.focusQ);
-  return h('div', { class: 'ledger' + (focusing ? ' focusing' : ''), role: 'table', 'aria-label': '依頼の一覧' }, rows);
+const shortDate = (s) => `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}`;
+function questRow(qd) {
+  const p = qd.q.plan, due = p && okDate(p.due) ? p.due : null, late = !!due && due < localToday() && boardBucket(qd) !== 'done';
+  const pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
+  return h('button', { type: 'button', class: 'qli', 'aria-current': S.sel === qd.id ? 'true' : 'false', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => selectQuest(qd.id) },
+    h('span', { class: 'id' }, qd.id), h('span', { class: 'tt', title: qd.title }, qd.title), h('span', { class: 'st' }, stampEl(qd.label, qd.cls + ' sm')),
+    h('span', { class: 'pg' }, h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { style: `width:${pct}%` })), qd.total ? `${qd.done}/${qd.total}` : '—'),
+    h('span', { class: 'du' + (late ? ' late' : '') }, due ? `締切 ${shortDate(due)}` : ''));
+}
+function requestRow(r) {
+  return h('div', { class: 'qli req' }, h('span', { class: 'id' }, '受付'), h('span', { class: 'tt', title: r.text }, r.text.split('\n')[0].slice(0, 80)), h('span', { class: 'st' }, stampEl('受付待ち', 'sd-wait sm')),
+    h('span', { class: 'pg' }, '/guild:quest が受け付けます'), h('span', { class: 'du' }, cancelCell(r)));
+}
+function questListPane(m, L) {
+  const reqs = L.f === 'all' || L.f === 'run' ? m.requests.filter((r) => hit(L.q, r.id, r.text)) : [];
+  const search = h('input', { type: 'search', class: 'qsearch', placeholder: '番号・題名で探す', 'aria-label': 'クエストを探す' }); search.value = S.form['f:bq'] || ''; bindKey(search, 'f:bq');
+  const chips = h('div', { class: 'chipbar', role: 'group', 'aria-label': '状態で絞り込む' }, BOARD_CHIPS.map(([k, l]) =>
+    h('button', { type: 'button', 'aria-pressed': String(L.f === k), onclick: () => { S.bfilter = k; render(); } }, l, h('span', { class: 'n' }, L.counts[k]))));
+  const empty = !reqs.length && !L.open.length && !L.closed.length;
+  return h('aside', { class: 'qlist', id: 'quest-list', 'aria-label': 'クエスト一覧' },
+    h('div', { class: 'qlhead' }, h('h2', { class: 'h2' }, 'クエスト掲示板'), h('button', { type: 'button', class: 'btn sm newbtn', onclick: openNew }, '＋ 新規')),
+    search, chips,
+    h('div', { class: 'qrows' },
+      reqs.map(requestRow), L.open.map(questRow),
+      L.closed.length ? h('button', { type: 'button', class: 'qfold', 'aria-expanded': String(!!S.showClosed), onclick: () => { S.showClosed = !S.showClosed; render(); } }, S.showClosed ? `完了・中止 ${L.closed.length}件を畳む` : `完了・中止 ${L.closed.length}件を表示`) : null,
+      S.showClosed ? L.closed.map(questRow) : null,
+      empty ? h('p', { class: 'sub', style: 'padding:10px 12px;margin:0' }, m.quests.length || m.requests.length ? '当てはまるクエストはありません。' : 'まだ依頼はありません。「＋ 新規」から出してください。') : null));
+}
+function questPanel(m, L) {
+  const qd = m.quests.find((x) => x.id === S.sel);
+  const i = qd ? L.nav.findIndex((x) => x.id === qd.id) : -1, go = (d) => { const n = L.nav[i + d]; if (n) selectQuest(n.id); };
+  const tool = h('div', { class: 'qtool' },
+    h('button', { type: 'button', class: 'btn ghost sm qback', onclick: () => { S.pane = 'list'; render(); } }, '‹ 一覧へ戻る'),
+    h('button', { type: 'button', class: 'btn ghost sm qhide', 'aria-expanded': String(S.listOpen), 'aria-controls': 'quest-list', onclick: () => { S.listOpen = !S.listOpen; lsSet(LS_LIST, S.listOpen); render(); } }, S.listOpen ? '一覧を隠す' : '一覧を表示'),
+    S.listOpen ? null : hiddenBar(m, L, i, go));
+  if (!qd) return h('section', { class: 'qpanel', 'aria-label': 'クエストの詳細' }, tool, h('p', { class: 'sub' }, m.quests.length ? '一覧からクエストを選んでください。' : 'まだクエストはありません。「＋ 新規」から出してください。'));
+  const p = qd.q.plan, pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
+  return h('section', { class: 'qpanel', 'aria-label': `${qd.id} の詳細` }, tool,
+    h('header', { class: 'qhead' },
+      h('div', { class: 'qhl' }, h('span', { class: 'tid' }, qd.id), stampEl(qd.label, qd.cls)),
+      h('h3', null, qd.title),
+      h('div', { class: 'qmeta' }, h('span', null, p ? `開始 ${p.start || '—'}　締切 ${p.due || '—'}` : '計画はまだありません'),
+        qd.total ? [h('span', { class: 'bar', role: 'img', 'aria-label': `${qd.total} 件中 ${qd.done} 件が済み` }, h('span', { style: `width:${pct}%` })), h('span', null, `${qd.done}/${qd.total} 済み`)] : null)),
+    questDetail(qd));
+}
+// 一覧を隠したときのツールバー：見出し・前後のクエスト・何件中何件目・探して開く・＋ 新規
+function hiddenBar(m, L, i, go) {
+  const jump = h('input', { type: 'search', class: 'qsearch', list: 'qjump', placeholder: 'クエストを探して開く', 'aria-label': 'クエストを探して開く' }); jump.value = S.form.bjump || ''; bindKey(jump, 'bjump');
+  const pick = (exact) => {
+    const v = jump.value.trim(); if (!v) return;
+    const lv = v.toLowerCase(), t = m.quests.find((x) => `${x.id} ${x.title}` === v) || (exact ? null : (m.quests.find((x) => x.id.toLowerCase() === lv) || m.quests.find((x) => hit(lv, x.id, x.title))));
+    if (t) { jump.value = ''; S.form.bjump = ''; jumpQuest(t.id); }
+  };
+  jump.addEventListener('input', () => pick(true));   // 候補（datalist）から選んだとき
+  jump.addEventListener('change', () => pick(false)); // Enter で確定したとき（番号・題名の一部でもよい）
+  return h('div', { class: 'hidebar' },
+    h('b', { class: 'h2', style: 'font-size:17px' }, 'クエスト掲示板'),
+    h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': '前のクエスト', disabled: i <= 0, onclick: () => go(-1) }, '‹'),
+    h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': '次のクエスト', disabled: i < 0 || i >= L.nav.length - 1, onclick: () => go(1) }, '›'),
+    h('span', { class: 'fine', 'aria-live': 'polite' }, i >= 0 ? `${L.nav.length}件中 ${i + 1}件目` : `${L.nav.length}件`),
+    jump, h('datalist', { id: 'qjump' }, m.quests.map((x) => h('option', { value: `${x.id} ${x.title}` }))),
+    h('button', { type: 'button', class: 'btn sm newbtn', onclick: openNew }, '＋ 新規'));
 }
 
 function sendWeb(obj, key) {
@@ -1127,14 +1185,12 @@ function boardTab() {
   if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
     m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text))));
   if (m) { const wl = webLetter(m); if (wl) out.push(wl); }
-  out.push(composer());
-  if (m && m.quests.length) out.push(stateFilter('board', m.quests));
-  if (m && m.quests.length) out.push(h('div', { class: 'btns', style: 'margin:0 0 8px' },
-    h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px', disabled: m.quests.every((x) => S.openQ[x.id]), onclick: () => { for (const x of m.quests) S.openQ[x.id] = true; render(); } }, 'すべて開く'),
-    h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px', disabled: !m.quests.some((x) => S.openQ[x.id]), onclick: () => { S.openQ = {}; render(); } }, 'すべて閉じる')));
-  if (m) out.push(ledger(m));
-  const toc = m ? questToc(filterQuests('board', m.quests)) : null;
-  return toc ? [h('div', { class: 'bwrap' }, toc, h('div', { class: 'bmain' }, out))] : out;
+  if (S.newSaved) out.push(h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。一覧の先頭に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`));
+  if (S.newOpen) out.push(composer(), h('div', { class: 'btns', style: 'margin:-6px 0 16px' }, h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.newOpen = false; S.newError = ''; render(); } }, 'やめる')));
+  if (!m) return out;
+  const L = boardList(m);
+  out.push(h('div', { class: `qb${S.listOpen ? '' : ' nolist'} pane-${S.pane}` }, questListPane(m, L), questPanel(m, L)));
+  return out;
 }
 
 function ganttBlock(x) {
@@ -1433,15 +1489,11 @@ function stickyTools() {
   const n = S.model ? S.model.needs.length : 0;
   return h('div', { class: 'tools' },
     n ? h('button', { type: 'button', class: 'tool warn', onclick: goNeed }, `あなたの番 ${n}件`) : null,
-    h('button', { type: 'button', class: 'tool', onclick: goCompose }, '＋ 新しい依頼'));
+    h('button', { type: 'button', class: 'tool', onclick: openNew }, '＋ 新しい依頼'));
 }
 function goNeed() {
   const n = S.model && S.model.needs[0]; if (!n) return;
   jumpQuest(n.q);
-}
-function goCompose() {
-  S.tab = 'board'; render();
-  const ta = document.getElementById('qreq'); if (ta) { ta.scrollIntoView({ block: 'center' }); ta.focus(); }
 }
 
 // 読み・コピーの結果は、手紙や納品物のタブにも出す（読み取り画面・保存失敗の枠が開いているときは、その中に出るので重ねない）。3秒で消す
@@ -1453,20 +1505,21 @@ function keepToast() {
   const shown = S.toast;
   S.toastTimer = setTimeout(() => { S.toastFor = ''; if (S.toast === shown) { S.toast = ''; render(); } }, 3000);
 }
+const KEEP_SCROLL = ['.rbox', '.qrows', '.nbox', '.iplist', '.plist'];  // 描き直しても、中でスクロールしている位置を保つ枠
 function render() {
   const app = document.getElementById('app');
   const ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.key : null, ss = ae && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
-  const oldBox = document.querySelector('.rbox'), boxTop = oldBox ? oldBox.scrollTop : 0;
+  const tops = KEEP_SCROLL.map((s) => { const e = document.querySelector(s); return e ? e.scrollTop : 0; });
   const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
   const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
-  app.replaceChildren(h('div', { class: 'wrap' }, banner(),
+  app.replaceChildren(h('div', { class: 'wrap' + (S.tab === 'board' ? ' wide' : '') }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox(), toastBox()].filter(Boolean));
   keepToast();
   window.scrollTo(0, sy);
-  const newBox = document.querySelector('.rbox'); if (newBox && boxTop) newBox.scrollTop = boxTop;
+  KEEP_SCROLL.forEach((s, i) => { const e = document.querySelector(s); if (e && tops[i]) e.scrollTop = tops[i]; });
   if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus({ preventScroll: true }); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
   window.scrollTo(0, sy);
 }
@@ -1529,7 +1582,7 @@ async function sendRequest() {
     for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
     await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due: S.form['new:due'] || null, files: names, created: new Date().toISOString() }, null, 2));
   } catch (e) { S.newError = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); return; }
-  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.files.new = []; S.newSaved = id;
+  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.files.new = []; S.newSaved = id; S.newOpen = false;
   await refresh(true);
 }
 async function openFile(full) {
@@ -1574,7 +1627,6 @@ async function refresh(force) {
     if (force || key !== S.dataKey) {
       S.dataKey = key; S.model = buildModel(raw);
       const ids = S.model.quests.map((x) => x.id);
-      if (!S.openInit && ids.length) { S.openInit = true; const f0 = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; if (f0) S.openQ[f0.id] = true; }
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
       render();
     }
@@ -1664,14 +1716,7 @@ async function start() {
   const params = new URLSearchParams(location.search);
   for (const ev of ['dragover', 'drop']) document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest('.dz')) e.preventDefault(); });
   window.addEventListener('scroll', spyKn, { passive: true });
-  // 集中表示は、票の外をクリックすると解除する（目次と「あなたの番」の帯は、押した依頼へ移るので除く）。再描画はせず、見た目だけをその場で戻す
-  document.addEventListener('click', (e) => {
-    if (!S.focusQ || !(e.target instanceof Element) || e.target.closest('.qitem.hit, .tocb, .attn')) return;
-    S.focusQ = null;
-    document.querySelectorAll('.ledger.focusing').forEach((x) => x.classList.remove('focusing'));
-    document.querySelectorAll('.qitem.hit').forEach((x) => x.classList.remove('hit'));
-  }, true);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.focusQ && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '')) { S.focusQ = null; render(); } });
+  S.listOpen = lsGet(LS_LIST, true) !== false;  // 前回の「一覧を隠す」。読めない・使えないときは、表示で開く
   document.addEventListener('compositionstart', () => { S.composing = true; });
   document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); const k = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key; if (k && k.startsWith('f:')) { S.form[k] = document.activeElement.value; render(); } });
   document.addEventListener('input', (e) => {
@@ -1686,7 +1731,7 @@ async function start() {
     if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
     if (k && t.type === 'date') S.form[k] = t.value;
   });
-  window.__guildBoard = { S, render, scheduleModel, ganttSvg, refresh, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
+  window.__guildBoard = { S, render, scheduleModel, ganttSvg, refresh, lsGet, lsSet, boardBucket, boardList, jumpQuest, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
   if (params.has('demo')) {
     S.demo = true; S.fs = new PathMap(new MemFS(toPhysicalTree(demoTree(params.get('demo') || 'human')))); S.conn = 'ok'; await refresh(true); return;
   }

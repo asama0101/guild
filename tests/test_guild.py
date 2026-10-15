@@ -1709,6 +1709,18 @@ class BoardPathsTest(unittest.TestCase):
                        "candidates: planList(p, 'candidates')", "mtime: e.mtime || 0"):
             self.assertIn(needle, self.board)
 
+    def test_quest_board_split_view(self):
+        for needle in ("function boardList(", "function boardBucket(", "function questListPane(", "function questPanel(", "function hiddenBar(",
+                       "function lsGet(", "function lsSet(", "'guild.board.listOpen'", "一覧を隠す", "‹ 一覧へ戻る", "件中 ${i + 1}件目",
+                       "@media (max-width:760px)", ".qb.pane-detail .qlist{display:none}", "container-type:inline-size", "const KEEP_SCROLL"):
+            self.assertIn(needle, self.board)
+        for gone in ("function ledger(", "function questToc(", "function stateFilter(", "function pageOf(", "function filterQuests(",
+                     "S.openQ", "S.focusQ", "S.stf", ".ledger", ".lr{", "goCompose", ".qitem"):
+            self.assertNotIn(gone, self.board)
+        # localStorage は lsGet・lsSet の中だけで使う（使えない環境で例外を出さない）
+        rest = self.board.replace("window.localStorage.getItem", "").replace("window.localStorage.setItem", "")
+        self.assertNotIn("localStorage", rest)
+
 
 class DocsContractTest(unittest.TestCase):
     def read(self, *p):
