@@ -458,6 +458,25 @@ def list_requests(root):
 
 
 INPUTS = "inputs"
+INPUT_NAME_BAD = re.compile(r"[\\/:\x00-\x1f\x7f]")  # パス区切り・ドライブの「:」・制御文字
+
+
+def check_input_name(n, label):
+    """インプットの名前（guild/inputs/ の直下のファイル名）の形だけを検査する。存在は見ない。日本語・空白は通す。"""
+    if (not isinstance(n, str) or not n.strip() or n != n.strip() or n in (".", "..")
+            or INPUT_NAME_BAD.search(n) or len(n) > 255):
+        raise GuildError(f"{label} のファイル名が不正です: {n!r}")
+    return n
+
+
+def unique_names(names):
+    """名前の重なりを除く（大文字小文字は区別しない。最初のものを残し、順序は保つ）。"""
+    out, seen = [], set()
+    for n in names:
+        if n.lower() not in seen:
+            seen.add(n.lower())
+            out.append(n)
+    return out
 
 
 def import_inputs(gdir, files_dir, quest):
@@ -686,9 +705,10 @@ def read_entry(path):
         k, sep, v = line.partition(":")
         if sep:
             e[k.strip()] = yaml_value(v.strip())
-    if not isinstance(e.get("aliases"), list):
-        e["aliases"] = []
-    e["aliases"] = [str(a).strip() for a in e["aliases"] if str(a).strip()]
+    for k in ("aliases", "inputs"):  # どちらもリストの項目。ない・壊れているときは空
+        if not isinstance(e.get(k), list):
+            e[k] = []
+        e[k] = [str(a).strip() for a in e[k] if str(a).strip()]
     e["body"] = m.group(2)
     e.setdefault("status", "active")
     return e
@@ -711,8 +731,10 @@ def yaml_value(v):
 
 def entry_text(e):
     aliases = [one_line(a) for a in e.get("aliases", []) if one_line(a)]
+    inputs = [one_line(a) for a in e.get("inputs", []) if one_line(a)]
     head = ["---", f"name: {yaml_str(e['name'])}", f"type: {e['type']}",
             "aliases: " + json.dumps(aliases, ensure_ascii=False),
+            "inputs: " + json.dumps(inputs, ensure_ascii=False),
             f"confidence: {e['confidence']}", f"source: {yaml_str(e.get('source'))}", f"confirmed: {e.get('confirmed') or today()}",
             f"status: {yaml_str(e.get('status') or 'active')}", f"summary: {yaml_str(e.get('summary'))}", "---"]
     return "\n".join(head) + "\n" + (e.get("body") or "").strip("\n") + "\n"
@@ -729,6 +751,11 @@ def check_entry(e):
         raise GuildError(f"confidence が不正です: {e.get('confidence')}（{', '.join(CONFIDENCE)}）")
     if e["confidence"] != "guess" and not one_line(e.get("source")):
         raise GuildError(f"出典（source）がありません: {e.get('name')}（推測なら confidence を guess にする）")
+    inputs = e.get("inputs", [])
+    if not isinstance(inputs, list):
+        raise GuildError(f"inputs はファイル名の配列にしてください: {e.get('name')}")
+    for n in inputs:
+        check_input_name(n, f"{one_line(e.get('name'))} の inputs")  # 名前の形だけ。guild/inputs/ にあるかは見ない
 
 
 def write_entry(adir, e, path=None):
@@ -795,10 +822,11 @@ def rebuild_index(adir):
         if not rows:
             out += ["なし", ""]
             continue
-        out += ["| 名前 | 別名 | 確度 | 確認日 | 説明 | 場所 |", "|---|---|---|---|---|---|"]
+        out += ["| 名前 | 別名 | 確度 | 確認日 | 説明 | インプット | 場所 |", "|---|---|---|---|---|---|---|"]
         for rel, e in rows:
             mark = "（要確認）" if e["status"] == "要確認" else ""
-            cells = [e.get("name", ""), "、".join(e["aliases"]), label.get(e.get("confidence"), "") + mark, e.get("confirmed", ""), e.get("summary", ""), f"[[{rel[:-3]}]]"]
+            cells = [e.get("name", ""), "、".join(e["aliases"]), label.get(e.get("confidence"), "") + mark, e.get("confirmed", ""),
+                     e.get("summary", ""), "、".join(e["inputs"]), f"[[{rel[:-3]}]]"]
             out.append("| " + " | ".join(c.replace("|", "／") for c in cells) + " |")
         out.append("")
     (adir / "index.md").write_text("\n".join(out), encoding="utf-8")
@@ -809,7 +837,8 @@ def apply_candidate(adir, c, quest):
     rel = c.get("update_of")
     if rel and (Path(adir) / rel).is_file():
         old = read_entry(entry_path(adir, rel))
-        e = dict(old, aliases=sorted({*old["aliases"], *c.get("aliases", [])}), confirmed=today())
+        e = dict(old, aliases=sorted({*old["aliases"], *c.get("aliases", [])}),
+                 inputs=unique_names([*old["inputs"], *c.get("inputs", [])]), confirmed=today())
         if c.get("conflict"):
             e["body"] = old["body"].rstrip("\n") + f"\n\n## 食い違い（{today()}、{quest}）\n{c.get('body', '').strip()}\n出典：{one_line(c.get('source')) or 'なし'}\n"
             e["status"] = "要確認"
@@ -878,6 +907,9 @@ def archive_apply(adir, data):
         e = dict(data["entry"], confidence="confirmed", confirmed=today(), status="active")
         e.setdefault("aliases", [])
         e["source"] = e.get("source") or "依頼主の登録"
+        if data.get("update_of") and "inputs" not in e:
+            e["inputs"] = read_entry(entry_path(adir, data["update_of"]))["inputs"]  # 編集で inputs を送らなければ、今のものを残す
+        e.setdefault("inputs", [])
         check_entry(e)
         if data.get("update_of"):
             entry_path(adir, data["update_of"])

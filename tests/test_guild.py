@@ -1787,5 +1787,104 @@ class NoTemplateTest(unittest.TestCase):
             self.assertNotIn(gone, s)
 
 
+class ArchiveInputsTest(unittest.TestCase):
+    """書庫の項目の inputs（guild/inputs/ のファイル名のリスト）。aliases と同じ作りで、名前の形だけ検査し、存在は見ない。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.adir = self.root / "guild" / "archive"
+        self.q = Path(guild.new_quest(self.root)["dir"])
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def entry(self, **kw):
+        e = {"type": "term", "name": "KGI", "aliases": ["重要目標達成指標"], "summary": "最終目標の指標", "body": "",
+             "confidence": "confirmed", "source": "依頼主の登録"}
+        e.update(kw)
+        return e
+
+    def put_inbox(self, name, data):
+        d = self.root / "guild" / ".work" / "archive-inbox"
+        d.mkdir(exist_ok=True)
+        (d / name).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    def draft(self, *cands):
+        (self.q / "reports" / "archive-draft.json").write_text(json.dumps({"quest": "Q001", "candidates": list(cands)}, ensure_ascii=False), encoding="utf-8")
+
+    def test_roundtrip_with_japanese_and_space_names(self):
+        rel = guild.write_entry(self.adir, self.entry(inputs=["売上 2026年度.xlsx", "KGI定義.md"]))
+        self.assertIn('inputs: ["売上 2026年度.xlsx", "KGI定義.md"]', (self.adir / rel).read_text(encoding="utf-8"))
+        self.assertEqual(guild.read_entry(self.adir / rel)["inputs"], ["売上 2026年度.xlsx", "KGI定義.md"])
+
+    def test_old_entry_without_inputs_reads_as_empty_and_is_rewritten_with_the_line(self):
+        (self.adir / "古い.md").write_text('---\nname: "古い"\ntype: term\naliases: []\nconfidence: guess\nsource: ""\n'
+                                         'confirmed: 2026-10-01\nstatus: "active"\nsummary: "s"\n---\n本文\n', encoding="utf-8")
+        e = guild.read_entry(self.adir / "古い.md")
+        self.assertEqual(e["inputs"], [])
+        guild.write_entry(self.adir, e, "古い.md")
+        self.assertIn("inputs: []", (self.adir / "古い.md").read_text(encoding="utf-8"))
+
+    def test_missing_file_is_allowed_but_bad_shapes_are_not(self):
+        guild.write_entry(self.adir, self.entry(inputs=["まだない.pdf"]))  # 存在は検査しない
+        for bad in ("a.txt", ["../x.txt"], ["sub/x.txt"], ["sub\\x.txt"], ["C:x.txt"], [""], [" a.txt"], [3], [".."], ["a\nb.txt"]):
+            with self.subTest(bad=bad), self.assertRaises(guild.GuildError):
+                guild.check_entry(self.entry(inputs=bad))
+
+    def test_check_input_name_and_unique_names(self):
+        self.assertEqual(guild.check_input_name("議事録 10月.txt", "x"), "議事録 10月.txt")
+        self.assertEqual(guild.unique_names(["a.txt", "B.csv", "A.TXT", "b.csv", "c.md"]), ["a.txt", "B.csv", "c.md"])
+
+    def test_index_lists_inputs(self):
+        guild.write_entry(self.adir, self.entry(inputs=["KGI定義.md"]))
+        guild.rebuild_index(self.adir)
+        idx = (self.adir / "index.md").read_text(encoding="utf-8")
+        self.assertIn("| 名前 | 別名 | 確度 | 確認日 | 説明 | インプット | 場所 |", idx)
+        self.assertIn("| KGI定義.md | [[KGI]] |", idx)
+
+    def test_candidate_inputs_pass_through_and_merge_on_update(self):
+        self.draft(dict(self.entry(confidence="sourced", source="https://example.com (2026-10-16)", inputs=["KGI定義.md"]), id="C1"))
+        guild.archive_propose(self.q)
+        guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register"}})
+        self.assertEqual(guild.read_entry(self.adir / "KGI.md")["inputs"], ["KGI定義.md"])
+        # 同名の候補は更新になり、inputs は足される（重なりは除く）
+        self.draft(dict(self.entry(confidence="sourced", source="https://example.com (2026-10-16)", inputs=["kgi定義.md", "売上.csv"]), id="C1"))
+        guild.archive_propose(self.q)
+        guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register"}})
+        self.assertEqual(guild.read_entry(self.adir / "KGI.md")["inputs"], ["KGI定義.md", "売上.csv"])
+
+    def test_candidate_with_bad_inputs_is_rejected(self):
+        self.draft(dict(self.entry(confidence="sourced", source="x", inputs=["../config.json"]), id="C1"))
+        with self.assertRaises(guild.GuildError):
+            guild.archive_propose(self.q)
+
+    def test_board_entry_and_edit(self):
+        self.put_inbox("1.json", {"type": "entry", "entry": {"type": "term", "name": "KGI", "summary": "s", "body": "", "source": "", "inputs": ["KGI定義.md"]}})
+        self.assertEqual(guild.archive_ingest(self.root)["rejected"], [])
+        self.assertEqual(guild.read_entry(self.adir / "KGI.md")["inputs"], ["KGI定義.md"])
+        # 編集で inputs を送らなければ、今のものを残す
+        self.put_inbox("2.json", {"type": "entry", "update_of": "KGI.md", "entry": {"type": "term", "name": "KGI", "summary": "編集", "body": "", "source": ""}})
+        guild.archive_ingest(self.root)
+        e = guild.read_entry(self.adir / "KGI.md")
+        self.assertEqual((e["summary"], e["inputs"]), ("編集", ["KGI定義.md"]))
+        # [] を送れば空にする
+        self.put_inbox("3.json", {"type": "entry", "update_of": "KGI.md", "entry": {"type": "term", "name": "KGI", "summary": "編集", "body": "", "source": "", "inputs": []}})
+        guild.archive_ingest(self.root)
+        self.assertEqual(guild.read_entry(self.adir / "KGI.md")["inputs"], [])
+        self.put_inbox("4.json", {"type": "entry", "update_of": "KGI.md", "entry": {"type": "term", "name": "KGI", "summary": "s", "body": "", "source": "", "inputs": ["../x"]}})
+        self.assertEqual(len(guild.archive_ingest(self.root)["rejected"]), 1)
+
+    def test_promote_retype_deprecate_keep_inputs(self):
+        rel = guild.write_entry(self.adir, self.entry(confidence="guess", source="", inputs=["a.txt"]))
+        for i, data in enumerate(({"type": "promote", "path": rel}, {"type": "retype", "path": rel, "to": "fact"},
+                                  {"type": "deprecate", "path": rel, "reason": "使わない"})):
+            with self.subTest(data=data):
+                self.put_inbox(f"{i}.json", data)
+                self.assertEqual(guild.archive_ingest(self.root)["rejected"], [])
+                self.assertEqual(guild.read_entry(self.adir / rel)["inputs"], ["a.txt"])
+
+
 if __name__ == "__main__":
     unittest.main()
