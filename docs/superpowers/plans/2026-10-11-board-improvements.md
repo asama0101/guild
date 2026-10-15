@@ -448,7 +448,7 @@ const ARCH_TYPES = [['term', 'terms', '用語'], ['flow', 'flows', '業務フロ
 
 - [ ] **Step 5: 目視確認（Playwright）**
 
-`file:///C:/Users/sioay/OneDrive/github/guild/skills/quest/board.html?demo=human` を開き、「書庫」タブで確かめる：
+`file:///<プロジェクトのフォルダ>/skills/quest/board.html?demo=human` を開き、「書庫」タブで確かめる：
   1. サブタブに「すべて／用語／業務フロー／業務情報／個人／心得」が出て、個人が1件。
   2. 確度のチェックと並びで一覧が変わる。廃止のあるデータでは「使っているもの」で消え、「廃止も含む」で出る。
   3. 項目を開いて「種類を変更」→ 移す先に自分の種類と心得が出ない。押すと「送りました」相当の反映待ちが出る（見本は保存しない）。
