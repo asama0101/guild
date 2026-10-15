@@ -1550,5 +1550,87 @@ class InputsTest(unittest.TestCase):
         self.assertEqual([p.name for p in (self.g / "inputs").iterdir()], ["ok.txt"])
 
 
+class DeliverablesTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.g = self.root / "guild"
+        self.q = Path(guild.new_quest(self.root)["dir"])
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def out(self, tid, name, body="x"):
+        d = self.q / "output" / tid
+        d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_text(body, encoding="utf-8")
+
+    def save(self, *todos):
+        guild.save_plan(self.q / "plan.json", plan(*todos))
+
+    def names(self):
+        d = self.g / "deliverables"
+        return sorted(p.name for p in d.iterdir()) if d.is_dir() else []
+
+    def test_publishes_deliverable_todo_and_any_prompt(self):
+        self.out("T1", "材料.md")
+        self.out("T1", "スライド.prompt.md")
+        self.out("T2", "調査報告.md")
+        self.out("T2", "メモ.txt")
+        self.save(todo("T1", state="done"), todo("T2", state="done", deliverable=True, deps=["T1"]))
+        self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_スライド.prompt.md", "Q001_調査報告.md"])
+        self.assertEqual(self.names(), ["Q001_スライド.prompt.md", "Q001_調査報告.md"])
+        self.assertEqual((self.g / "deliverables" / "Q001_調査報告.md").read_text(encoding="utf-8"), "x")
+
+    def test_without_a_deliverable_mark_all_done_markdown_is_published(self):
+        self.out("T1", "a.md")
+        self.out("T2", "b.md")
+        self.save(todo("T1", state="done"), todo("T2", state="skipped"))
+        self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_a.md"])  # やめた Todo は含めない
+
+    def test_same_file_name_in_two_todos_gets_the_todo_id(self):
+        self.out("T1", "報告.md")
+        self.out("T2", "報告.md")
+        self.save(todo("T1", state="done"), todo("T2", state="done"))
+        self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_報告.md", "Q001_T2_報告.md"])
+
+    def test_publish_is_idempotent_and_does_not_touch_other_quests(self):
+        (self.g / "deliverables").mkdir()
+        (self.g / "deliverables" / "Q002_他の依頼.md").write_text("keep", encoding="utf-8")
+        self.out("T1", "a.md")
+        self.save(todo("T1", state="done"))
+        guild.publish_deliverables(self.q)
+        guild.publish_deliverables(self.q)
+        self.assertEqual(self.names(), ["Q001_a.md", "Q002_他の依頼.md"])
+
+    def test_unpublish_removes_only_this_quest(self):
+        (self.g / "deliverables").mkdir()
+        (self.g / "deliverables" / "Q0010_別.md").write_text("keep", encoding="utf-8")
+        self.out("T1", "a.md")
+        self.save(todo("T1", state="done"))
+        guild.publish_deliverables(self.q)
+        self.assertEqual(guild.unpublish_deliverables(self.q), ["Q001_a.md"])
+        self.assertEqual(self.names(), ["Q0010_別.md"])
+
+    def test_replan_adopt_unpublishes(self):
+        self.out("T1", "a.md")
+        old = dict(plan(todo("T1", state="done")), status="replan")
+        guild.save_plan(self.q / "plan.json", old)
+        guild.publish_deliverables(self.q)
+        (self.q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q001", "title": "t", "todos": [
+            {"id": "T1", "title": "x", "kind": "auto", "deps": [], "criteria": CRIT}]}), encoding="utf-8")
+        guild.adopt(self.q / "plan.json", TR)
+        self.assertEqual(self.names(), [])
+
+    def test_cli_publish(self):
+        self.out("T1", "a.md")
+        self.save(todo("T1", state="done"))
+        r = subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), "publish", str(self.q)],
+                           capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout)["published"], ["Q001_a.md"])
+
+
 if __name__ == "__main__":
     unittest.main()

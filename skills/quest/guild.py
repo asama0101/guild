@@ -11,6 +11,7 @@ guild.py close ROOT: 完了・中止した依頼のインプットのバック�
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
+guild.py publish QDIR: 納品物を guild/deliverables/ へコピーする（全 Todo が済んだとき）。
 guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
 guild.py archive-ingest ROOT: .work/archive-inbox/ の入力（entry・promote・deprecate・retype）を書庫に反映する。
 guild.py web-ingest ROOT: .work/web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
@@ -390,6 +391,7 @@ def adopt(plan_path, tr):
     carried = []
     if old is not None:
         shutil.copy2(plan_path, plan_path.with_name("plan.prev.json"))
+        unpublish_deliverables(plan_path.parent)  # 作り直し。置いた納品物は、また全 Todo が済んだ時に置き直す
         carried = carry_over(plan, old, plan_path.parent)
     save_plan(plan_path, plan)
     return {"adopted": len(plan["todos"]), "replaced": old is not None, "carried": carried}
@@ -498,6 +500,53 @@ def close_quests(root):
             shutil.rmtree(bak)
             removed.append(q.name)
     return {"removed": removed}
+
+
+DELIV = "deliverables"
+
+
+def deliverable_files(qdir, plan):
+    """納品物にするファイルを (Todo の id, パス) で返す。合格（done）した Todo の、
+    deliverable の印がある Todo の .md と、どの Todo でも *.prompt.md。印のある Todo が1つもなければ、done の Todo すべての .md。"""
+    marked = {t["id"] for t in plan["todos"] if t.get("deliverable")} or {t["id"] for t in plan["todos"]}
+    for t in plan["todos"]:
+        d = Path(qdir) / "output" / t["id"]
+        if t.get("state") != "done" or not d.is_dir():
+            continue
+        for f in sorted(d.rglob("*.md")):
+            if f.is_file() and (t["id"] in marked or f.name.lower().endswith(PROMPT_SUFFIX)):
+                yield t["id"], f
+
+
+def unpublish_deliverables(qdir):
+    """この依頼の納品物（deliverables/Q###_*）を消す。ほかの依頼のものは消さない。"""
+    qdir = Path(qdir)
+    d = gdir_of(qdir) / DELIV
+    removed = []
+    if d.is_dir():
+        for f in sorted(d.glob(f"{qdir.name}_*")):
+            if f.is_file():
+                f.unlink()
+                removed.append(f.name)
+    return removed
+
+
+def publish_deliverables(qdir):
+    """納品物を .work/Q###/output/ から guild/deliverables/ へコピーする（Obsidian でも読めるように）。何度実行しても同じ結果。"""
+    qdir = Path(qdir)
+    plan = load_json(qdir / "plan.json")
+    unpublish_deliverables(qdir)
+    dest = gdir_of(qdir) / DELIV
+    dest.mkdir(exist_ok=True)
+    used, names = set(), []
+    for tid, f in deliverable_files(qdir, plan):
+        name = f"{qdir.name}_{f.name}"
+        if name in used:
+            name = f"{qdir.name}_{tid}_{f.name}"
+        used.add(name)
+        shutil.copy2(f, dest / name)
+        names.append(name)
+    return {"published": names}
 
 
 def new_quest(root, request_id=None):
@@ -888,7 +937,7 @@ def archive_ingest(root):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
@@ -900,6 +949,9 @@ def main(argv):
             return 1 if cmd == "web-ingest" and result["rejected"] else 0
         if cmd in ("archive-propose", "archive-ingest"):
             print(json.dumps(archive_propose(path) if cmd == "archive-propose" else archive_ingest(path), ensure_ascii=False))
+            return 0
+        if cmd == "publish":
+            print(json.dumps(publish_deliverables(path), ensure_ascii=False))
             return 0
         if cmd in ("wait", "arrivals", "answers"):
             if cmd == "wait":
