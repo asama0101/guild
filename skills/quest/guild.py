@@ -7,6 +7,7 @@ adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を�
 guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
 guild.py new ROOT [R…]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む。
 guild.py requests ROOT: 受付待ちの依頼を一覧する。
+guild.py inputs-list ROOT [--text 依頼文]: guild/inputs/ のファイル（名前・拡張子・大きさ・更新日・文字のファイルの先頭5行）と、依頼文に出てくる書庫の項目からのヒントを一覧する（地図師に渡す）。
 guild.py close ROOT: 完了・中止した依頼のインプットのバックアップを消す。
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
@@ -477,6 +478,12 @@ def unique_names(names):
             seen.add(n.lower())
             out.append(n)
     return out
+
+
+def existing_inputs(gdir):
+    """guild/inputs/ の直下のファイルを {小文字の名前: 実際の名前} で返す（同一判定は大文字小文字を区別しない）。"""
+    d = Path(gdir) / INPUTS
+    return {p.name.lower(): p.name for p in d.iterdir() if p.is_file()} if d.is_dir() else {}
 
 
 def import_inputs(gdir, files_dir, quest):
@@ -968,12 +975,84 @@ def archive_ingest(root):
     return report
 
 
+# ============================================================ インプットの一覧（地図師の材料）
+TEXT_EXTS = (".md", ".txt", ".csv")  # 先頭の行を読むファイル
+HEAD_LINES = 5
+HEAD_BYTES = 65536  # 大きなファイルでも、ここまでしか読まない
+HEAD_WIDTH = 200  # 1行の長さの上限
+HINT_MIN_LEN = 3  # 2文字以下の語は、一致に使わない（偽の一致が多い）
+HINT_CONFIDENCE = ("confirmed", "sourced")  # 推測の項目は、ヒントに使わない
+
+
+def read_head(path):
+    """文字のファイルの先頭 HEAD_LINES 行。UTF-8 で読み、読めない文字は置き換える（Shift_JIS などでも止まらない）。"""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read(HEAD_BYTES)
+    except OSError:
+        return []
+    text = raw.decode("utf-8-sig", errors="replace")
+    return [line[:HEAD_WIDTH] for line in text.splitlines()[:HEAD_LINES]]
+
+
+def hint_terms(adir, text):
+    """依頼文に名前・別名が出てくる書庫の項目と、その項目の語（3文字以上の名前・別名）の組を返す。
+    対象は、確認済みか出典ありで、使われている（active）、心得でない項目だけ。依頼文が空なら何も返さない。"""
+    low = (text or "").casefold()
+    found = []
+    if not low.strip() or not Path(adir).is_dir():
+        return found
+    for _, e in all_entries(adir):
+        if e.get("type") not in ARCHIVE_TITLES or e["status"] != "active" or e.get("confidence") not in HINT_CONFIDENCE:
+            continue
+        words = [w for w in (one_line(x) for x in [e.get("name"), *e["aliases"]]) if len(w) >= HINT_MIN_LEN]
+        if any(w.casefold() in low for w in words):
+            found.append((e, words))
+    return found
+
+
+def inputs_list(root, text=""):
+    """guild/inputs/ のファイルを一覧する（地図師がインプットを選ぶ材料）。サブフォルダは見ない。
+    hints は、依頼文に出てくる書庫の項目から付ける理由。ヒントのあるファイルを先に、それぞれ名前順に並べる。"""
+    gdir = Path(root) / "guild"
+    if not (gdir / "config.json").exists():
+        raise GuildError(f"{gdir} がありません（/guild:init を先に実行してください）")
+    d = gdir / INPUTS
+    files = sorted((p for p in d.iterdir() if p.is_file()), key=lambda p: p.name.lower()) if d.is_dir() else []
+    terms = hint_terms(gdir / "archive", text)
+    out = []
+    for p in files:
+        st = p.stat()
+        ext = p.suffix.lower()
+        head = read_head(p) if ext in TEXT_EXTS else None
+        hints = []
+        for e, words in terms:
+            label = f"書庫の{ARCHIVE_TITLES[e['type']]}『{one_line(e.get('name'))}』"
+            if p.name.lower() in {n.lower() for n in e["inputs"]}:
+                hints.append(f"{label}→ このファイル")
+            if any(w.casefold() in p.name.casefold() for w in words):
+                hints.append(f"ファイル名に{label}")
+            elif head and any(w.casefold() in line.casefold() for w in words for line in head):
+                hints.append(f"先頭の行に{label}")
+        out.append({"name": p.name, "ext": ext, "size": st.st_size,
+                    "updated": datetime.date.fromtimestamp(st.st_mtime).isoformat(),
+                    "head": head, "hints": list(dict.fromkeys(hints))})
+    out.sort(key=lambda x: not x["hints"])  # 安定な並べ替え：ヒントのあるものが先。それぞれの中は名前順のまま
+    return out
+
+
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
     try:
+        if cmd == "inputs-list":
+            rest = argv[3:]
+            if rest and (len(rest) != 2 or rest[0] != "--text"):
+                raise GuildError("inputs-list ROOT [--text 依頼文] の形で指定してください")
+            print(json.dumps(inputs_list(path, rest[1] if rest else ""), ensure_ascii=False))
+            return 0
         if cmd in ("web-ingest", "web-pending", "web-reset"):
             gdir = Path(path) / "guild"
             result = {"web-ingest": webaccess.ingest, "web-pending": webaccess.pending, "web-reset": webaccess.reset}[cmd](gdir)

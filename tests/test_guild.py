@@ -1,4 +1,5 @@
 import copy
+import datetime
 import json
 import os
 import re
@@ -1884,6 +1885,134 @@ class ArchiveInputsTest(unittest.TestCase):
                 self.put_inbox(f"{i}.json", data)
                 self.assertEqual(guild.archive_ingest(self.root)["rejected"], [])
                 self.assertEqual(guild.read_entry(self.adir / rel)["inputs"], ["a.txt"])
+
+
+class InputsListTest(unittest.TestCase):
+    """inputs-list：guild/inputs/ のファイルの一覧と、書庫の項目からのヒント（地図師がインプットを選ぶ材料）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.inputs = self.root / "guild" / "inputs"
+        self.adir = self.root / "guild" / "archive"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def put(self, name, body):
+        p = self.inputs / name
+        p.write_bytes(body if isinstance(body, bytes) else body.encode("utf-8"))  # 改行を変換しない（size を比べるため）
+        return p
+
+    def term(self, name, aliases=(), inputs=(), confidence="confirmed", status="active", etype="term"):
+        guild.write_entry(self.adir, {"type": etype, "name": name, "aliases": list(aliases), "inputs": list(inputs), "summary": "s",
+                                      "body": "", "confidence": confidence, "source": "" if confidence == "guess" else "依頼主の登録",
+                                      "status": status})
+
+    def by_name(self, items):
+        return {x["name"]: x for x in items}
+
+    def test_lists_files_with_shape_and_head(self):
+        csv = "月,売上,KGI達成率\n" + "".join(f"{m}月,{m * 100},{m}%\n" for m in range(1, 10))
+        self.put("売上_2026Q3.csv", csv)
+        self.put("議事録 10月.txt", "10月の定例\n参加者：A、B\n")
+        self.put("提案書.pptx", b"PK\x03\x04\x00\x00")
+        (self.inputs / "old").mkdir()
+        (self.inputs / "old" / "中のファイル.md").write_text("x", encoding="utf-8")  # サブフォルダは見ない
+        ts = datetime.datetime(2026, 10, 1, 12, 0).timestamp()
+        os.utime(self.inputs / "議事録 10月.txt", (ts, ts))
+        items = guild.inputs_list(self.root)
+        self.assertEqual([x["name"] for x in items], ["売上_2026Q3.csv", "提案書.pptx", "議事録 10月.txt"])  # 名前順
+        got = self.by_name(items)
+        c = got["売上_2026Q3.csv"]
+        self.assertEqual(set(c), {"name", "ext", "size", "updated", "head", "hints"})
+        self.assertEqual((c["ext"], c["size"], c["hints"]), (".csv", len(csv.encode("utf-8")), []))
+        self.assertEqual(c["head"], csv.splitlines()[:5])
+        self.assertRegex(c["updated"], r"^\d{4}-\d{2}-\d{2}$")
+        self.assertEqual((got["提案書.pptx"]["ext"], got["提案書.pptx"]["head"]), (".pptx", None))
+        self.assertEqual(got["議事録 10月.txt"]["updated"], "2026-10-01")
+        self.assertEqual(got["議事録 10月.txt"]["head"], ["10月の定例", "参加者：A、B"])
+
+    def test_two_hundred_files_and_unreadable_text(self):
+        for i in range(200):
+            self.put(f"資料 {i:03d}.txt", f"{i}行目\n" * 10)
+        self.put("sjis.txt", "売上の表".encode("shift_jis"))  # UTF-8 でないファイルでも止まらない
+        self.put("long.md", "x" * 500000)  # 改行のない長いファイル
+        items = guild.inputs_list(self.root)
+        self.assertEqual(len(items), 202)
+        self.assertEqual([x["name"] for x in items[:3]], ["long.md", "sjis.txt", "資料 000.txt"])
+        self.assertTrue(all(len(x["head"]) <= 5 for x in items))
+        got = self.by_name(items)
+        self.assertEqual(len(got["sjis.txt"]["head"]), 1)
+        self.assertIsInstance(got["sjis.txt"]["head"][0], str)
+        self.assertEqual(len(got["long.md"]["head"][0]), 200)
+
+    def test_hints_from_archive_inputs(self):
+        self.put("売上_2026Q3.csv", "月,売上\n")
+        self.put("aaa.txt", "関係ない\n")
+        # 大文字小文字は区別しない。ないファイルの名前は無視する
+        self.term("KGI", aliases=["Key Goal Indicator"], inputs=["売上_2026q3.CSV", "消えたファイル.xlsx"])
+        items = guild.inputs_list(self.root, "今期の kgi の達成状況をまとめて")
+        self.assertEqual(items[0]["name"], "売上_2026Q3.csv")  # ヒントのあるファイルが先
+        self.assertEqual(items[0]["hints"], ["書庫の用語『KGI』→ このファイル"])
+        self.assertEqual(items[1]["hints"], [])
+        self.assertEqual(guild.inputs_list(self.root, "Key Goal Indicator を確認")[0]["hints"], ["書庫の用語『KGI』→ このファイル"])
+        self.term("出典ありの語", confidence="sourced", inputs=["aaa.txt"])
+        got = self.by_name(guild.inputs_list(self.root, "出典ありの語を使う"))
+        self.assertEqual(got["aaa.txt"]["hints"], ["書庫の用語『出典ありの語』→ このファイル"])
+
+    def test_hints_from_file_name_and_head(self):
+        self.term("月次報告書", etype="fact")
+        self.put("月次報告書_ひな形.md", "# 見出し\n")
+        self.put("メモ.txt", "来週の作業\n月次報告書の締切は5日\n")
+        self.put("zzz.txt", "1\n2\n3\n4\n5\n月次報告書\n")  # 6行目は見ない
+        items = guild.inputs_list(self.root, "月次報告書を作って")
+        got = self.by_name(items)
+        self.assertEqual(got["月次報告書_ひな形.md"]["hints"], ["ファイル名に書庫の業務情報『月次報告書』"])
+        self.assertEqual(got["メモ.txt"]["hints"], ["先頭の行に書庫の業務情報『月次報告書』"])
+        self.assertEqual(got["zzz.txt"]["hints"], [])
+        self.assertEqual([x["name"] for x in items], ["メモ.txt", "月次報告書_ひな形.md", "zzz.txt"])
+        # 依頼文に出てこない項目は、ファイル名にあってもヒントにしない。依頼文がなければヒントはない
+        self.assertTrue(all(not x["hints"] for x in guild.inputs_list(self.root, "別の依頼")))
+        self.assertTrue(all(not x["hints"] for x in guild.inputs_list(self.root)))
+
+    def test_false_positive_guards(self):
+        self.put("売上_2026Q3.csv", "月,売上\n推測語ABC\n")
+        self.term("売上", inputs=["売上_2026Q3.csv"])  # 2文字の語は使わない
+        self.term("推測語ABC", inputs=["売上_2026Q3.csv"], confidence="guess")
+        self.term("廃止語ABC", inputs=["売上_2026Q3.csv"], status="廃止")
+        self.term("要確認ABC", inputs=["売上_2026Q3.csv"], status="要確認")
+        self.term("心得ABC", inputs=["売上_2026Q3.csv"], etype="lesson")
+        items = guild.inputs_list(self.root, "売上と 推測語ABC と 廃止語ABC と 要確認ABC と 心得ABC を見る")
+        self.assertEqual(items[0]["hints"], [])
+
+    def test_without_init_or_inputs_folder(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(guild.GuildError):
+                guild.inputs_list(Path(d))
+        self.inputs.rmdir()
+        self.assertEqual(guild.inputs_list(self.root), [])
+        self.assertEqual(guild.existing_inputs(self.root / "guild"), {})
+
+    def test_existing_inputs(self):
+        self.put("KGI定義.md", "x")
+        (self.inputs / "sub").mkdir()
+        self.assertEqual(guild.existing_inputs(self.root / "guild"), {"kgi定義.md": "KGI定義.md"})
+
+    def test_cli(self):
+        self.put("議事録 10月.txt", "KGI の確認\n")
+        self.term("KGI", inputs=["議事録 10月.txt"])
+        run = lambda *a: subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), "inputs-list", str(self.root), *a],
+                                        capture_output=True, text=True, encoding="utf-8")
+        r = run("--text", "KGI をまとめる")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        got = json.loads(r.stdout)
+        self.assertEqual(got[0]["name"], "議事録 10月.txt")
+        self.assertIn("書庫の用語『KGI』→ このファイル", got[0]["hints"])
+        self.assertEqual(run().returncode, 0)
+        self.assertEqual(run("--nanika").returncode, 1)
+        self.assertEqual(run("--text").returncode, 1)
 
 
 if __name__ == "__main__":
