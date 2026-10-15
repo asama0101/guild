@@ -893,35 +893,48 @@ class ArchiveTest(unittest.TestCase):
         e.update(kw)
         return e
 
-    def test_init_makes_archive_and_keeps_items(self):
-        for sub in ("terms", "flows", "facts", "personal", "lessons"):
-            self.assertTrue((self.adir / sub).is_dir(), sub)
+    def test_init_makes_flat_archive_and_keeps_items(self):
         self.assertTrue((self.adir / "index.md").is_file())
-        self.assertFalse((self.root / "guild" / "knowledge").exists())
-        guild.write_entry(self.adir, self.entry(name="A", confidence="confirmed", source="x"))
-        guild.init_guild(self.root)
-        self.assertTrue((self.adir / "terms" / "A.md").is_file())
+        self.assertEqual([p.name for p in self.adir.iterdir() if p.is_dir()], [])  # 種類別フォルダはない
+        rel = guild.write_entry(self.adir, self.entry(type="fact", name="料金", summary="s"))
+        self.assertEqual(rel, "料金.md")
+        guild.init_guild(self.root)  # 再実行しても消えない
+        self.assertTrue((self.adir / "料金.md").is_file())
+
+    def test_an_entry_named_index_does_not_overwrite_the_index(self):
+        rel = guild.write_entry(self.adir, self.entry(name="index", summary="s"))
+        self.assertNotEqual(rel, "index.md")
+        guild.rebuild_index(self.adir)
+        self.assertIn("書庫の索引", (self.adir / "index.md").read_text(encoding="utf-8"))
+
+    def test_entry_path_accepts_only_flat_md_names(self):
+        guild.write_entry(self.adir, self.entry(name="KPI", summary="s"))
+        self.assertEqual(guild.entry_path(self.adir, "KPI.md"), self.adir / "KPI.md")
+        for bad in ("terms/KPI.md", "../x.md", "index.md", "KPI.txt", "ない.md"):
+            with self.assertRaises(guild.GuildError):
+                guild.entry_path(self.adir, bad)
+
+    def test_retype_only_rewrites_type_in_place(self):
+        rel = guild.write_entry(self.adir, self.entry(name="料金", type="term", summary="s", confidence="confirmed", source="x"))
+        self.put_inbox("1.json", {"type": "retype", "path": rel, "to": "fact"})
+        r = guild.archive_ingest(self.root)
+        self.assertEqual(r["rejected"], [])
+        self.assertEqual(guild.read_entry(self.adir / rel)["type"], "fact")
+        self.assertEqual([p.name for p in self.adir.glob("*.md")].count(rel), 1)
 
     def test_personal_is_a_type_in_index_and_propose(self):
-        self.assertEqual(guild.ARCHIVE_DIRS["personal"], "personal")
+        self.assertIn("personal", guild.ARCHIVE_TYPES)
         guild.write_entry(self.adir, self.entry(type="personal", name="文体", summary="敬体で簡潔に", confidence="confirmed", source="依頼主の登録"))
         guild.rebuild_index(self.adir)
         idx = (self.adir / "index.md").read_text(encoding="utf-8")
         self.assertIn("## 個人", idx)
-        self.assertIn("[[personal/文体]]", idx)
+        self.assertIn("[[文体]]", idx)
         self.draft(self.cand("C1", type="personal", name="役職", aliases=[], summary="情報システム部の課長", confidence="guess", source=""))
         self.assertEqual(guild.archive_propose(self.q)["pending"], ["C1"])  # 心得と違い、確認の手紙を通る
 
-    def test_init_adds_personal_to_an_old_archive(self):
-        import shutil as sh
-        sh.rmtree(self.adir / "personal")
-        guild.init_guild(self.root)
-        self.assertTrue((self.adir / "personal").is_dir())
-
     def test_entry_roundtrip_and_safe_name(self):
         rel = guild.write_entry(self.adir, self.entry(type="fact", name="料金/月額: 200M?", aliases=["a,b"], summary="行1\n行2", body="本文", confidence="sourced", source="u"))
-        self.assertTrue(rel.startswith("facts/"))
-        self.assertNotIn("/", rel[len("facts/"):])
+        self.assertNotIn("/", rel)
         e = guild.read_entry(self.adir / rel)
         self.assertEqual((e["name"], e["type"], e["confidence"], e["status"]), ("料金/月額: 200M?", "fact", "sourced", "active"))
         self.assertEqual(e["summary"], "行1 行2")
@@ -946,7 +959,7 @@ class ArchiveTest(unittest.TestCase):
         guild.rebuild_index(self.adir)
         idx = (self.adir / "index.md").read_text(encoding="utf-8")
         self.assertIn("生きている", idx)
-        self.assertIn("[[terms/生きている]]", idx)
+        self.assertIn("[[生きている]]", idx)
         self.assertIn("食い違い", idx)
         self.assertNotIn("廃止の語", idx)
         self.assertNotIn("心得ひとつ", idx)
@@ -965,7 +978,7 @@ class ArchiveTest(unittest.TestCase):
         self.assertEqual(r["pending"], ["C1"])
         self.assertEqual(len(r["registered"]), 1)
         self.assertTrue((self.adir / r["registered"][0]).is_file())
-        self.assertFalse((self.adir / "terms" / "WVS2.md").exists())  # 確認前は登録しない
+        self.assertFalse((self.adir / "WVS2.md").exists())  # 確認前は登録しない
         self.assertEqual(self.archive_json()["status"], "proposed")
 
     def test_propose_with_only_lessons_is_done(self):
@@ -997,9 +1010,9 @@ class ArchiveTest(unittest.TestCase):
         self.draft(self.cand("C1"), self.cand("C2", name="DX", aliases=[], summary="s2"))
         guild.archive_propose(self.q)
         guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register", "C2": "skip"}})
-        e = guild.read_entry(self.adir / "terms" / "WVS2.md")
+        e = guild.read_entry(self.adir / "WVS2.md")
         self.assertEqual((e["confidence"], e["status"]), ("sourced", "active"))
-        self.assertFalse((self.adir / "terms" / "DX.md").exists())
+        self.assertFalse((self.adir / "DX.md").exists())
         self.assertIn("WVS2", (self.adir / "index.md").read_text(encoding="utf-8"))
         self.assertEqual(self.archive_json()["status"], "done")
 
@@ -1011,7 +1024,7 @@ class ArchiveTest(unittest.TestCase):
         guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register"}})
         with self.assertRaises(guild.GuildError):
             guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register"}})
-        self.assertEqual(len(list((self.adir / "terms").glob("*.md"))), 1)
+        self.assertEqual(len([p for p in self.adir.glob("*.md") if p.name != "index.md"]), 1)
 
     def test_decide_update_replaces_and_conflict_appends(self):
         rel = guild.write_entry(self.adir, self.entry(type="fact", name="月額", summary="旧", body="旧本文", confidence="confirmed", source="old"))
@@ -1039,21 +1052,21 @@ class ArchiveTest(unittest.TestCase):
         (self.q / "inbox" / "a-archive.json").write_text(json.dumps({"type": "archive", "decisions": {"C1": "register"}}), encoding="utf-8")
         r = guild.ingest(self.q / "plan.json", guild.load_json(self.q / "plan.json"), TR)
         self.assertEqual(r["rejected"], [])
-        self.assertTrue((self.adir / "terms" / "WVS2.md").is_file())
+        self.assertTrue((self.adir / "WVS2.md").is_file())
         self.assertTrue((self.q / "inbox" / "done" / "a-archive.json").is_file())
 
     def test_archive_ingest_entry_promote_deprecate(self):
         self.put_inbox("1-entry.json", {"type": "entry", "entry": {"type": "flow", "name": "経費精算", "aliases": ["精算"], "summary": "申請から承認まで", "body": "1. 申請 2. 承認", "source": "経理部"}})
         r = guild.archive_ingest(self.root)
         self.assertEqual((len(r["applied"]), r["rejected"]), (1, []))
-        e = guild.read_entry(self.adir / "flows" / "経費精算.md")
+        e = guild.read_entry(self.adir / "経費精算.md")
         self.assertEqual(e["confidence"], "confirmed")  # 依頼主が入れたものは確認済み
         rel = guild.write_entry(self.adir, self.entry(name="推測語"))
         self.put_inbox("2-promote.json", {"type": "promote", "path": rel})
-        self.put_inbox("3-dep.json", {"type": "deprecate", "path": "flows/経費精算.md", "reason": "廃止された"})
+        self.put_inbox("3-dep.json", {"type": "deprecate", "path": "経費精算.md", "reason": "廃止された"})
         guild.archive_ingest(self.root)
         self.assertEqual(guild.read_entry(self.adir / rel)["confidence"], "confirmed")
-        d = guild.read_entry(self.adir / "flows" / "経費精算.md")
+        d = guild.read_entry(self.adir / "経費精算.md")
         self.assertEqual(d["status"], "廃止")
         self.assertIn("廃止された", d["body"])
         self.assertNotIn("経費精算", (self.adir / "index.md").read_text(encoding="utf-8"))
@@ -1064,27 +1077,26 @@ class ArchiveTest(unittest.TestCase):
         self.put_inbox("2.json", {"type": "entry", "entry": {"type": "term", "name": "kpi", "summary": "別", "body": "b", "source": ""}})
         r = guild.archive_ingest(self.root)
         self.assertEqual(len(r["rejected"]), 1)  # 同名は新規にできない
-        self.put_inbox("3.json", {"type": "entry", "update_of": "terms/KPI.md", "entry": {"type": "term", "name": "KPI", "summary": "編集後", "body": "b2", "source": ""}})
+        self.put_inbox("3.json", {"type": "entry", "update_of": "KPI.md", "entry": {"type": "term", "name": "KPI", "summary": "編集後", "body": "b2", "source": ""}})
         guild.archive_ingest(self.root)
-        self.assertEqual(guild.read_entry(self.adir / "terms" / "KPI.md")["summary"], "編集後")
+        self.assertEqual(guild.read_entry(self.adir / "KPI.md")["summary"], "編集後")
 
     def retype(self, path, to):
         self.put_inbox("20261011-retype.json", {"type": "retype", "path": path, "to": to})
         return guild.archive_ingest(self.root)
 
-    def test_retype_moves_the_file_keeps_fields_and_updates_index(self):
+    def test_retype_keeps_fields_and_updates_index(self):
         rel = guild.write_entry(self.adir, self.entry(name="料金", summary="s", body="本文", confidence="sourced", source="https://x (2026-10-01)", aliases=["fee"]))
         old = guild.read_entry(self.adir / rel)
         r = self.retype(rel, "fact")
         self.assertEqual(r["rejected"], [], r)
-        self.assertFalse((self.adir / rel).exists())
-        new = guild.read_entry(self.adir / "facts" / "料金.md")
+        new = guild.read_entry(self.adir / rel)  # その場で書き換わる
         self.assertEqual(new["type"], "fact")
         for k in ("confidence", "confirmed", "source", "status", "body", "aliases", "summary"):
             self.assertEqual(new[k], old[k], k)
         idx = (self.adir / "index.md").read_text(encoding="utf-8")
-        self.assertIn("[[facts/料金]]", idx)
-        self.assertNotIn("[[terms/料金]]", idx)
+        self.assertIn("[[料金]]", idx)
+        self.assertNotIn("type: term", idx)
 
     def test_retype_rejects_a_same_name_item_in_the_target(self):
         guild.write_entry(self.adir, self.entry(type="fact", name="料金", summary="別", confidence="guess"))
@@ -1092,13 +1104,6 @@ class ArchiveTest(unittest.TestCase):
         r = self.retype(rel, "fact")
         self.assertEqual(len(r["rejected"]), 1)
         self.assertTrue((self.adir / rel).exists())
-
-    def test_retype_uses_a_serial_file_name_when_only_the_file_name_collides(self):
-        guild.write_entry(self.adir, self.entry(type="fact", name="別の項目", summary="x"), "facts/料金.md")  # ファイル名だけ同じ
-        rel = guild.write_entry(self.adir, self.entry(name="料金", summary="s"))
-        self.assertEqual(self.retype(rel, "fact")["rejected"], [])
-        self.assertEqual(guild.read_entry(self.adir / "facts" / "料金.md")["name"], "別の項目")
-        self.assertEqual(guild.read_entry(self.adir / "facts" / "料金-2.md")["name"], "料金")
 
     def test_retype_rejects_bad_requests_and_changes_nothing(self):
         rel = guild.write_entry(self.adir, self.entry(name="A", summary="s"))
@@ -1108,21 +1113,6 @@ class ArchiveTest(unittest.TestCase):
             with self.subTest(path=path, to=to):
                 self.assertEqual(len(self.retype(path, to)["rejected"]), 1)
         self.assertTrue((self.adir / rel).exists() and (self.adir / les).exists() and (self.adir / dep).exists())
-
-    def test_retype_rolls_back_the_new_file_when_the_old_one_cannot_be_removed(self):
-        from unittest import mock
-        rel = guild.write_entry(self.adir, self.entry(name="料金", summary="s"))
-        real_unlink = Path.unlink
-
-        def fake(self_, *a, **k):
-            if self_.name == "料金.md" and self_.parent.name == "terms":
-                raise PermissionError("locked")
-            return real_unlink(self_, *a, **k)
-        with mock.patch.object(Path, "unlink", fake):
-            r = self.retype(rel, "fact")
-        self.assertEqual(len(r["rejected"]), 1)
-        self.assertTrue((self.adir / rel).exists())
-        self.assertFalse((self.adir / "facts" / "料金.md").exists())  # 重複して残らない
 
     def test_rejected_archive_input_leaves_its_reason_for_the_board(self):
         rel = guild.write_entry(self.adir, self.entry(name="A", summary="s"))
@@ -1137,7 +1127,7 @@ class ArchiveTest(unittest.TestCase):
         (d / "0-broken.json").write_text("{not json", encoding="utf-8")
         self.put_inbox("1-unknown.json", {"type": "nanika"})
         self.put_inbox("2-escape.json", {"type": "promote", "path": "../../config.json"})
-        self.put_inbox("3-nofile.json", {"type": "promote", "path": "terms/ない.md"})
+        self.put_inbox("3-nofile.json", {"type": "promote", "path": "ない.md"})
         self.put_inbox("4-ok.json", {"type": "entry", "entry": {"type": "term", "name": "ok", "summary": "s", "body": "", "source": ""}})
         r = guild.archive_ingest(self.root)
         self.assertEqual((len(r["applied"]), len(r["rejected"])), (1, 4))
@@ -1146,13 +1136,13 @@ class ArchiveTest(unittest.TestCase):
 
     def test_arrivals_include_archive_inbox(self):
         self.assertFalse([a for a in guild.arrivals(self.root) if a["kind"] == "archive"])
-        self.put_inbox("1.json", {"type": "promote", "path": "terms/x.md"})
+        self.put_inbox("1.json", {"type": "promote", "path": "x.md"})
         self.assertEqual([a["file"] for a in guild.arrivals(self.root) if a["kind"] == "archive"], ["1.json"])
 
     def test_adopt_keeps_archive_used(self):
-        (self.q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q1", "title": "t", "todos": [todo("T1")], "archive_used": ["terms/WVS2.md"]}), encoding="utf-8")
+        (self.q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q1", "title": "t", "todos": [todo("T1")], "archive_used": ["WVS2.md"]}), encoding="utf-8")
         guild.adopt(self.q / "plan.json", TR)
-        self.assertEqual(guild.load_json(self.q / "plan.json")["archive_used"], ["terms/WVS2.md"])
+        self.assertEqual(guild.load_json(self.q / "plan.json")["archive_used"], ["WVS2.md"])
 
     def test_cli_archive_commands(self):
         script = str(ROOT / "skills" / "quest" / "guild.py")
@@ -1362,10 +1352,6 @@ class McpContractTest(unittest.TestCase):
         self.assertLess(s.index("mcp__playwright__browser_navigate"), s.index("使える Python を探す"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class WorkDirTest(unittest.TestCase):
     """機械用のファイルは guild/.work/ に置く（Obsidian に出さない）。"""
 
@@ -1401,3 +1387,7 @@ class WorkDirTest(unittest.TestCase):
         webaccess.save(self.g, dict(webaccess.load(self.g), allow=["example.jp"]))
         self.assertTrue((self.g / ".work" / "web" / "access.json").is_file())
         self.assertFalse((self.g / "web").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

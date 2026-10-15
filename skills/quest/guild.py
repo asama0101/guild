@@ -511,7 +511,8 @@ def take_answers(qdir):
 
 
 # ============================================================ 書庫（archive）
-ARCHIVE_DIRS = {"term": "terms", "flow": "flows", "fact": "facts", "personal": "personal", "lesson": "lessons"}
+ARCHIVE_TYPES = ("term", "flow", "fact", "personal", "lesson")  # 書庫の項目の種類。フォルダは分けず、種類は frontmatter の type で持つ
+INDEX_NAME = "index.md"
 ARCHIVE_TITLES = {"term": "用語", "flow": "業務フロー", "fact": "業務情報", "personal": "個人"}  # 心得は索引に載せない（役は読まない）
 CONFIDENCE = ("guess", "sourced", "confirmed")  # 低い順
 ACTIVE_STATUS = ("active", "要確認")
@@ -520,11 +521,10 @@ FILE_BAD = re.compile(r'[\\/:*?"<>|\s]+')
 
 
 def init_archive(adir):
-    """archive/ と種類別のフォルダ、索引を作る。既存の項目は消さない。"""
+    """archive/ と索引を作る。既存の項目は消さない。"""
     adir = Path(adir)
-    for sub in ARCHIVE_DIRS.values():
-        (adir / sub).mkdir(parents=True, exist_ok=True)
-    if not (adir / "index.md").exists():
+    adir.mkdir(parents=True, exist_ok=True)
+    if not (adir / INDEX_NAME).exists():
         rebuild_index(adir)
 
 
@@ -583,8 +583,8 @@ def entry_text(e):
 
 
 def check_entry(e):
-    if e.get("type") not in ARCHIVE_DIRS:
-        raise GuildError(f"type が不正です: {e.get('type')}（{', '.join(ARCHIVE_DIRS)}）")
+    if e.get("type") not in ARCHIVE_TYPES:
+        raise GuildError(f"type が不正です: {e.get('type')}（{', '.join(ARCHIVE_TYPES)}）")
     if not one_line(e.get("name")):
         raise GuildError("name がありません")
     if not one_line(e.get("summary")):
@@ -603,13 +603,13 @@ def write_entry(adir, e, path=None):
         stem = FILE_BAD.sub("-", one_line(e["name"])).strip("-. ")
         if not stem:
             raise GuildError(f"ファイル名にできない名前です: {e['name']}")
-        folder = adir / ARCHIVE_DIRS[e["type"]]
-        folder.mkdir(parents=True, exist_ok=True)
-        n, cand = 1, folder / f"{stem}.md"
+        if stem.lower() == "index":
+            stem = "index-項目"  # 索引（index.md）を上書きしない
+        n, cand = 1, adir / f"{stem}.md"
         while cand.exists():
             n += 1
-            cand = folder / f"{stem}-{n}.md"
-        path = cand.relative_to(adir).as_posix()
+            cand = adir / f"{stem}-{n}.md"
+        path = cand.name
     target = adir / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(entry_text(e), encoding="utf-8")
@@ -617,21 +617,22 @@ def write_entry(adir, e, path=None):
 
 
 def entry_path(adir, rel):
-    """archive/ の中の項目だけを指せる。外や、4つのフォルダ以外は指せない。"""
-    parts = str(rel).replace("\\", "/").split("/")
-    ok = len(parts) == 2 and parts[0] in ARCHIVE_DIRS.values() and parts[1].endswith(".md") and ".." not in parts[1]
-    p = Path(adir) / "/".join(parts)
+    """archive/ の中の項目（フォルダなしの 名前.md）だけを指せる。索引や、外は指せない。"""
+    name = str(rel).replace("\\", "/")
+    ok = "/" not in name and name.endswith(".md") and name != INDEX_NAME and ".." not in name
+    p = Path(adir) / name
     if not ok or not p.is_file():
         raise GuildError(f"項目が見つかりません: {rel}")
     return p
 
 
 def all_entries(adir):
-    for folder in ARCHIVE_DIRS.values():
-        for f in sorted((Path(adir) / folder).glob("*.md")):
-            e = read_entry(f)
-            if e is not None:
-                yield f"{folder}/{f.name}", e
+    for f in sorted(Path(adir).glob("*.md")):
+        if f.name == INDEX_NAME:
+            continue
+        e = read_entry(f)
+        if e is not None:
+            yield f.name, e
 
 
 def find_entry(adir, etype, names):
@@ -755,10 +756,9 @@ def archive_apply(adir, data):
         e.update(confidence="confirmed", confirmed=today(), status="active", source=e.get("source") or "依頼主の確認")
         write_entry(adir, e, data["path"])
     elif kind == "retype":
-        src = entry_path(adir, data["path"])
-        e = read_entry(src)
+        e = read_entry(entry_path(adir, data["path"]))
         to = data.get("to")
-        if to not in ARCHIVE_DIRS or to == "lesson" or e.get("type") == "lesson":
+        if to not in ARCHIVE_TYPES or to == "lesson" or e.get("type") == "lesson":
             raise GuildError("心得への付け替え・心得からの付け替えはできません")
         if to == e.get("type"):
             raise GuildError("同じ種類です")
@@ -768,12 +768,7 @@ def archive_apply(adir, data):
         if dup:
             raise GuildError(f"移動先に同名の項目があります: {dup}")
         e["type"] = to
-        new = adir / write_entry(adir, e)  # 新しい場所へ。ファイル名が重なれば連番になり、上書きしない
-        try:
-            src.unlink()  # 書けたあとで元を消す（書けなければ元は残る）
-        except OSError as err:
-            new.unlink()  # 元を消せなかったら、書いたほうを戻す（2つの種類に残さない）
-            raise GuildError(f"元の項目を消せませんでした: {err}")
+        write_entry(adir, e, data["path"])  # 同じファイルの type を書き換えるだけ
     elif kind == "deprecate":
         e = read_entry(entry_path(adir, data["path"]))
         e["body"] = e["body"].rstrip("\n") + f"\n\n## 廃止（{today()}）\n{one_line(data.get('reason')) or '理由の記載なし'}\n"
