@@ -69,7 +69,6 @@ body{margin:0;background:var(--bg)}
 .s-ng{background:var(--ng)}
 .s-blk{background:repeating-linear-gradient(45deg,var(--stripe1) 0 6px,var(--stripe2) 6px 12px);color:var(--stop);border:1px solid var(--stop-line);line-height:22px}
 .nowline{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ng)}
-.qtag{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:11.5px;background:var(--ink);color:var(--paper);border-radius:3px;padding:0 6px;margin-right:8px}
 @media (max-width:760px){.lh{display:none}.lr{grid-template-columns:70px 1fr}}
 .stamp{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800;font-size:13px;border:2px solid;border-radius:4px;padding:0 9px;display:inline-block;white-space:nowrap;transform:rotate(-2deg)}
 .sd-ok{color:var(--ok);border-color:var(--ok);background:var(--ok-bg)}
@@ -148,14 +147,6 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .morebtn{min-height:34px}
 .filters button{font:inherit;font-size:13px;min-height:36px;border:1px solid var(--brass);border-radius:999px;padding:2px 14px;background:transparent;color:var(--ink);cursor:pointer}
 .filters button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-.msg{display:flex;gap:12px;margin-bottom:12px}
-.who{flex:none;width:70px;text-align:center;font-size:11.5px;color:var(--sub);line-height:1.3}
-.av{display:flex;width:42px;height:42px;margin:0 auto 4px;border-radius:50%;align-items:center;justify-content:center;font-weight:800;font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:16px;color:#fff}
-.av.gm{background:#3D4A5C}.av.cart{background:#4F6A70}.av.adv{background:#6B5A3E}.av.app{background:#5B4A6B}.av.me{background:var(--warn)}
-.bub{flex:1 1 auto;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:8px 16px}
-.bub time{display:block;font-size:11.5px;color:var(--sub)}
-.bub p{margin:0}
-.bub a{font-size:12.5px;color:var(--gold)}
 .grid2{column-count:2;column-gap:16px}
 .grid2>.card{break-inside:avoid;margin:0 0 16px}
 @media (max-width:900px){.grid2{column-count:1}}
@@ -203,14 +194,13 @@ select{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass)
 .dzmsg{font-size:14px;color:var(--sub)}
 .dzlink{font-size:14px;font-weight:700;color:var(--gold);text-decoration:underline}
 .filebtn:focus-within .dzlink{outline:3px solid var(--brass);outline-offset:2px}
-.trow .ff{flex:1 1 300px}
 .ff{display:flex;flex-direction:column;gap:6px;min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chipx{margin-left:6px;border:0;background:transparent;color:var(--sub);font:inherit;cursor:pointer;padding:0 2px}
 .chipx:hover{color:var(--ng)}
 .filebtn input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .filebtn .btn{display:inline-flex;align-items:center;box-sizing:border-box;min-height:34px;line-height:1.2}
-.fld.wide{grid-column:1/-1}.trow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}.trow select{min-width:240px}
+.fld.wide{grid-column:1/-1}
 .filebtn:focus-within .btn{outline:3px solid var(--brass);outline-offset:1px}
 .chip{display:inline-block;padding:2px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);font-size:13px;word-break:break-all}
 .rhead{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -334,7 +324,7 @@ class MemFS {
 }
 
 // 論理パス（画面の中で使う Q001/… requests/… web/… archive/inbox/…）を、guild/ の中の物理パスに写す。
-// 機械用のファイルは guild/.work/ にある（Obsidian に出ない）。archive/ の項目、deliverables/、inputs/、templates/ はそのまま。
+// 機械用のファイルは guild/.work/ にある（Obsidian に出ない）。archive/ の項目、deliverables/、inputs/ はそのまま。
 const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1']];
 function physical(p) { for (const [re, to] of PHYS) if (re.test(p)) return p.replace(re, to); return p; }
 class PathMap {
@@ -371,6 +361,7 @@ function parseEntry(path, text) {
   const val = (v) => { if (/^["[]/.test(v)) { try { return JSON.parse(v); } catch (_) { /* そのまま使う */ } } return v; };
   for (const line of m[1].split(/\r?\n/)) { const i = line.indexOf(':'); if (i > 0) e[line.slice(0, i).trim()] = val(line.slice(i + 1).trim()); }
   e.aliases = (Array.isArray(e.aliases) ? e.aliases : []).map((x) => String(x).trim()).filter(Boolean);
+  e.inputs = (Array.isArray(e.inputs) ? e.inputs : []).map((x) => String(x).trim()).filter(Boolean);  // 関係するインプットの名前。aliases と同じ形（ない古い項目は空）
   e.status = e.status || 'active';
   return e;
 }
@@ -380,7 +371,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, openQ: {}, openInit: false, tq: null, role: 'all', stf: { board: {} }, kn: { cur: null }, limit: { board: 20, msg: 50 }, msgKey: '',
+  tab: 'board', sel: null, openQ: {}, openInit: false, stf: { board: {} }, kn: { cur: null }, limit: { board: 20 },
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -403,7 +394,7 @@ async function loadAll() {
   for (const e of await S.fs.list('requests')) {
     if (e.kind === 'file' && /^R[0-9][0-9-]*\.json$/.test(e.name)) {
       const r = await readJSON(`requests/${e.name}`);
-      if (r) requests.push({ id: e.name.slice(0, -5), text: r.text || '', due: r.due || null, files: r.files || [], created: r.created || '', template: r.template || null });
+      if (r) requests.push({ id: e.name.slice(0, -5), text: r.text || '', start: r.start || null, due: r.due || null, inputs: Array.isArray(r.inputs) ? r.inputs : [], files: r.files || [], created: r.created || '' });
     }
   }
   requests.sort((a, b) => a.id.localeCompare(b.id));
@@ -419,7 +410,7 @@ async function loadAll() {
     const output = await listFilesDeep(`${q}/output`, 2);
     const inbox = [];
     for (const f of await S.fs.list(`${q}/inbox`)) {
-      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null, qs: null, due: j.due === undefined ? undefined : j.due }); }
+      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null, qs: null, due: j.due === undefined ? undefined : j.due, add: Array.isArray(j.add) ? j.add : null, remove: Array.isArray(j.remove) ? j.remove : null }); }
     }
     if (!plan) for (const f of await S.fs.list(`${q}/inbox/done`)) {
       if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', todo: null, choice: null, qs: j.answers.map((a) => a.q) }); }
@@ -445,9 +436,9 @@ async function loadAll() {
   const webList = (k) => (Array.isArray(wa[k]) ? wa[k] : []);
   const webWait = (await S.fs.list('web/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
   const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), wait: webWait };
-  const templates = (await S.fs.list('templates')).filter((e) => e.kind === 'file').map((e) => e.name).sort();
-  const inputs = (await S.fs.list('inputs')).filter((e) => e.kind === 'file').map((e) => e.name).sort();
-  return { requests, quests, archive, archiveWait, archiveRejected, web, templates: templates.filter((n) => n.toLowerCase().endsWith('.md')), inputs, root: (cfg && cfg.root) || '' };
+  // 共通のインプット（guild/inputs/ の直下だけ。サブフォルダは見ない）。名前の同一判定は、大文字小文字を区別しない（guild.py と同じ）
+  const inputs = (await S.fs.list('inputs')).filter((e) => e.kind === 'file').map((e) => ({ name: e.name, mtime: e.mtime || 0 })).sort((a, b) => a.name.localeCompare(b.name));
+  return { requests, quests, archive, archiveWait, archiveRejected, web, inputs, root: (cfg && cfg.root) || '' };
 }
 
 // ============================================================ 読み解き
@@ -474,10 +465,12 @@ function dependents(plan, id) {
   set.delete(id); return plan.todos.filter((t) => set.has(t.id));
 }
 
+// 計画のインプット（inputs: [{name, source, reason}]）と候補（candidates: [{name, reason}]）。ない古い計画・壊れた要素は除く
+const planList = (p, k) => (p && Array.isArray(p[k]) ? p[k].filter((x) => x && typeof x.name === 'string' && x.name) : []);
 function derive(q) {
   const p = q.plan;
   const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 80)) || q.id;
-  const d = { id: q.id, title, asks: [], info: null, todos: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q };
+  const d = { id: q.id, title, asks: [], info: null, todos: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q, inputs: planList(p, 'inputs'), candidates: planList(p, 'candidates') };
   const inboxHas = (type, todo, choice) => q.inbox.some((x) => x.type === type && (todo == null || x.todo === todo) && (choice == null || x.choice === choice));
   if (!p) {
     const qs = q.draft && Array.isArray(q.draft.questions) ? q.draft.questions : [];
@@ -524,7 +517,7 @@ function derive(q) {
 
 function buildModel(raw) {
   const quests = raw.quests.map(derive);
-  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, templates: raw.templates, inputs: raw.inputs || [], quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, inputs: raw.inputs || [], quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
@@ -536,39 +529,7 @@ function askText(x, a) {
   return `${a.todo.id} ができなかったため、進め方の判断`;
 }
 
-// ---- 会話の材料と、タイムラインの帯
-function roleOf(kind) { return { gm: ['受', 'マスター', 'gm'], cart: ['地', '地図師', 'cart'], adv: ['冒', '冒険者', 'adv'], app: ['鑑', '鑑定士', 'app'], me: ['君', 'あなた', 'me'] }[kind]; }
-function messagesOf(q) {
-  const p = q.q.plan; if (!p) return [];
-  const has = (n) => q.q.reports.includes(n);
-  const out = [];
-  const kindOf = {}; p.todos.forEach((t) => { kindOf[t.id] = t.kind; });
-  const add = (h0, role, text, report, note) => out.push({ q: q.id, t: h0.t, role, text, report: report && has(report.split('/').pop()) ? report : '', note: !!note });
-  for (const e of p.history || []) {
-    const id = e.id;
-    if (e.event === 'adopted') add(e, 'cart', `${p.todos.length}つの Todo に分けました。`, 'reports/plan-draft.json');
-    else if (e.event === 'approved') add(e, 'me', '計画を承認しました。');
-    else if (e.event === 'accepted') add(e, 'me', '納品物を受け取りました。');
-    else if (e.event === 'replanned') add(e, 'cart', `計画を作り直しました（引き継いだ Todo：${(e.carried || []).join('、') || 'なし'}）。`, 'reports/plan-draft.json');
-    else if (e.event === 'decision') add(e, 'me', e.choice === 'abort' ? '依頼を中止しました。' : '計画を直すよう頼みました。' + (e.comment ? `（${e.comment}）` : ''));
-    else if (e.event === 'deps_done') {
-      if (e.to === 'waiting_user') add(e, 'gm', `${id} をあなたに渡しました。「掲示板」の手紙に、答える欄があります。`);
-      else if (e.to === 'awaiting_confirm') add(e, 'gm', `${id} は実行前の確認待ちです。`);
-      else add(e, 'gm', `${id} を冒険者に渡しました。`);
-    }
-    else if (e.event === 'dep_failed') add(e, 'gm', `${id} が止まりました（前提の Todo ができなかったため）。`);
-    else if (e.event === 'unblock') add(e, 'gm', `${id} の止まりが解けました。`);
-    else if (e.event === 'confirmed') add(e, 'me', `${id}：実行する、を選びました。`);
-    else if (e.event === 'declined') add(e, 'me', `${id}：実行しない、を選びました。`);
-    else if (e.event === 'submitted') { if (kindOf[id] === 'human') add(e, 'me', `${id}：できた（結果を送りました）。`, `reports/${id}-user.md`); else add(e, 'adv', `${id}：作業を終えました。`, `reports/${id}-adventurer.md`); }
-    else if (e.event === 'reported_failed') add(e, 'me', `${id}：できなかった。`, `reports/${id}-user.md`);
-    else if (e.event === 'passed') add(e, 'app', `${id}：合格。`, `reports/${id}-appraiser.md`);
-    else if (e.event === 'rejected') add(e, 'app', `${id}：不合格です。${e.to === 'failed' ? 'やり直しの回数を超えました。' : 'やり直します。'}`, `reports/${id}-appraiser.md`, true);
-    else if (e.event === 'skip') add(e, 'me', `${id}：やめました。`);
-    else if (e.event === 'dropped') add(e, 'gm', `${id}：前提がやめられたため、やめました。`);
-  }
-  return out;
-}
+// ---- タイムラインの帯
 
 const BARKIND = { running: ['adv', '作業'], review: ['app', '鑑定'], waiting_user: ['me', 'あなたの番'], awaiting_confirm: ['conf', '確認待ち'], blocked: ['blk', '止まり'], failed: ['ng', 'できず'] };
 function ganttOf(q) {
@@ -1019,13 +980,9 @@ function composer() {
   ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendRequest(); } });
   const start = h('input', { type: 'date', 'aria-label': '開始日' }); start.value = S.form['new:start'] || ''; bindKey(start, 'new:start');
   const due = h('input', { type: 'date', 'aria-label': '締切' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
-  const tplSel = h('select', { 'aria-label': '納品物のテンプレート' }, h('option', { value: '' }, 'なし'), ((S.model && S.model.templates) || []).map((n) => h('option', { value: 'templates/' + n }, n)));
-  tplSel.value = S.form['new:template'] || ''; bindKey(tplSel, 'new:template');
-  const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイル・テンプレートをつける（任意）'),
+  const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイルをつける（任意）'),
     h('div', { class: 'qopts' },
-      h('div', { class: 'fld wide' }, h('span', { class: 'cap' }, '素材ファイル'), fileField('new', '素材ファイル', true)),
-      h('div', { class: 'fld wide' }, h('span', { class: 'cap' }, '納品物のテンプレート'), h('div', { class: 'trow' }, tplSel, h('span', { class: 'fine' }, 'または、新しく追加：'), fileField('newtpl', 'テンプレートを追加', false)),
-        h('span', { class: 'fine' }, 'Markdown（.md）のテンプレートだけ追加できます。'))));
+      h('div', { class: 'fld wide' }, h('span', { class: 'cap' }, '素材ファイル'), fileField('new', '素材ファイル', true))));
   more.addEventListener('toggle', () => { S.open.qmore = more.open; });
   return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
     h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼'),
@@ -1076,7 +1033,7 @@ function jumpQuest(id) {
   if (me && !filterQuests('board', [me]).length) S.stf.board = {};
   const list = filterQuests('board', all), i = list.findIndex((x) => x.id === id);
   if (i >= 0 && i >= S.limit.board) S.limit.board = i + 1;
-  S.openQ[id] = true; S.sel = id; S.tq = id; S.focusQ = id; render();
+  S.openQ[id] = true; S.sel = id; S.focusQ = id; render();
   const el = document.querySelector(`[data-q="${id}"]`);
   if (el) {
     const bar = document.querySelector('.tabs'), top = bar ? bar.offsetHeight : 0;  // 固定されたときのタブの高さ（スクロール前の位置ではなく）
@@ -1084,7 +1041,7 @@ function jumpQuest(id) {
     el.focus({ preventScroll: true });
   }
 }
-// 依頼の目次。掲示板は押した依頼へ飛び、冒険の書は押した依頼のやりとりに切り替える（pick・cur・allLabel で指定）
+// 依頼の目次。押した依頼へ飛ぶ
 function questToc(list, o = {}) {
   if (!list.length) return null;
   const pick = o.pick || jumpQuest, cur = o.pick ? o.cur : S.sel;
@@ -1105,7 +1062,7 @@ function ledger(m) {
   const pg = pageOf('board', filterQuests('board', m.quests));
   for (const qd of pg.shown) {
     const on = S.focusQ === qd.id;
-    const row = h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => { const was = S.focusQ === qd.id; S.focusQ = null; S.openQ[qd.id] = was ? false : !S.openQ[qd.id]; S.sel = qd.id; S.tq = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
+    const row = h('button', { type: 'button', class: 'lr' + (S.openQ[qd.id] ? ' sel' : ''), role: 'row', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => { const was = S.focusQ === qd.id; S.focusQ = null; S.openQ[qd.id] = was ? false : !S.openQ[qd.id]; S.sel = qd.id; render(); }, 'aria-expanded': String(!!S.openQ[qd.id]) },
       h('span', { class: 'id' }, qd.id), h('span', null, qd.title), h('span', null, stampEl(qd.label, qd.cls)), h('span', null, qd.total ? `${qd.done} / ${qd.total}` : '—'), h('span', null, qd.me));
     const kids = [row];
     if (S.openQ[qd.id]) kids.push(questDetail(qd));
@@ -1195,34 +1152,6 @@ function ganttBlock(x) {
     g.now != null ? h('p', { class: 'sub', style: 'margin:6px 0 0;padding-left:150px' }, '赤い線が「いま」です。') : null);
 }
 
-function talkTab() {
-  const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
-  if (S.tq !== 'all' && !m.quests.some((x) => x.id === S.tq)) S.tq = m.quests.length ? m.quests[0].id : null;
-  const scopeIds = S.tq === 'all' ? m.quests.map((x) => x.id) : [S.tq].filter(Boolean);
-  const out = [h('h2', { class: 'h2' }, '冒険の書'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '役たちとのやりとりを、新しい順に見られます。左の目次で依頼を選びます。時間の帯（タイムライン）は、「掲示板」の依頼の「道のり」の下にあります。')];
-  const sel = scopeIds.map((id) => m.quests.find((x) => x.id === id)).filter(Boolean);
-  {
-    const roles = [['all', 'すべて'], ['cart', '地図師'], ['adv', '冒険者'], ['app', '鑑定士'], ['me', 'あなた'], ['note', '指摘だけ']];
-    out.push(h('div', { class: 'filters', 'aria-label': '役の絞り込み' }, h('span', { class: 'sub', style: 'align-self:center' }, '役：'),
-      roles.map(([k, l]) => h('button', { type: 'button', class: S.role === k ? 'on' : '', onclick: () => { S.role = k; render(); } }, l))));
-    let msgs = sel.flatMap((x) => messagesOf(x)).sort((a, b) => new Date(b.t) - new Date(a.t));
-    msgs = msgs.filter((x) => S.role === 'all' || (S.role === 'note' ? x.role === 'app' && x.note : x.role === S.role));
-    if (!msgs.length) out.push(h('p', { class: 'sub' }, S.role === 'note' ? '指摘はありません。' : 'このあたりのやりとりは、まだありません。'));
-    // 依頼・役の絞り込みが変わったら、件数の区切りを50件に戻す。新しい順に50件ずつ、古い側を足す
-    const mk = [S.tq, S.role].join('|');
-    if (S.msgKey !== mk) { S.msgKey = mk; S.limit.msg = 50; }
-    const total = msgs.length; msgs = msgs.slice(0, S.limit.msg);
-    for (const x of msgs) { const r = roleOf(x.role);
-      out.push(h('div', { class: 'msg' }, h('div', { class: 'who' }, h('span', { class: `av ${r[2]}` }, r[0]), r[1]),
-        h('div', { class: 'bub' }, h('time', null, fmtTime(x.t)), h('p', null, S.tq === 'all' ? h('span', { class: 'qtag' }, x.q) : null, x.text),
-          x.report ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(x.q, x.report); } }, '報告を読む：' + x.report) : null))); }
-    if (total > msgs.length) out.push(h('button', { type: 'button', class: 'btn ghost morebtn', onclick: () => { S.limit.msg += 50; render(); } }, `さらに古いやりとりを表示（残り ${total - msgs.length} 件）`));
-  }
-  out.push(h('p', { class: 'fine', style: 'margin-top:14px' }, '答える用件は、「掲示板」の手紙に出ます。', h('button', { type: 'button', class: 'btn ghost', style: 'min-height:38px;margin-left:8px', onclick: () => { S.tab = 'board'; render(); } }, '掲示板へ')));
-  const toc = questToc(m.quests, { pick: (id) => { S.tq = id; render(); }, cur: S.tq, allLabel: 'すべての依頼' });
-  return toc ? [h('div', { class: 'bwrap' }, toc, h('div', { class: 'bmain' }, out))] : out;
-}
-
 function searchBox(key, placeholder) {
   const i = h('input', { type: 'search', placeholder, 'aria-label': placeholder, style: 'width:100%;max-width:420px;min-height:40px;padding:6px 12px;font:inherit;border:1px solid var(--brass);border-radius:4px;background:var(--surface);margin:0 0 12px' });
   i.value = S.form[key] || ''; return bindKey(i, key);
@@ -1243,9 +1172,6 @@ function delivTab() {
     out.push(h('article', { class: 'card', style: 'margin-bottom:12px' }, h('h3', null, `${x.id}　${x.title}`),
       acc ? h('p', { class: 'fine', style: 'margin:0 0 6px' }, '受け取った日時：' + fmtTime(acc.t)) : null, deliverableBlock(x)));
   }
-  out.push(h('h3', { class: 'sec' }, 'テンプレート'), h('p', { class: 'sub', style: 'margin:0 0 8px' }, '納品物の型です。新しい依頼で選ぶと、納品物はこの型に沿ってまとめられます。追加は、「掲示板」の「新しい依頼」からできます。'));
-  const tpls = (m.templates || []).filter((n) => hit(q, n));
-  out.push(tpls.length ? h('ul', { class: 'flist' }, tpls.map((n) => [fileRow('templates/' + n, n)])) : h('p', { class: 'sub' }, 'テンプレートはまだありません。'));
   return out;
 }
 
@@ -1533,8 +1459,8 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const oldBox = document.querySelector('.rbox'), boxTop = oldBox ? oldBox.scrollTop : 0;
-  const tabs = [['board', '掲示板'], ['prog', 'クエスト進捗'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '冒険の書'], ['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
-  const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, talk: talkTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
+  const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
+  const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox(), toastBox()].filter(Boolean));
@@ -1559,8 +1485,7 @@ function obsidianTab() {
           h('li', null, '作業用のファイルは ', code('guild/.work/'), ' にあり、Obsidian には出ません（設定は要りません）。')),
         h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
       sec('ディレクトリ構成', pre(['guild/', '  board.html  config.json', '  archive/            書庫（用語名.md。種類は項目の type）', '    index.md          索引（役が最初に読む）',
-        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             共通のインプット（1つだけ。各依頼はファイル名で参照）', '  templates/          納品物のテンプレート（.md）',
-        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、バックアップ'].join('\n'))),
+        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             共通のインプット（1つだけ。各依頼はファイル名で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、バックアップ'].join('\n'))),
       sec('納品物を見る', dl([['場所', h('span', null, code('deliverables/Q###_…'), '。全 Todo が済んで受け取りの確認の手紙が出た時に置かれます。Markdown 以外が要る部分は ', code('.prompt.md'), '（Claude Code に渡すプロンプト）です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
       sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[KGI]] のようにリンクします。'].join('\n')),
         dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止']]),
@@ -1599,20 +1524,12 @@ async function sendRequest() {
   if (!text) { S.newError = '依頼の内容を書いてください。'; render(); return; }
   if (S.conn !== 'ok') { S.newError = '保存先につながっていません。上の「フォルダを選ぶ」から選んでください。'; render(); return; }
   const id = 'R' + stamp14(new Date()).replace(/^(\d{8})/, '$1-'), files = S.files.new || [], names = [];
-  const tfile = (S.files.newtpl || [])[0];
-  let template = S.form['new:template'] || null;
   const start = S.form['new:start'] || localToday();
   try {
-    if (tfile) {
-      if (!tfile.name.toLowerCase().endsWith('.md')) { S.newError = 'テンプレートは Markdown（.md）だけ追加できます。'; render(); return; }
-      const have = (S.model && S.model.templates) || [];
-      let tn = tfile.name; if (have.includes(tn)) tn = tn.replace(/(\.[^.]*)?$/, `-${stamp14(new Date())}$1`);
-      await S.fs.writeBlob(`templates/${tn}`, tfile); template = `templates/${tn}`;
-    }
     for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
-    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due: S.form['new:due'] || null, template, files: names, created: new Date().toISOString() }, null, 2));
+    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due: S.form['new:due'] || null, files: names, created: new Date().toISOString() }, null, 2));
   } catch (e) { S.newError = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); return; }
-  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.form['new:template'] = ''; S.files.new = []; S.files.newtpl = []; S.newSaved = id;
+  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.files.new = []; S.newSaved = id;
   await refresh(true);
 }
 async function openFile(full) {
@@ -1659,7 +1576,6 @@ async function refresh(force) {
       const ids = S.model.quests.map((x) => x.id);
       if (!S.openInit && ids.length) { S.openInit = true; const f0 = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; if (f0) S.openQ[f0.id] = true; }
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
-      if (!S.tq || (S.tq !== 'all' && !ids.includes(S.tq))) S.tq = S.sel;
       render();
     }
   } catch (e) { S.connMsg = `読み込めませんでした（${e.name || 'エラー'}：${e.message || e}）。`; S.conn = 'error'; render(); }
@@ -1734,7 +1650,7 @@ function demoTree(scene) {
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   return {
-    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
+    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
     deliverables: { 'Q001_report.md': T('見本'), 'Q001_スライド.prompt.md': T('---\ntype: prompt\n---\n# PowerPoint 5枚を作って…'), 'Q002_comparison.md': T('見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
     Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md' }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },

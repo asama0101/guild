@@ -1701,6 +1701,14 @@ class BoardPathsTest(unittest.TestCase):
         for needle in ("type: 'due', todo: t.id, scheduled:", "type: 'due', start:", "function questDatesRow(", "function dateIssues("):
             self.assertIn(needle, self.board)
 
+    def test_no_adventure_book_or_templates(self):
+        for gone in ("function talkTab(", "function messagesOf(", "function roleOf(", "['talk'", "'冒険の書'", "S.tq", "S.role", "msgKey",
+                     "templates", "tplSel", "new:template", "newtpl", "template:", ".bub{", ".qtag{"):
+            self.assertNotIn(gone, self.board)
+        for needle in ("['board', 'クエスト掲示板']", "function openReport(", "e.inputs = (Array.isArray(e.inputs)",
+                       "candidates: planList(p, 'candidates')", "mtime: e.mtime || 0"):
+            self.assertIn(needle, self.board)
+
 
 class DocsContractTest(unittest.TestCase):
     def read(self, *p):
