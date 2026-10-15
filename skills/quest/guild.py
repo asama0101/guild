@@ -238,6 +238,11 @@ def ingest(plan_path, plan, tr):
             else:
                 apply_input(plan, data, tr)
                 write_user_report(Path(plan_path).parent, data)
+                qdir = Path(plan_path).parent
+                if data.get("type") == "accept":
+                    publish_deliverables(qdir, plan)  # 受け取ったら、納品物が必ず置かれている（何度でも同じ）
+                elif data.get("type") == "decision" and data.get("choice") in ("abort", "replan"):
+                    unpublish_deliverables(qdir)  # 中止なら納品物はない。見直しなら古いものは使えない
             dest, key, item = inbox / "done", "applied", f.name
         except (GuildError, KeyError, TypeError, AttributeError) as e:
             dest, key, item = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}
@@ -429,6 +434,8 @@ def init_guild(root):
     gdir.mkdir(parents=True, exist_ok=True)
     init_archive(gdir / "archive")
     (work_dir(gdir) / "requests").mkdir(parents=True, exist_ok=True)
+    for sub in ("inputs", DELIV, "templates"):
+        (gdir / sub).mkdir(exist_ok=True)
     board = HERE / "board.html"
     if board.exists():
         shutil.copy2(board, gdir / "board.html")  # ボードはプラグイン側が正本。init のたびに最新に置き換える
@@ -531,10 +538,12 @@ def unpublish_deliverables(qdir):
     return removed
 
 
-def publish_deliverables(qdir):
-    """納品物を .work/Q###/output/ から guild/deliverables/ へコピーする（Obsidian でも読めるように）。何度実行しても同じ結果。"""
+def publish_deliverables(qdir, plan=None):
+    """納品物を .work/Q###/output/ から guild/deliverables/ へコピーする（Obsidian でも読めるように）。何度実行しても同じ結果。
+    plan を渡すと、ディスクの plan.json の代わりにそれを使う（ingest が保存前の状態で呼ぶため）。"""
     qdir = Path(qdir)
-    plan = load_json(qdir / "plan.json")
+    if plan is None:
+        plan = load_json(qdir / "plan.json")
     unpublish_deliverables(qdir)
     dest = gdir_of(qdir) / DELIV
     dest.mkdir(exist_ok=True)
@@ -755,7 +764,7 @@ def write_entry(adir, e, path=None):
 def entry_path(adir, rel):
     """archive/ の中の項目（フォルダなしの 名前.md）だけを指せる。索引や、外は指せない。"""
     name = str(rel).replace("\\", "/")
-    ok = "/" not in name and name.endswith(".md") and name.lower() != INDEX_NAME and ".." not in name
+    ok = "/" not in name and ":" not in name and name.endswith(".md") and name.lower() != INDEX_NAME and ".." not in name
     p = Path(adir) / name
     if not ok or not p.is_file():
         raise GuildError(f"項目が見つかりません: {rel}")

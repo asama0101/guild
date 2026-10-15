@@ -354,6 +354,12 @@ class InitAndNewTest(unittest.TestCase):
         guild.init_guild(self.root)  # 再実行しても依頼は消えない
         self.assertTrue(Path(q["dir"]).is_dir())
 
+    def test_init_creates_inputs_deliverables_templates(self):
+        guild.init_guild(self.root)
+        guild.init_guild(self.root)
+        for d in ("inputs", "deliverables", "templates"):
+            self.assertTrue((self.root / "guild" / d).is_dir(), d)
+
     def test_new_requires_init(self):
         with self.assertRaises(guild.GuildError):
             guild.new_quest(self.root)
@@ -991,7 +997,7 @@ class ArchiveTest(unittest.TestCase):
     def test_entry_path_accepts_only_flat_md_names(self):
         guild.write_entry(self.adir, self.entry(name="KPI", summary="s"))
         self.assertEqual(guild.entry_path(self.adir, "KPI.md"), self.adir / "KPI.md")
-        for bad in ("terms/KPI.md", "../x.md", "index.md", "INDEX.md", "Index.md", "KPI.txt", "ない.md"):
+        for bad in ("terms/KPI.md", "../x.md", "index.md", "INDEX.md", "Index.md", "KPI.txt", "ない.md", "D:x.md", "C:\\x.md"):
             with self.assertRaises(guild.GuildError):
                 guild.entry_path(self.adir, bad)
 
@@ -1596,7 +1602,7 @@ class DeliverablesTest(unittest.TestCase):
         self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_報告.md", "Q001_T2_報告.md"])
 
     def test_publish_is_idempotent_and_does_not_touch_other_quests(self):
-        (self.g / "deliverables").mkdir()
+        (self.g / "deliverables").mkdir(exist_ok=True)
         (self.g / "deliverables" / "Q002_他の依頼.md").write_text("keep", encoding="utf-8")
         self.out("T1", "a.md")
         self.save(todo("T1", state="done"))
@@ -1605,7 +1611,7 @@ class DeliverablesTest(unittest.TestCase):
         self.assertEqual(self.names(), ["Q001_a.md", "Q002_他の依頼.md"])
 
     def test_unpublish_removes_only_this_quest(self):
-        (self.g / "deliverables").mkdir()
+        (self.g / "deliverables").mkdir(exist_ok=True)
         (self.g / "deliverables" / "Q0010_別.md").write_text("keep", encoding="utf-8")
         self.out("T1", "a.md")
         self.save(todo("T1", state="done"))
@@ -1630,6 +1636,57 @@ class DeliverablesTest(unittest.TestCase):
                            capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout)["published"], ["Q001_a.md"])
+
+
+class IngestPublishTest(DeliverablesTest):
+    """accept で納品物が必ず置かれ、abort / replan で取り下げられる。"""
+
+    def send(self, data):
+        inbox = self.q / "inbox"
+        inbox.mkdir(exist_ok=True)
+        (inbox / "1.json").write_text(json.dumps(data), encoding="utf-8")
+        p = guild.load_json(self.q / "plan.json")
+        r = guild.ingest(self.q / "plan.json", p, TR)
+        self.assertEqual(r["rejected"], [])
+        return p
+
+    def done_plan(self):
+        self.out("T1", "a.md")
+        self.save(todo("T1", state="done"))
+
+    def test_accept_without_prior_publish_publishes(self):
+        self.done_plan()
+        self.send({"type": "accept"})
+        self.assertEqual(self.names(), ["Q001_a.md"])
+
+    def test_accept_after_publish_has_no_duplicates(self):
+        self.done_plan()
+        guild.publish_deliverables(self.q)
+        self.send({"type": "accept"})
+        self.assertEqual(self.names(), ["Q001_a.md"])
+
+    def test_publish_with_no_outputs_is_empty(self):
+        self.save(todo("T1", state="done"))
+        self.assertEqual(guild.publish_deliverables(self.q)["published"], [])
+
+    def test_abort_unpublishes(self):
+        self.done_plan()
+        guild.publish_deliverables(self.q)
+        self.send({"type": "decision", "choice": "abort"})
+        self.assertEqual(self.names(), [])
+
+    def test_replan_unpublishes(self):
+        self.done_plan()
+        guild.publish_deliverables(self.q)
+        self.send({"type": "decision", "choice": "replan"})
+        self.assertEqual(self.names(), [])
+
+    def test_abort_after_replan_leaves_nothing(self):
+        self.done_plan()
+        guild.publish_deliverables(self.q)
+        self.send({"type": "decision", "choice": "replan"})
+        self.send({"type": "decision", "choice": "abort"})
+        self.assertEqual(self.names(), [])
 
 
 class BoardPathsTest(unittest.TestCase):
@@ -1688,6 +1745,12 @@ class DocsContractTest(unittest.TestCase):
         s = self.read("skills", "quest", "SKILL.md")
         for needle in ("guild.py\" publish", "close <root>", ".prompt.md", ".work/"):
             self.assertIn(needle, s)
+
+    def test_accept_publishes_and_adventurer_avoids_work_links(self):
+        self.assertIn("`ingest` が同じ納品物を置く", self.read("skills", "quest", "SKILL.md"))
+        a = self.read("agents", "adventurer.md")
+        self.assertNotIn("[[.work/", a)
+        self.assertIn("Obsidian から見えない", a)
 
     def test_cartographer_decides_dates_and_prompts(self):
         s = self.read("agents", "cartographer.md")

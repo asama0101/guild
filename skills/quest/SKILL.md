@@ -84,7 +84,7 @@ disable-model-invocation: true
    | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の Todo なら冒険者の `reports/<id>-adventurer.md`（斥候なら `reports/<id>-scout.md`）、「あなたの実行」の Todo なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる）。`needs_scout`（開けない出典の確認待ち）のときは `advance` を送らず、下の「出典の確認」を行う |
    | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える（`awaiting_accept` の納品物の置き方は、下の「納品物を置く」） |
 
-   **納品物を置く**：`next` の出力で `awaiting_accept` が `true` になった依頼は、`"${CLAUDE_SKILL_DIR}/guild.py" publish <dir>` を実行する（`<python>` を前に付ける。何度実行しても同じ。納品物と `*.prompt.md` が `guild/deliverables/Q###_…` に置かれ、ボードの「受け取りの確認」の手紙と Obsidian の両方で読める）。「直してほしい」（`replan`）になると、`adopt` が置いたものを取り下げるので、また全 Todo が済んだ時に実行する。
+   **納品物を置く**：`next` の出力で `awaiting_accept` が `true` になった依頼は、`"${CLAUDE_SKILL_DIR}/guild.py" publish <dir>` を実行する（`<python>` を前に付ける。何度実行しても同じ。依頼主の「受け取る」を `ingest` が取り込んだときも、`ingest` が同じ納品物を置く。`complete` になったのに `guild/deliverables/Q###_…` がなければ、`publish <dir>` をもう一度実行してよい。納品物と `*.prompt.md` が `guild/deliverables/Q###_…` に置かれ、ボードの「受け取りの確認」の手紙と Obsidian の両方で読める）。「直してほしい」（`replan`）になると、`adopt` が置いたものを取り下げるので、また全 Todo が済んだ時に実行する。
 
    **出典の確認**（鑑定士が `needs_scout` を返したとき）：斥候（`guild:scout`）を**確認モード**で1人呼ぶ。メッセージに、依頼のフォルダ、`id`、鑑定士の報告（`reports/<id>-appraiser.md`。「斥候に確認してほしいこと」）の場所、「確認モード」と書く。返ってきたら、鑑定士をもう一度呼ぶ（メッセージに、斥候の報告 `reports/<id>-verify-scout.md` の場所と「再鑑定」を足す）。再鑑定は `needs_scout` を返さないので、確認は1回で終わる。その結果（`passed` か `rejected`）で `advance` を送る。
 
