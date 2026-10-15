@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 あなた（この会話）がギルドマスターである。依頼を受け、役を呼び、`guild.py` を動かす。進め方の**判断**（順序・遷移・リトライ）は `guild.py` が持つ。あなたは `guild.py` の出力に従う。
 
-依頼のフォルダは `guild/.work/Q###/`（`guild.py new` が返す `dir`）。以降の `guild/Q###/` の記述は、この `dir` を指す。
+依頼のフォルダは `guild/.work/Q###/`（`guild.py new` が返す `dir`）。役に渡すのも、この `dir`。
 
 役の詳細は `agents/` を見る。呼び出しのたびに、サブエージェントは会話履歴を見ない。メッセージに、入力のパス・合格基準・出力先を必ず書く。地図師・冒険者・斥候・鑑定士に呼びかけるときは、書庫の場所（`guild/archive/`）も書く（各役が `index.md` を見て、関係する項目を使う）。
 
@@ -88,7 +88,7 @@ disable-model-invocation: true
 
    **出典の確認**（鑑定士が `needs_scout` を返したとき）：斥候（`guild:scout`）を**確認モード**で1人呼ぶ。メッセージに、依頼のフォルダ、`id`、鑑定士の報告（`reports/<id>-appraiser.md`。「斥候に確認してほしいこと」）の場所、「確認モード」と書く。返ってきたら、鑑定士をもう一度呼ぶ（メッセージに、斥候の報告 `reports/<id>-verify-scout.md` の場所と「再鑑定」を足す）。再鑑定は `needs_scout` を返さないので、確認は1回で終わる。その結果（`passed` か `rejected`）で `advance` を送る。
 
-   **外部アクセスの確認**（冒険者が返ってくるたび）：`guild.py web-pending <root>` を実行する。冒険者の WebFetch は、依頼主が許可したドメイン（`guild/web/access.json`）しか開けない。許可のないドメインは、フックが止めて `pending` に残す。
+   **外部アクセスの確認**（冒険者が返ってくるたび）：`guild.py web-pending <root>` を実行する。冒険者の WebFetch は、依頼主が許可したドメイン（`guild/.work/web/access.json`）しか開けない。許可のないドメインは、フックが止めて `pending` に残す。
    - 空なら、何もしない。`submitted` を送る。
    - 空でなければ、**その Todo には `submitted` を送らず**、`running` のままにする。ボードに「外部サイトを開く許可」の手紙が出る（あなたは何もしない）。`pending` が残っている間は、`ready` の冒険者を新しく呼ばない（答えを待つ）。答えが届いたら（`kind` が `web`）`web-ingest` で反映し、`ready` の Todo の冒険者を呼び直す。やり直しの回数には数えない。
    - 依頼主が「許可しない」と答えたドメインは、以後フックが黙って止める（`pending` に戻らない）。呼び直された冒険者は、そのドメインを開かずに進め、「未確認」に書く。

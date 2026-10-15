@@ -1698,7 +1698,16 @@ class DocsContractTest(unittest.TestCase):
     def test_adventurer_may_add_prompts_without_approval(self):
         s = self.read("agents", "adventurer.md")
         self.assertIn(".prompt.md", s)
-        self.assertIn("承認", s)
+        self.assertIn("Todo は増やさない。計画の承認は取らない", s)
+
+    def test_live_docs_have_no_old_layout_terms(self):
+        files = ["README.md", "skills/quest/SKILL.md", "skills/init/SKILL.md", "docs/graph-format.md",
+                 "docs/board-design.md", "docs/archive-spec.md", "docs/roles-spec.md", "docs/spec.md"]
+        files += ["agents/" + p.name for p in (ROOT / "agents").glob("*.md")]
+        for f in files:
+            s = self.read(*f.split("/"))
+            for old in ("guild/requests", "guild/web/", "lessons/", ".mcp.json", "plugin_guild_browser", "guild/Q###"):
+                self.assertNotIn(old, s, f"{f} に古い記述 {old}")
 
     def test_graph_format_documents_dates(self):
         s = self.read("docs", "graph-format.md")
