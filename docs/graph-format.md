@@ -161,7 +161,7 @@
 | `init <root>` | `<root>/guild/`（`archive/`（`index.md`。フラット）・`inputs/`・`deliverables/`・`.work/`（`requests/` など作業用）・`config.json`・`board.html`）を作る。何度実行しても依頼のデータは消さない。`board.html` は最新の版に置き換える |
 | `requests <root>` | ボードが保存した受付待ちの依頼を一覧する |
 | `new <root> [依頼のID]` | 次の依頼のフォルダ（`guild/.work/Q001…`。出力の `dir`）を作る。ID を渡すと、受付待ちの依頼を取り込み、アップロードを共通の `guild/inputs/` に置く。依頼の `inputs`（既存から選んだ名前）が `guild/inputs/` になければ拒否し、依頼を `.work/requests/rejected/`（理由は `<ID>.json.reason.txt`）へ移す（番号は進まない）。`request.json` の `inputs` は、選んだ名前とアップロードの名前を合わせたもの |
-| `inputs-list <root> [--text 依頼文]` | `guild/inputs/` のファイルごとに `name`・`ext`・`size`・`updated`・`head`（`.md` `.txt` `.csv` の先頭5行。ほかは `null`）・`hints` を返す。`hints` は、依頼文に名前・別名が出てくる書庫の項目（確認済みか出典ありで、使われているもの。3文字以上の語だけ。心得は除く）の `inputs` に挙がったファイルと、ファイル名・先頭の行にその語が出てくるファイルに付く理由。ヒントのあるファイルが先。地図師にだけ渡す |
+| `inputs-list <root> [--text 依頼文 / --text-file パス]` | `guild/inputs/` のファイルごとに `name`・`ext`・`size`・`updated`・`head`（`.md` `.txt` `.csv` の先頭5行。ほかは `null`）・`hints` を返す。`hints` は、依頼文に名前・別名が出てくる書庫の項目（確認済みか出典ありで、使われているもの。3文字以上の語だけ。心得は除く）の `inputs` に挙がったファイルと、ファイル名・先頭の行にその語が出てくるファイルに付く理由。ヒントのあるファイルが先。地図師にだけ渡す |
 | `arrivals <root>` | ボードから届いて、まだ取り込んでいない入力と依頼を一覧する |
 | `wait <root> [秒]` | 入力か依頼が届くまで待つ（既定 540 秒）。届いていれば、すぐ返す |
 | `answers <dir>` | 計画がない依頼の、質問への回答を取り出す |

@@ -7,7 +7,7 @@ adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を�
 guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
 guild.py new ROOT [R…]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む（選んだインプットが guild/inputs/ になければ、依頼を .work/requests/rejected/ へ移して拒否する）。
 guild.py requests ROOT: 受付待ちの依頼を一覧する。
-guild.py inputs-list ROOT [--text 依頼文]: guild/inputs/ のファイル（名前・拡張子・大きさ・更新日・文字のファイルの先頭5行）と、依頼文に出てくる書庫の項目からのヒントを一覧する（地図師に渡す）。
+guild.py inputs-list ROOT [--text 依頼文 | --text-file パス]（同時指定は不可。長い依頼文や記号を含む依頼文はファイルで渡す）:guild/inputs/ のファイル（名前・拡張子・大きさ・更新日・文字のファイルの先頭5行）と、依頼文に出てくる書庫の項目からのヒントを一覧する（地図師に渡す）。
 guild.py close ROOT: 完了・中止した依頼のインプットのバックアップを消す。
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
@@ -229,7 +229,7 @@ def next_view(plan):
 
 def ingest(plan_path, plan, tr):
     inbox = Path(plan_path).parent / "inbox"
-    report = {"applied": [], "rejected": []}
+    report = {"applied": [], "rejected": [], "warnings": []}
     if not inbox.is_dir():
         return report
     for f in sorted(inbox.glob("*.json")):
@@ -241,10 +241,14 @@ def ingest(plan_path, plan, tr):
                 apply_input(plan, data, tr, Path(plan_path).parent)
                 write_user_report(Path(plan_path).parent, data)
                 qdir = Path(plan_path).parent
-                if data.get("type") == "accept":
-                    publish_deliverables(qdir, plan)  # 受け取ったら、納品物が必ず置かれている（何度でも同じ）
-                elif data.get("type") == "decision" and data.get("choice") in ("abort", "replan"):
-                    unpublish_deliverables(qdir)  # 中止なら納品物はない。見直しなら古いものは使えない
+                try:
+                    if data.get("type") == "accept":
+                        publish_deliverables(qdir, plan)  # 受け取ったら、納品物が必ず置かれている（何度でも同じ）
+                    elif data.get("type") == "decision" and data.get("choice") in ("abort", "replan"):
+                        unpublish_deliverables(qdir)  # 中止なら納品物はない。見直しなら古いものは使えない
+                except OSError as e:
+                    # 入力は適用済み。ここで落とすと同じバッチの適用済みの入力が計画に保存されず失われるので、警告にして続ける
+                    report["warnings"].append(f"納品物の置き直しに失敗しました（{f.name}：{e}）。`publish` を再実行してください")
             dest, key, item = inbox / "done", "applied", f.name
         except (GuildError, KeyError, TypeError, AttributeError) as e:
             dest, key, item = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}
@@ -1227,9 +1231,15 @@ def main(argv):
     try:
         if cmd == "inputs-list":
             rest = argv[3:]
-            if rest and (len(rest) != 2 or rest[0] != "--text"):
-                raise GuildError("inputs-list ROOT [--text 依頼文] の形で指定してください")
-            print(json.dumps(inputs_list(path, rest[1] if rest else ""), ensure_ascii=False))
+            if rest and (len(rest) != 2 or rest[0] not in ("--text", "--text-file")):
+                raise GuildError("inputs-list ROOT [--text 依頼文 | --text-file パス] の形で指定してください（同時指定は不可）")
+            text = rest[1] if rest else ""
+            if rest and rest[0] == "--text-file":
+                try:
+                    text = Path(rest[1]).read_text(encoding="utf-8-sig")
+                except (OSError, UnicodeDecodeError) as e:
+                    raise GuildError(f"--text-file を読めません：{rest[1]}（{e}）")
+            print(json.dumps(inputs_list(path, text), ensure_ascii=False))
             return 0
         if cmd in ("web-ingest", "web-pending", "web-reset"):
             gdir = Path(path) / "guild"

@@ -44,7 +44,7 @@ disable-model-invocation: true
 
 依頼ごとに、計画がまだないものについて行う。複数あれば、地図師は同時に呼んでよい。
 
-1. 地図師を呼ぶ前に、`<python> "${CLAUDE_SKILL_DIR}/guild.py" inputs-list <root> --text "<依頼文>"` を実行する（`<依頼文>` は `request.json` の `text`。聞き取りの回答があれば、続けて足す）。出力は、`guild/inputs/` のファイルの一覧と、書庫の項目からのヒント。
+1. 地図師を呼ぶ前に、依頼文（`request.json` の `text`。聞き取りの回答があれば、続けて足す）をスクラッチ等の一時ファイル（UTF-8）に書き、`<python> "${CLAUDE_SKILL_DIR}/guild.py" inputs-list <root> --text-file <一時ファイルのパス>` を実行する（依頼文を `--text` に直接書くと、引用符・バッククォート・`$` がシェルに解釈されて壊れるため）。出力は、`guild/inputs/` のファイルの一覧と、書庫の項目からのヒント。
 2. 地図師を呼ぶ（`subagent_type: guild:cartographer`）。メッセージに次を書く。
    - 依頼文（`<dir>/request.json`）と、依頼主が指定したインプット（`request.json` の `inputs`）
    - `inputs-list` の出力（JSON）を、そのまま。**ファイルに保存せず、チャットにも書かない**（ファイルの先頭の行に秘密が含まれうるため、地図師にだけ渡す）

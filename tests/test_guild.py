@@ -224,7 +224,7 @@ class IngestTest(unittest.TestCase):
 
     def test_no_inbox(self):
         (self.dir / "inbox").rmdir()
-        self.assertEqual(self.run_ingest(plan(todo("T1"))), {"applied": [], "rejected": []})
+        self.assertEqual(self.run_ingest(plan(todo("T1"))), {"applied": [], "rejected": [], "warnings": []})
 
 
 class AdoptTest(unittest.TestCase):
@@ -1654,6 +1654,26 @@ class IngestPublishTest(DeliverablesTest):
         self.assertEqual(self.names(), [])
 
 
+    def test_publish_oserror_keeps_other_inputs_of_the_same_batch(self):
+        """納品物の置き直しが OSError でも、同じバッチで適用済みの入力は計画に残り、警告で知らせる。"""
+        from unittest import mock
+        self.done_plan()
+        inbox = self.q / "inbox"
+        inbox.mkdir(exist_ok=True)
+        (inbox / "1.json").write_text(json.dumps({"type": "due", "todo": "T1", "due": "2026-12-01"}), encoding="utf-8")
+        (inbox / "2.json").write_text(json.dumps({"type": "accept"}), encoding="utf-8")
+        p = guild.load_json(self.q / "plan.json")
+        with mock.patch.object(guild, "publish_deliverables", side_effect=OSError("使用中")):
+            r = guild.ingest(self.q / "plan.json", p, TR)
+        self.assertEqual(r["rejected"], [])
+        self.assertEqual(len(r["applied"]), 2)
+        self.assertEqual(len(r["warnings"]), 1)
+        self.assertIn("納品物の置き直しに失敗しました", r["warnings"][0])
+        self.assertIn("`publish` を再実行してください", r["warnings"][0])
+        self.assertEqual(next(t for t in p["todos"] if t["id"] == "T1")["due"], "2026-12-01")
+        self.assertTrue(p.get("accepted"))
+
+
 class BoardPathsTest(unittest.TestCase):
     """ボードは、論理パスを .work/ の物理パスに写して読み書きする（画面の中のパス文字列は変えない）。"""
 
@@ -1833,12 +1853,12 @@ class DocsContractTest(unittest.TestCase):
 
     def test_quest_skill_passes_inputs_list_to_the_cartographer(self):
         s = self.read("skills", "quest", "SKILL.md")
-        for needle in ("inputs-list <root> --text", "ファイルに保存せず、チャットにも書かない", "`.work/requests/rejected/`", "`guild/inputs/<name>`"):
+        for needle in ("inputs-list <root> --text-file", "ファイルに保存せず、チャットにも書かない", "`.work/requests/rejected/`", "`guild/inputs/<name>`"):
             self.assertIn(needle, s)
 
     def test_graph_format_and_archive_spec_document_inputs(self):
         g = self.read("docs", "graph-format.md")
-        for needle in ("inputs-list <root> [--text 依頼文]", '{"name": "KGI定義.md", "source": "user", "reason": "依頼主の指定"}',
+        for needle in ("inputs-list <root> [--text 依頼文 / --text-file パス]", '{"name": "KGI定義.md", "source": "user", "reason": "依頼主の指定"}',
                        '{"type": "inputs", "add": [名前…], "remove": [名前…]}', ".work/requests/rejected/", "\"candidates\": ["):
             self.assertIn(needle, g)
         a = self.read("docs", "archive-spec.md")
@@ -2132,6 +2152,21 @@ class InputsListTest(unittest.TestCase):
         self.assertEqual(run().returncode, 0)
         self.assertEqual(run("--nanika").returncode, 1)
         self.assertEqual(run("--text").returncode, 1)
+
+    def test_cli_text_file(self):
+        """--text-file は、引用符・バッククォート・$ を含む日本語の依頼文でもそのまま読む（BOM つきも可）。"""
+        self.put("議事録 10月.txt", "KGI の確認\n")
+        self.term("KGI", inputs=["議事録 10月.txt"])
+        run = lambda *a: subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), "inputs-list", str(self.root), *a],
+                                        capture_output=True, text=True, encoding="utf-8")
+        tf = self.root / "text.txt"
+        tf.write_text('「KGI」を `まとめ` て "$HOME" に出す\n', encoding="utf-8-sig")
+        r = run("--text-file", str(tf))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("書庫の用語『KGI』→ このファイル", json.loads(r.stdout)[0]["hints"])
+        self.assertEqual(run("--text-file", str(self.root / "nai.txt")).returncode, 1)
+        self.assertEqual(run("--text", "KGI", "--text-file", str(tf)).returncode, 1)
+        self.assertEqual(run("--text-file").returncode, 1)
 
 
 class InputsSelectTest(unittest.TestCase):

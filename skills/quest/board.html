@@ -1540,7 +1540,7 @@ function archiveForm() {
     if (!name || !summary) { S.archiveError = '名前と一言の説明は、必ず書いてください。'; render(); return; }
     S.archiveError = '';
     const raw = S.form['a:inputs'] || '', seen = new Set(), inputs = [];
-    for (const n of (raw.includes('\n') ? raw.split(/\r?\n/) : raw.split(/[、,，]/)).map((x) => x.trim()).filter(Boolean)) if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); inputs.push(n); }
+    for (const n of raw.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)) if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); inputs.push(n); }
     const bad = inputs.filter((n) => /[\\/:\x00-\x1f\x7f]/.test(n) || n === '.' || n === '..');
     if (bad.length) { S.archiveError = `インプットのファイル名に使えない文字があります（/ \\ : など）：${bad.join('、')}`; render(); return; }
     const entry = { type: S.form['a:type'] || 'term', name, aliases: (S.form['a:aliases'] || '').split(/[、,，]/).map((x) => x.trim()).filter(Boolean), inputs, summary, body: (S.form['a:body'] || '').trim(), source: (S.form['a:source'] || '').trim() };
