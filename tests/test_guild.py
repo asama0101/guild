@@ -1680,5 +1680,37 @@ class BoardPathsTest(unittest.TestCase):
             self.assertIn(needle, self.board)
 
 
+class DocsContractTest(unittest.TestCase):
+    def read(self, *p):
+        return (ROOT.joinpath(*p)).read_text(encoding="utf-8")
+
+    def test_quest_skill_runs_close_and_publish(self):
+        s = self.read("skills", "quest", "SKILL.md")
+        for needle in ("guild.py\" publish", "close <root>", ".prompt.md", ".work/"):
+            self.assertIn(needle, s)
+
+    def test_cartographer_decides_dates_and_prompts(self):
+        s = self.read("agents", "cartographer.md")
+        for needle in ("scheduled", "\"due\"", ".prompt.md"):
+            self.assertIn(needle, s)
+        self.assertNotIn("\"format\"", s)
+
+    def test_adventurer_may_add_prompts_without_approval(self):
+        s = self.read("agents", "adventurer.md")
+        self.assertIn(".prompt.md", s)
+        self.assertIn("承認", s)
+
+    def test_graph_format_documents_dates(self):
+        s = self.read("docs", "graph-format.md")
+        for needle in ("scheduled", "\"start\"", "publish", "close"):
+            self.assertIn(needle, s)
+
+    def test_readme_matches_the_new_layout(self):
+        s = self.read("README.md")
+        for needle in ("deliverables/", "inputs/", ".work/", "クエスト進捗", "Playwright MCP"):
+            self.assertIn(needle, s)
+        self.assertNotIn(".mcp.json", s)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,8 @@ disable-model-invocation: true
 
 あなた（この会話）がギルドマスターである。依頼を受け、役を呼び、`guild.py` を動かす。進め方の**判断**（順序・遷移・リトライ）は `guild.py` が持つ。あなたは `guild.py` の出力に従う。
 
+依頼のフォルダは `guild/.work/Q###/`（`guild.py new` が返す `dir`）。以降の `guild/Q###/` の記述は、この `dir` を指す。
+
 役の詳細は `agents/` を見る。呼び出しのたびに、サブエージェントは会話履歴を見ない。メッセージに、入力のパス・合格基準・出力先を必ず書く。地図師・冒険者・斥候・鑑定士に呼びかけるときは、書庫の場所（`guild/archive/`）も書く（各役が `index.md` を見て、関係する項目を使う）。
 
 ## いちばん大事な決まり：依頼主への質問は、すべてボードで
@@ -33,7 +35,7 @@ disable-model-invocation: true
 
 依頼は2通りで届く。
 
-- **ボードから**：`guild.py requests <root>` で受付待ちの依頼を一覧し、**全部を受け付ける**（どれを受け付けるかは聞かない）。古い順に、依頼ごとに `guild.py new <root> <依頼のID>` で依頼のフォルダを作る。依頼文は `text`、素材は `files`（取り込むと `<dir>/inputs/` に移る）、期限は `due`。
+- **ボードから**：`guild.py requests <root>` で受付待ちの依頼を一覧し、**全部を受け付ける**（どれを受け付けるかは聞かない）。古い順に、依頼ごとに `guild.py new <root> <依頼のID>` で依頼のフォルダを作る。依頼文は `text`、素材は `files`。取り込むと共通の `guild/inputs/` に1つだけ置かれ（同名で内容が違えば上書き）、依頼の `request.json` の `inputs` にファイル名が入る。地図師・冒険者には `guild/inputs/<ファイル名>` で渡す。開始日は `start`、締切は `due`（未指定は、開始日が登録日、締切が開始日）。
 - **チャットから**：`/guild:quest` のあとに書かれた依頼文は、`guild.py new <root>` でフォルダを作り、`<dir>/request.json` に `{"type": "request", "text": "<依頼文>", "files": []}` を書く。
 
 何も届いていなければ、進行中の依頼があるかを見る（手順4へ）。進行中の依頼もなければ、「ボードの『新しい依頼』に書くか、`/guild:quest` のあとに依頼文を書いてください」と伝えて終える。
@@ -43,10 +45,11 @@ disable-model-invocation: true
 依頼ごとに、計画がまだないものについて行う。複数あれば、地図師は同時に呼んでよい。
 
 1. 地図師を呼ぶ（`subagent_type: guild:cartographer`）。メッセージに次を書く。
-   - 依頼文（`<dir>/request.json`）、素材（`<dir>/inputs/`）
+   - 依頼文（`<dir>/request.json`）、素材（`request.json` の `inputs` のファイル名を `guild/inputs/<ファイル名>` で）
+   - 依頼の開始日・締切（`request.json` の `start`・`due`）
    - 依頼のフォルダ、書庫の場所（`guild/archive/`）
    - 出力先：`<dir>/reports/plan-draft.json`
-   - 納品物の形式（`<dir>/request.json` の `format`。なければ `md`）と、テンプレート（`template`。あれば `guild/` からのパスを、そのまま渡す）
+   - テンプレート（`template`。あれば `guild/` からのパスを、そのまま渡す。テンプレートは Markdown だけ）
    - 質問への回答があるとき、またはやり直しのときは、その内容（下の3・4）
 2. `plan-draft.json` を読む。
    - `questions` が空でなければ、そこで止める。ボードが `plan-draft.json` を読んで、質問の手紙を出す。あなたは何もしない（手順4で、回答の到着を待つ）。
@@ -79,7 +82,9 @@ disable-model-invocation: true
    |---|---|
    | `ready` | 冒険者を呼ぶ（`guild:adventurer`）。ただし `plan.json` でその Todo に `needs_browser: true` があれば、斥候（`guild:scout`）を呼ぶ。互いに独立な冒険者は同時に呼んでよい。**斥候は、ブラウザが1つなので、同時に1人まで**（複数あれば1人ずつ）。メッセージに、依頼のフォルダ、Todo の `id`、`criteria`、やり直しなら鑑定士の指摘の場所を書く。返ってきたら、下の「外部アクセスの確認」を済ませてから `guild.py advance <plan> <id> submitted` |
    | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の Todo なら冒険者の `reports/<id>-adventurer.md`（斥候なら `reports/<id>-scout.md`）、「あなたの実行」の Todo なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる）。`needs_scout`（開けない出典の確認待ち）のときは `advance` を送らず、下の「出典の確認」を行う |
-   | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える |
+   | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える（`awaiting_accept` の納品物の置き方は、下の「納品物を置く」） |
+
+   **納品物を置く**：`next` の出力で `awaiting_accept` が `true` になった依頼は、`"${CLAUDE_SKILL_DIR}/guild.py" publish <dir>` を実行する（`<python>` を前に付ける。何度実行しても同じ。納品物と `*.prompt.md` が `guild/deliverables/Q###_…` に置かれ、ボードの「受け取りの確認」の手紙と Obsidian の両方で読める）。「直してほしい」（`replan`）になると、`adopt` が置いたものを取り下げるので、また全 Todo が済んだ時に実行する。
 
    **出典の確認**（鑑定士が `needs_scout` を返したとき）：斥候（`guild:scout`）を**確認モード**で1人呼ぶ。メッセージに、依頼のフォルダ、`id`、鑑定士の報告（`reports/<id>-appraiser.md`。「斥候に確認してほしいこと」）の場所、「確認モード」と書く。返ってきたら、鑑定士をもう一度呼ぶ（メッセージに、斥候の報告 `reports/<id>-verify-scout.md` の場所と「再鑑定」を足す）。再鑑定は `needs_scout` を返さないので、確認は1回で終わる。その結果（`passed` か `rejected`）で `advance` を送る。
 
@@ -96,7 +101,7 @@ disable-model-invocation: true
    冒険者が「できなかった」と返したり、報告ファイルがなかったりしても、`submitted` を送って鑑定に進める（鑑定士が `rejected` にして、やり直しになる）。ギルドマスターが成否を判断して分岐しない。
 3. **何か進めたら**、手順1に戻る。
 4. **何も進められないとき**：
-   - `complete`（全 Todo が済み、依頼主が受け取った）、または `status` が `aborted`（`next` の出力に `status` と `approved` がある）になった依頼で、`<dir>/archive.json` がまだないものは、`guild.py web-reset <root>` を実行してから、手順5・6を行う（進めたことになるので、手順1に戻る）。
+   - `complete`（全 Todo が済み、依頼主が受け取った）、または `status` が `aborted`（`next` の出力に `status` と `approved` がある）になった依頼で、`<dir>/archive.json` がまだないものは、`guild.py web-reset <root>` と `guild.py close <root>`（閉じた依頼のインプットのバックアップを消す）の両方を実行してから、手順5・6を行う（進めたことになるので、手順1に戻る）。
    - すべての依頼が `complete` か `aborted` で、どれも `archive.json` の `status` が `done`（書庫の登録候補の確認が済んでいる）なら、終える。`archive.json` の `status` が `proposed` のもの（依頼主が登録候補に答えていない）は、終わりにしない。**`awaiting_accept`（全 Todo は済んだが、依頼主が受け取っていない）は、終わりにしない。** ボードの「受け取りの確認」の手紙に依頼主が答えるのを待つ。ギルドマスターが勝手に完了にしない。`replan` のものは、手順2の4で地図師を呼んでいる最中なので、終わりにしない。
    - そうでなければ（依頼主の答えを待っている）、`guild.py wait <root> 43200`（12時間）を、**バックグラウンドで実行する**（Bash の `run_in_background: true`）。待っている間は、会話は止まり、トークンを使わない。答えが届くと `wait` が1秒ほどで終わり、終了の通知が来る。通知が来たら、出力（`arrived`）を読み、手順1へ。
      - 実行したら、チャットに「ボードで答えを待っています」と**1回だけ**書いて、手を止める。ほかの命令を重ねて出さない。通知が来る前に、結果を推測して進めない。
@@ -111,7 +116,7 @@ disable-model-invocation: true
 依頼が `complete`（依頼主が受け取った）になったら、納品物の場所をチャットで短く伝える（ボードの「完了」の手紙にも出る）。
 
 - 納品物は、`deliverable: true` の Todo の成果物（1つにまとめた資料）。途中の Todo の成果物は材料であり、納品物ではない。
-- 成果物の置き場は、実行中はいつも `output/<id>/`。依頼にファイルの置き場の指定があれば、このとき `output/` から指定の場所へコピーし、コピーしたことを伝える。
+- 成果物の置き場は、実行中はいつも `output/<id>/`。受け取りの確認の手紙が出るとき、納品物は `guild/deliverables/` にも置かれる（手順4）。依頼にファイルの置き場の指定があれば、そこへコピーする。
 
 ## 6. 書庫への記録
 
@@ -123,9 +128,10 @@ disable-model-invocation: true
    - `done`：登録する候補がない（または心得だけ登録した）。何もしない。
    - `proposed`：依頼主の確認待ち。ボードに「登録候補の確認」の手紙が出る。あなたは何もしない（手順4の待機で答えを待つ）。答えは `inbox/` に届き、`guild.py ingest <dir>/plan.json` が書庫に反映する。
 
-書庫は、次の依頼で全役が `index.md` から読む。心得（`lessons/`）は、役は読まず、依頼主が guild の改善に使う。依頼主の好みや確かめていない推測は、事実として書かない（司書の指示書に書いてある）。
+書庫は、次の依頼で全役が `index.md` から読む。心得（`type: lesson` の項目）は、役は読まず、依頼主が guild の改善に使う。依頼主の好みや確かめていない推測は、事実として書かない（司書の指示書に書いてある）。
 
 ## 守ること
+- 出力は Markdown だけ。PowerPoint・Excel などが要るときは、Claude Code に渡すプロンプトを `*.prompt.md` で出す（冒険者が実行中に足してもよい。Todo は増やさず、承認は取らない）。
 - `plan.json` を直接書かない。変えるのは `guild.py` だけ。
 - 役に判断させない。役の返り値（場所と一語）を `guild.py` に渡すだけにする。
 - 秘密情報（トークン、キー）を報告や書庫に書かない。
