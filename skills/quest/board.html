@@ -68,7 +68,6 @@ input[type=date]{font:inherit;font-size:14px;min-height:42px;border:1px solid va
 .opt .d{font-size:13px;color:var(--sub);display:block}
 .opt:has(input:checked){border:2px solid var(--ok);background:var(--sel-bg)}
 .warnline{font-size:13px;color:var(--warn);display:block}
-.drop{border:2px dashed var(--brass);border-radius:4px;padding:12px;text-align:center;font-size:13.5px;color:var(--sub);background:var(--surface2)}
 .sec{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:17px;margin:24px 0 10px}
 .tid{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px;background:var(--ink);color:var(--paper);border-radius:3px;padding:0 7px}
 .kind{font-size:12.5px;color:var(--sub)}
@@ -87,11 +86,9 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .toch{position:sticky;top:0;font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--paper2)}
 .tocb{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:transparent;border:0;border-bottom:1px solid var(--line);padding:6px 10px;cursor:pointer}
 .tocb:hover{background:var(--head)}
-.tocb.need{box-shadow:inset 4px 0 0 var(--warn)}
 .tocb.on{background:var(--surface);font-weight:700;box-shadow:inset 4px 0 0 var(--seal)}
 .tocb .id{display:block;font-weight:700}
 .tocb .tt{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tocb .st{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .stamp.sm{font-size:11px;padding:0 6px;border-width:1px;transform:none;font-weight:700}
 @media (max-width:900px){.bwrap{display:block}.toc{display:none}}
 /* 画面が広いとき（本文1100px＋左右の余白に目次が入る幅）は、目次を本文の外の左の余白に固定する */
@@ -596,7 +593,7 @@ function derive(q) {
 
 function buildModel(raw) {
   const quests = raw.quests.map(derive);
-  return { root: raw.root, requests: raw.requests, rejectedRequests: raw.rejectedRequests || [], archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, inputs: raw.inputs || [], quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+  return { root: raw.root, requests: raw.requests, rejectedRequests: raw.rejectedRequests || [], archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, inputs: raw.inputs || [], inputSet: new Set((raw.inputs || []).map((f) => f.name.toLowerCase())), quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
@@ -739,6 +736,7 @@ function letterFor(qd, a) {
           h('p', { class: 'fine', style: 'margin:0 0 4px' }, c.summary),
           c.body ? h('p', { class: 'fine', style: 'margin:0 0 4px;white-space:pre-wrap' }, c.body) : null,
           h('p', { class: 'fine', style: 'margin:0 0 4px' }, '出典：' + (c.source || 'なし') + (c.update_of ? `　更新先：${c.update_of}` : '')),
+          Array.isArray(c.inputs) && c.inputs.length ? h('p', { class: 'fine', style: 'margin:0 0 4px' }, 'インプット：' + c.inputs.join('、')) : null,
           radio(ck + 'r', ck, 'register', c.update_of ? (c.conflict ? '登録する（両方の値を残して「要確認」にする）' : '登録する（既存の項目を更新）') : '登録する', '', '', def),
           radio(ck + 'r', ck, 'skip', '不要', '', '', def));
       }),
@@ -1479,8 +1477,8 @@ function webTab() {
   if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、許可リストが表示されます。');
   const w = m.web;
   return [h('h2', { class: 'h2' }, '外部サイト'),
-    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '冒険者が、依頼を進めるなかで読めるウェブサイトを決めます。リストにないサイトを開こうとしたときは、「掲示板」の手紙でお聞きします。'),
-    w.pending.length && !w.wait ? h('div', { class: 'attn', role: 'status' }, h('b', null, `許可待ちが${w.pending.length}件あります`), w.pending.map((x) => code(x.domain)), h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.tab = 'board'; render(); } }, '掲示板の手紙で答える')) : null,
+    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '冒険者が、依頼を進めるなかで読めるウェブサイトを決めます。リストにないサイトを開こうとしたときは、「クエスト掲示板」の手紙でお聞きします。'),
+    w.pending.length && !w.wait ? h('div', { class: 'attn', role: 'status' }, h('b', null, `許可待ちが${w.pending.length}件あります`), w.pending.map((x) => code(x.domain)), h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.tab = 'board'; render(); } }, 'クエスト掲示板の手紙で答える')) : null,
     webCard(m)];
 }
 
@@ -1531,22 +1529,29 @@ function archiveForm() {
   const sel = h('select', { id: 'a:type', 'aria-label': '種類', disabled: !!edit }, ARCH_TYPES.filter((x) => x[0] !== 'lesson').map(([t, l]) => h('option', { value: t }, l)));
   sel.value = S.form['a:type'] || 'term'; bindKey(sel, 'a:type');
   const inp = (k, ph, id) => { const e = h('input', { type: 'text', id, placeholder: ph }); e.value = S.form[k] || ''; return bindKey(e, k); };
-  const reset = () => { for (const f of ['a:edit', 'a:name', 'a:aliases', 'a:summary', 'a:body', 'a:source']) S.form[f] = ''; };
+  const reset = () => { for (const f of ['a:edit', 'a:name', 'a:aliases', 'a:summary', 'a:body', 'a:source', 'a:inputs']) S.form[f] = ''; };
   const send1 = async () => {
     const name = (S.form['a:name'] || '').trim(), summary = (S.form['a:summary'] || '').trim();
     if (!name || !summary) { S.archiveError = '名前と一言の説明は、必ず書いてください。'; render(); return; }
     S.archiveError = '';
-    const entry = { type: S.form['a:type'] || 'term', name, aliases: (S.form['a:aliases'] || '').split(/[、,，]/).map((x) => x.trim()).filter(Boolean), summary, body: (S.form['a:body'] || '').trim(), source: (S.form['a:source'] || '').trim() };
+    const raw = S.form['a:inputs'] || '', seen = new Set(), inputs = [];
+    for (const n of (raw.includes('\n') ? raw.split(/\r?\n/) : raw.split(/[、,，]/)).map((x) => x.trim()).filter(Boolean)) if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); inputs.push(n); }
+    const bad = inputs.filter((n) => /[\\/:\x00-\x1f\x7f]/.test(n) || n === '.' || n === '..');
+    if (bad.length) { S.archiveError = `インプットのファイル名に使えない文字があります（/ \\ : など）：${bad.join('、')}`; render(); return; }
+    const entry = { type: S.form['a:type'] || 'term', name, aliases: (S.form['a:aliases'] || '').split(/[、,，]/).map((x) => x.trim()).filter(Boolean), inputs, summary, body: (S.form['a:body'] || '').trim(), source: (S.form['a:source'] || '').trim() };
     await sendArchive(edit ? { type: 'entry', update_of: edit, entry } : { type: 'entry', entry }, key);
     if (S.sent[key]) reset();
     render();
   };
   const ta = textarea('a:body', { id: 'a:body', rows: '2', placeholder: '本文（任意）。手順・意味・数値など' });
   ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); send1(); } });
-  const more = h('details', { class: 'qmore', open: !!S.open['a:more'] }, h('summary', null, '別名・出典をつける（任意）'),
+  const more = h('details', { class: 'qmore', open: !!S.open['a:more'] }, h('summary', null, '別名・出典・インプットをつける（任意）'),
     h('div', { class: 'qopts' },
       fld('別名・略称（読点「、」かカンマで区切る）', inp('a:aliases', '例：精算、経費申請', 'a:aliases')),
-      fld('出典・根拠', inp('a:source', '例：経理部の○○さんに確認', 'a:source'))));
+      fld('出典・根拠', inp('a:source', '例：経理部の○○さんに確認', 'a:source')),
+      h('div', { class: 'fld wide' }, h('label', { class: 'cap', for: 'a:inputs' }, 'インプット（任意。guild/inputs/ のファイル名を1行に1つ）'),
+        textarea('a:inputs', { id: 'a:inputs', rows: '2', placeholder: '例：KGI定義.md' }),
+        h('span', { class: 'fine' }, '依頼文にこの項目の名前・別名が出てきたとき、ここに書いたファイルが、地図師に「関係がありそう」と勧められます。ファイルがなくても保存できます。'))));
   more.addEventListener('toggle', () => { S.open['a:more'] = more.open; });
   return h('section', { class: 'quick', 'aria-label': '項目の登録' },
     h('label', { class: 'lbl', for: 'a:name', style: 'margin:0 0 6px' }, edit ? `項目を編集する（${edit}）` : '自分で項目を登録する'),
@@ -1565,12 +1570,13 @@ function archiveCard(e) {
       e.summary ? h('span', { class: 'fine', style: 'font-weight:400;margin-left:10px' }, e.summary.length > 60 ? e.summary.slice(0, 60) + '…' : e.summary) : null),
     h('p', { class: 'fine', style: 'margin:6px 0' }, e.summary || ''),
     e.aliases.length ? h('p', { class: 'fine', style: 'margin:0 0 6px' }, '別名：' + e.aliases.join('、')) : null,
+    e.inputs.length ? h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'インプット：', e.inputs.map((n, i) => [i ? '、' : '', n, S.model.inputSet.has(n.toLowerCase()) ? '' : '（guild/inputs/ にありません）'])) : null,
     h('p', { class: 'fine', style: 'margin:0 0 6px' }, `出典：${e.source || 'なし'}　確認日：${e.confirmed || '—'}　`, code(e.path)),
     h('pre', { style: 'white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0' }, e.body || '(本文なし)'),
     h('div', { class: 'btns', style: 'margin:10px 0 0' },
       e.status !== '廃止' && (e.confidence !== 'confirmed' || e.status === '要確認') ? h('button', { type: 'button', class: 'btn', style: 'min-height:36px', disabled: S.sent[k + ':p'], onclick: () => sendArchive({ type: 'promote', path: e.path }, k + ':p') }, S.sent[k + ':p'] ? '確認済みにする（送りました）' : '確認済みにする') : null,
       e.status !== '廃止' && e.type !== 'lesson' ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => {
-        S.form['a:edit'] = e.path; S.form['a:type'] = e.type; S.form['a:name'] = e.name; S.form['a:aliases'] = e.aliases.join('、'); S.form['a:summary'] = e.summary || ''; S.form['a:body'] = e.body || ''; S.form['a:source'] = e.source === '依頼主の登録' ? '' : (e.source || '');
+        S.form['a:edit'] = e.path; S.form['a:type'] = e.type; S.form['a:name'] = e.name; S.form['a:aliases'] = e.aliases.join('、'); S.form['a:summary'] = e.summary || ''; S.form['a:body'] = e.body || ''; S.form['a:source'] = e.source === '依頼主の登録' ? '' : (e.source || ''); S.form['a:inputs'] = e.inputs.join('\n'); S.open['a:more'] = true;
         render(); const f = document.getElementById('a:name'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); }
       } }, '編集') : null,
       e.status !== '廃止' && e.type !== 'lesson' ? h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.confirm[k + ':t'] = !S.confirm[k + ':t']; S.open[k] = true; render(); } }, '種類を変更') : null,
@@ -1593,7 +1599,7 @@ function archiveCard(e) {
 function knowTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
   const q = (S.form['f:kn'] || '').trim().toLowerCase();
-  const out = [h('h2', { class: 'h2' }, '書庫'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '用語・業務フロー・業務情報・個人を、種類別にためています。次の依頼で、役が索引を見て、関係する項目を使います。依頼が終わるたびに、司書が登録候補を挙げます（「掲示板」の手紙で選びます）。'),
+  const out = [h('h2', { class: 'h2' }, '書庫'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '用語・業務フロー・業務情報・個人を、種類別にためています。次の依頼で、役が索引を見て、関係する項目を使います。依頼が終わるたびに、司書が登録候補を挙げます（「クエスト掲示板」の手紙で選びます）。項目に「インプット」（guild/inputs/ のファイル名）を付けておくと、依頼文にその項目の名前が出てきたとき、地図師にそのファイルが勧められます。'),
     searchBox('f:kn', '言葉で探す（本文も探します）')];
   if (m.archiveWait) out.push(h('p', { class: 'fine', role: 'status' }, `書庫への反映待ちが ${m.archiveWait} 件あります。/guild:quest が動いていれば、すぐ反映されます。動いていなければ、チャットで /guild:quest と送ってください。`));
   const kn = S.kn, all = m.archive || [];
@@ -1602,7 +1608,7 @@ function knowTab() {
   out.push(archiveForm());
   const cmp = (a, b) => String(a.name).localeCompare(String(b.name));
   const groups = ARCH_TYPES.map(([type, title]) => ({ type, title,
-    list: all.filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases)).sort(cmp) }));
+    list: all.filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases, ...e.inputs)).sort(cmp) }));
   for (const { type, title, list } of groups) {
     const head = type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title;
     if (!list.length) { out.push(h('p', { class: 'sub kn-h', id: 'kn-' + type, style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
@@ -1654,7 +1660,7 @@ function flowSvg() {
   };
   const note = (x, y, t, anchor) => svg.append(E('text', { x, y, 'text-anchor': anchor || 'start', style: 'font-size:12px;fill:var(--sub)' }, t));
   // 受付〜計画
-  box(20, 20, 'me', '依頼を書く', '「依頼」ボタン');
+  box(20, 20, 'me', '依頼を書く', '「＋ 新規」で出す');
   box(270, 20, 'gm', '受け付ける', '依頼のフォルダを作る');
   box(520, 20, 'cart', 'Todo に分解', '前提・合格基準・形式');
   box(770, 20, 'me', '質問に答える', 'あいまいなときだけ');
@@ -1701,7 +1707,7 @@ function flowSvg() {
 // ヘルプの「役」。モデルは ROLE_MODELS（agents/*.md の model と、テストで一致を確かめている）から引く
 const ROLES = [
   ['ギルドマスター', null, '/guild:quest が動いている間、ずっと', '依頼を受け付け、役を呼び、あなたの答えを待ちます。進め方の判断（順序・遷移・やり直し）は guild.py に任せ、自分では判断しません。', '/guild:quest を動かしているセッションのモデル'],
-  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる Todo を決めます。納品物は Markdown だけです。PowerPoint・Excel など Markdown 以外が要るときは、Claude Code に渡すプロンプト（*.prompt.md）にします。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
+  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、使うインプットを理由つきで選び（迷うものは候補に）、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる Todo を決めます。納品物は Markdown だけです。PowerPoint・Excel など Markdown 以外が要るときは、Claude Code に渡すプロンプト（*.prompt.md）にします。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
   ['冒険者', 'adventurer', '自動でできる Todo ごと', '調べる・書き写す・整理する・書く。最後のまとめの Todo では、納品物の資料（Markdown）を作ります。Markdown 以外が要る部分は、Claude Code に渡すプロンプト（*.prompt.md）を書きます。報告は .work/Q###/reports/、成果物は .work/Q###/output/ に書き、納品物は全 Todo が済んだとき guild.py が deliverables/ に置きます。'],
   ['斥候', 'scout', '動的ページを読む Todo。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
   ['鑑定士', 'appraiser', 'Todo ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、斥候に読んでもらいます。成果物は直しません。'],
@@ -1739,22 +1745,33 @@ function helpGrid() {
   const faq = (q, ...a) => keepOpen('faq:' + q, h('summary', null, q), h('p', null, ...a));
   return h('div', { class: 'grid2' },
     sec('使い方', h('ol', null,
-      h('li', null, h('b', null, '依頼を書く。'), '「掲示板」の上の欄に内容を書いて、「依頼」を押します。'),
+      h('li', null, h('b', null, '依頼を書く。'), '「クエスト掲示板」の「＋ 新規」で、依頼の内容・開始日・締切を書き、使う資料（インプット）を既存から選ぶかアップロードして、「クエストを出す」を押します。'),
       h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります（動いている間は、新しい依頼を自動で受け付けます）。足りないことは、この画面の「質問」の手紙で聞かれます。'),
-      h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられて、「道のり」が出ます。承認はこの1回だけです。'),
-      h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「掲示板」に手紙が出ます。'),
+      h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられ、承認の手紙が出ます。使うインプット（あなたの「指定」と、地図師が理由つきで選んだ「自動」）も、ここで外したり、候補から追加したりできます。承認はこの1回だけです。'),
+      h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「クエスト掲示板」の詳細に手紙が出ます。'),
       h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。'))),
+    sec('クエスト掲示板の使い方', dl([
+      ['一覧', '左にクエストの一覧があります。番号・題名で探せ、状態（すべて／あなたの番／進行中／受け取り待ち／完了）で絞れます。完了・中止は、ふだんは畳んであります。'],
+      ['詳細', '行を押すと、右に詳細が出ます。上に「あなたの番」の手紙、下にタブ「道のり」「日付」「インプット」があります。'],
+      ['一覧を隠す', '詳細を横幅いっぱいにします。上のツールバーの「‹ ›」で前後のクエストへ移り、検索で番号・題名から開けます。隠したことは、このブラウザが覚えます。狭い画面では、一覧と詳細を切り替えます（「‹ 一覧へ戻る」）。'],
+      ['道のり', 'Todo の一覧です。行を開くと、合格基準と報告（冒険者・斥候・鑑定士・あなた）が読めます。失敗の判断の手紙には、鑑定士の指摘が出ます。'],
+      ['日付', 'このクエストのガントと、依頼の開始日・締切、Todo の予定日・締切の表です。直して「変更を送る」を押します。順序の矛盾は注意だけで、ほかの日付は自動では動きません。'],
+      ['インプット', 'このクエストが使うファイルです。「外す」「追加」「既存から選ぶ」で直せます（承認の前でも後でも）。'],
+      ['進捗で見る', 'このクエストだけを選んだ状態で、「クエスト進捗」を開きます。']])),
     sec('スキルの使い方（チャットで使う）', dl([['/guild:init', 'プロジェクトのフォルダで、最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。何度実行しても、依頼や書庫の項目は消えません。プラグインを更新したあとにもう一度実行すると、この画面が最新になります。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。質問・承認・確認は、チャットではなく、この画面の「手紙」で聞きます。動いている間は、この画面での答えを待ち続け、届くとすぐ取り込みます。'], ['止まったとき', 'しばらく動きがなければ、チャットで /guild:quest と送ってください。保存済みの答えや依頼を読み取って、続きから進めます。']])),
-    sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（掲示板の一覧・目次・絞り込みで使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', 'Todo ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全 Todo が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
+    sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（クエスト掲示板の一覧で使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', 'Todo ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全 Todo が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
       h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'Todo の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
-    sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
+    sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['インプット', '依頼で使う資料（guild/inputs/ に1つだけ置き、各クエストは名前で参照）。あなたが「＋ 新規」で選んだものが「指定」、地図師が依頼文と書庫をもとに理由つきで選んだものが「自動」です。地図師が迷ったものは「候補」になります。'], ['書庫の紐づけ', '書庫の項目に「インプット」を書いておくと、依頼文にその項目の名前・別名が出てきたとき、地図師にそのファイルが勧められます（確認済み・出典ありの項目の、3文字以上の語だけ）。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
     sec('困ったとき', h('div', { class: 'faq' },
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
       faq('間違えて承認した', 'チャットで「計画を直したい」と伝えてください。実行が始まる前なら、計画を作り直せます。'),
-      faq('予定や進み具合を見たい', '「クエスト進捗」のタブに、依頼ごとの帯と Todo の予定日（◆）、あなたの実行の日ごとの件数が出ます。日付は掲示板の依頼の「道のり」で直せます。'),
+      faq('予定や進み具合を見たい', '「クエスト進捗」のタブに、選んだクエストの帯と Todo の予定日（◆）、あなたの実行の日ごとの件数が出ます。「表示するクエスト」で絞れ、選んだものはこのブラウザが覚えます。日付は、クエスト掲示板の詳細の「日付」タブで直せます。'),
+      faq('納品物のテンプレートを使いたい', 'テンプレートの欄はありません。型にしたいファイルを「＋ 新規」でインプットとして付け、依頼文に「KGI定義.md の見出しに沿って」のように書いてください。'),
+      faq('冒険の書（やりとりの一覧）はどこ？', '冒険の書はなくなりました。役の報告は、クエスト掲示板の詳細の「道のり」で、Todo の行を開くと読めます。'),
+      faq('依頼が受け付けられなかった', '選んだインプットが、出したあとで guild/inputs/ から消されると、依頼は受け付けられず、クエスト掲示板の上に理由が出ます。「出し直す」から、インプットを選び直して出してください。'),
       faq('PowerPoint や Excel がほしい', '納品物は Markdown です。Markdown 以外が要るときは、受け取りの確認の手紙に「プロンプトをコピー」が出ます。コピーして Claude Code に貼ると、作ってもらえます。'),
-      faq('依頼を取り消したい', '進行中なら、失敗の判断で「この依頼を中止する」を選べます。受付待ちの依頼は、', code('guild/.work/requests/'), ' の該当ファイルを削除してください。'))));
+      faq('依頼を取り消したい', '進行中なら、詳細の下の「この依頼を中止する」か、失敗の判断で選べます。受付待ちの依頼は、一覧の「取り消す」で取り消せます（', code('guild/.work/requests/'), ' の該当ファイルを削除しても同じです）。'))));
 }
 
 function reader() {
@@ -1830,10 +1847,10 @@ function obsidianTab() {
           h('li', null, '作業用のファイルは ', code('guild/.work/'), ' にあり、Obsidian には出ません（設定は要りません）。')),
         h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
       sec('ディレクトリ構成', pre(['guild/', '  board.html  config.json', '  archive/            書庫（用語名.md。種類は項目の type）', '    index.md          索引（役が最初に読む）',
-        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             共通のインプット（1つだけ。各依頼はファイル名で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、バックアップ'].join('\n'))),
+        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             依頼で使う資料（1つだけ置き、各クエストは名前で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、バックアップ'].join('\n'))),
       sec('納品物を見る', dl([['場所', h('span', null, code('deliverables/Q###_…'), '。全 Todo が済んで受け取りの確認の手紙が出た時に置かれます。Markdown 以外が要る部分は ', code('.prompt.md'), '（Claude Code に渡すプロンプト）です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
-      sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[KGI]] のようにリンクします。'].join('\n')),
-        dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止']]),
+      sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'inputs: ["KGI定義.md"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[KGI]] のようにリンクします。'].join('\n')),
+        dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止'], ['inputs', '関係する guild/inputs/ のファイル名（任意）。依頼文にこの項目の名前が出ると、地図師にそのファイルが勧められます']]),
         h('p', { class: 'fine' }, '本文は Obsidian で編集してもかまいませんが、先頭のフロントマターは Obsidian の「プロパティ」画面で編集しないでください（別名などの書き方が変わり、読めなくなって消えることがあります）。索引（', code('index.md'), '）は自動では更新されません。確実に反映するには、この画面の「書庫」から編集してください。')),
       sec('整形（フォーマッタ）の設定',
         h('ul', null,
@@ -1865,7 +1882,7 @@ async function sendResult(qid, t, key) {
 function localToday() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 async function sendRequest() {
   const text = (S.form['new:text'] || '').trim();
-  S.newError = ''; S.newSaved = ''; S.newNote = '';
+  S.newError = ''; S.newSaved = '';
   if (!text) { S.newError = '依頼の内容を書いてください。'; render(); return; }
   if (S.conn !== 'ok') { S.newError = '保存先につながっていません。上の「フォルダを選ぶ」から選んでください。'; render(); return; }
   // 選んだ名前が、表示のあとで guild/inputs/ から消されていたら、出さずに知らせる（guild.py new も拒否する）
@@ -2002,11 +2019,11 @@ function demoTree(scene) {
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   if (scene === 'failed') { rep['T2-user.md'] = T('# T2 の結果\nできた：上司に口頭で共有した\nメモ：返事は「検討する」だった'); rep['T2-appraiser.md'] = T('---\ntodo: T2\n---\n# T2 の鑑定\n## 判定\n不合格\n## 指摘\n- 合格ラインの「了承する」という返事が、報告にない\n- 返事は「検討する」で、了承ではない\n- やり直しの回数（1回）を超えた\n## 未確認\n- なし'); }
   return {
-    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), inputs: { 'notes.txt': T('- 要点1\n- 要点2\n- 要点3\n- 要点4'), 'KGI定義.md': T('# KGI の定義\n最終目標の達成度を測る指標'), '売上 2026Q3.csv': T('月,売上\n7月,100'), '古い資料.pdf': T('(PDF の見本)') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
+    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), inputs: { 'notes.txt': T('- 要点1\n- 要点2\n- 要点3\n- 要点4'), 'KGI定義.md': T('# KGI の定義\n最終目標の達成度を測る指標'), '売上 2026Q3.csv': T('月,売上\n7月,100'), '古い資料.pdf': T('(PDF の見本)') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\ninputs: ["KGI定義.md"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
     deliverables: { 'Q001_report.md': T('見本'), 'Q001_スライド.prompt.md': T('---\ntype: prompt\n---\n# PowerPoint 5枚を作って…'), 'Q002_comparison.md': T('見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', start: null, due: null, inputs: [], files: [] }),
       rejected: { 'R20261009-090000.json': J({ type: 'request', text: '売上の資料をまとめてほしい', inputs: ['消えた資料.xlsx'], files: [] }), 'R20261009-090000.json.reason.txt': T('選んだインプットが guild/inputs/ にありません（削除された可能性があります）: 消えた資料.xlsx') } },
-    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md' }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
+    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md', inputs: ['notes.txt'] }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }
   };
 }

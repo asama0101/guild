@@ -1747,6 +1747,13 @@ class BoardPathsTest(unittest.TestCase):
                        ".pgh{position:sticky", "progCandidates, progEffective, progQuick, showInProgress"):
             self.assertIn(needle, self.board)
 
+    def test_help_and_archive_inputs(self):
+        for needle in ("sec('クエスト掲示板の使い方'", "S.form['a:inputs']", "inputs, summary,", 'inputs: ["KGI定義.md"]', "（guild/inputs/ にありません）",
+                       "納品物のテンプレートを使いたい", "冒険の書はなくなりました", "依頼が受け付けられなかった", "inputSet: new Set("):
+            self.assertIn(needle, self.board)
+        for gone in ("「掲示板」", "掲示板の一覧・目次", "S.newNote", ".drop{", ".tocb.need", ".tocb .st"):
+            self.assertNotIn(gone, self.board)
+
 
 class DocsContractTest(unittest.TestCase):
     def read(self, *p):
