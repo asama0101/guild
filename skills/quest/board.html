@@ -71,15 +71,7 @@ input[type=date]{font:inherit;font-size:14px;min-height:42px;border:1px solid va
 .warnline{font-size:13px;color:var(--warn);display:block}
 .drop{border:2px dashed var(--brass);border-radius:4px;padding:12px;text-align:center;font-size:13.5px;color:var(--sub);background:var(--surface2)}
 .sec{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:17px;margin:24px 0 10px}
-.tag{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--brass);border-radius:3px;padding:10px 14px;margin-bottom:8px}
-.duerow{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0 0;padding-top:8px;border-top:1px dotted var(--brass);font-size:13px}
-.duerow .dl{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800}
-.duerow input[type=date]{font:inherit;font-size:13px;min-height:32px;padding:2px 8px;border:1px solid var(--brass);border-radius:3px;background:var(--paper2);color:var(--ink)}
-.duerow .dwarn{flex-basis:100%;margin:0;color:var(--warn)}
-.tag.over{border-left-color:var(--ng)}
-.tag .row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}
 .tid{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px;background:var(--ink);color:var(--paper);border-radius:3px;padding:0 7px}
-.ttl{font-weight:700;flex:1 1 240px}
 .kind{font-size:12.5px;color:var(--sub)}
 .lock{color:var(--ng);font-weight:700;font-size:12.5px}
 details{margin-top:6px;font-size:13.5px}
@@ -251,6 +243,20 @@ svg.humbars{min-width:0;max-width:100%}
   .td .tdcrit{display:none}
 }
 @media (max-width:620px){.tdrow{grid-template-columns:auto minmax(0,1fr) auto 18px}.tdrow .tdd{display:none}}
+/* 日付タブ：このクエストのガントと、日付の表（変えた行は色を変える。注意は表示だけ） */
+svg.qgantt{min-width:560px}
+.dtq{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 12px;border:1px solid var(--line);border-left:6px solid var(--brass);border-radius:3px;background:var(--surface);margin-bottom:10px;font-size:13.5px}
+.dtable{border:1px solid var(--line);border-radius:3px;background:var(--surface);font-size:13.5px}
+.dtr{display:grid;grid-template-columns:44px minmax(0,1fr) 150px 150px minmax(0,1fr);gap:4px 10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--grid);border-left:4px solid transparent}
+.dtr:last-child{border-bottom:0}
+.dth{font-size:12px;color:var(--sub);background:var(--head)}
+.dtr.chg,.dtq.chg{background:var(--warn-bg);border-left-color:var(--seal)}
+.dtt{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.dtw{color:var(--warn);font-size:12.5px}
+.dtq .dtw{margin:0;flex-basis:100%}
+.dtr input[type=date]{min-height:34px;padding:2px 8px;font-size:13px;width:100%;box-sizing:border-box}
+.dtq input[type=date]{min-height:34px;padding:2px 8px;font-size:13px}
+@media (max-width:760px){.dtr{grid-template-columns:44px minmax(0,1fr)}.dth{display:none}.dtr>span:nth-child(n+3){grid-column:2}}
 </style>
 </head>
 <body>
@@ -784,45 +790,6 @@ function infoLetter(qd) {
   return null;
 }
 
-function dueRow(qd, t) {
-  const p = qd.q.plan, key = `due:${qd.id}:${t.id}`, over = overdue(t, Date.now());
-  const editable = p.status === 'active' || p.status === undefined;
-  const cur = (f) => (S.form[`${key}:${f}`] !== undefined ? S.form[`${key}:${f}`] : (t[f] || ''));
-  const mk = (f, label) => { const i = h('input', { type: 'date', 'aria-label': `${t.id} の${label}` }); i.value = cur(f); bindKey(i, `${key}:${f}`); return i; };
-  const sch = mk('scheduled', '予定日'), due = mk('due', '締切');
-  const warn = h('p', { class: 'dwarn' });
-  const btn = h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => {
-    const body = { type: 'due', todo: t.id, scheduled: sch.value || t.scheduled, due: due.value || null };
-    await send(qd.id, body, key); delete S.form[`${key}:scheduled`]; delete S.form[`${key}:due`]; render(); } });
-  // 入力中に描き直すと、日付の欄の入力位置が先頭に戻る。ボタンと注意文だけをその場で直す
-  const sync = () => {
-    const probe = { ...t, scheduled: sch.value || t.scheduled, due: due.value || null };
-    btn.disabled = S.conn !== 'ok' || (probe.scheduled === t.scheduled && probe.due === (t.due || null));
-    btn.textContent = '日付を設定';
-    warn.textContent = dateIssues(p, probe).join(' '); warn.hidden = !warn.textContent;
-  };
-  for (const i of [sch, due]) i.addEventListener('change', () => { S.form[`${key}:${i === sch ? 'scheduled' : 'due'}`] = i.value; sync(); });
-  sync();
-  const pend = qd.q.inbox.filter((x) => x.type === 'due' && x.todo === t.id).slice(-1)[0];
-  return h('div', { class: 'duerow' },
-    h('span', { class: 'dl' }, '予定日'), h('span', null, t.scheduled || 'なし'), h('span', { class: 'dl' }, '締切'), h('span', null, t.due || 'なし'),
-    over ? stampEl('期限切れ', 'sd-ng') : null, pend ? stampEl('反映待ち', 'sd-turn') : null,
-    editable ? [sch, due, btn] : null, editable ? warn : null);
-}
-function questDatesRow(qd) {
-  const p = qd.q.plan, key = `qdates:${qd.id}`;
-  const editable = p.status === 'active' || p.status === undefined;
-  const cur = (f) => (S.form[`${key}:${f}`] !== undefined ? S.form[`${key}:${f}`] : (p[f] || ''));
-  const mk = (f, label) => { const i = h('input', { type: 'date', 'aria-label': `依頼の${label}` }); i.value = cur(f); bindKey(i, `${key}:${f}`); return i; };
-  const st = mk('start', '開始日'), du = mk('due', '締切');
-  const btn = h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => {
-    await send(qd.id, { type: 'due', start: st.value || p.start, due: du.value || p.due }, key); delete S.form[`${key}:start`]; delete S.form[`${key}:due`]; render(); } });
-  const sync = () => { btn.disabled = S.conn !== 'ok' || ((st.value || p.start) === p.start && (du.value || p.due) === p.due); btn.textContent = '依頼の日付を設定'; };
-  for (const i of [st, du]) i.addEventListener('change', () => { S.form[`${key}:${i === st ? 'start' : 'due'}`] = i.value; sync(); });
-  sync();
-  return h('div', { class: 'duerow' }, h('span', { class: 'dl' }, '依頼の開始日'), h('span', null, p.start || 'なし'), h('span', { class: 'dl' }, '締切'), h('span', null, p.due || 'なし'),
-    editable ? [st, du, btn] : null);
-}
 // ---- 詳細パネルのタブ（道のり／日付／インプット）と、報告の読み込み
 const DTABS = [['way', '道のり'], ['dates', '日付'], ['inputs', 'インプット']];
 // 報告のファイル（reports/<Todo>-<役>.md）。道のりの行に、この順で並べる
@@ -879,9 +846,101 @@ function wayTab(qd) {
     h('aside', { class: 'critside', 'aria-label': '選んだ Todo の合格基準' },
       cur ? [h('b', null, `${cur.id} の合格基準`), critList(cur)] : h('p', { class: 'fine', style: 'margin:0' }, '行を開くと、ここに合格基準が出ます。')));
 }
-// 日付タブ（Task 9 で、このクエストのガントと日付の表に置き換える）。今は、依頼と Todo ごとの日付の欄を並べる
+// ---- 日付タブ：このクエストのガントと、依頼・Todo の日付の表
+// 表示の範囲（日番号）。依頼の開始日・締切と Todo の予定日のうち、正しい日付（okDate）だけを使い、前後に1日ずつ足す。
+// 正しい日付が1つもなければ今日。狭すぎると読めないので、幅は最低7日
+function dateRange(plan) {
+  const p = plan || {}, ds = [p.start, p.due, ...(Array.isArray(p.todos) ? p.todos : []).map((t) => t && t.scheduled)].filter(okDate).map(dayNum);
+  if (!ds.length) ds.push(dayNum(localToday()));
+  const min = Math.min(...ds) - 1, max = Math.max(Math.max(...ds) + 1, min + 6);
+  return { min, max };
+}
+// このクエストのガントのモデル。帯は開始日〜締切、◆ は Todo の予定日（不正なら開始日、それもなければ描かない）
+function qGanttModel(plan) {
+  const p = plan || {}, r = dateRange(p), start = okDate(p.start) ? p.start : null, due = okDate(p.due) ? p.due : start;
+  const todos = (Array.isArray(p.todos) ? p.todos : []).map((t) => ({ id: t.id, title: t.title || '', state: t.state, scheduled: okDate(t.scheduled) ? t.scheduled : start, due: okDate(t.due) ? t.due : null }));
+  return { min: r.min, max: r.max, today: dayNum(localToday()), start, due, todos };
+}
+function questGantt(qd) {
+  const m = qGanttModel(qd.q.plan), LABEL = 200, W = 900, ROW = 24, HEAD = 30, n = m.max - m.min + 1, DW = (W - LABEL - 12) / n;
+  const x = (d) => LABEL + (d - m.min) * DW + DW / 2, H = HEAD + (m.todos.length + 1) * ROW + 8, every = Math.max(1, Math.ceil(44 / DW));
+  const cut = (s, k) => (s.length > k ? s.slice(0, k) + '…' : s);
+  const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': `${qd.id} の予定（帯は開始日から締切、◆ は Todo の予定日）`, class: 'gantt qgantt' });
+  for (let d = m.min, k = 0; d <= m.max; d++, k++) {
+    svg.append(sv('line', { x1: x(d), x2: x(d), y1: HEAD - 4, y2: H, stroke: 'var(--line)', 'stroke-width': 1, opacity: 0.5 }));
+    if (k % every === 0) svg.append(sv('text', { x: x(d), y: 14, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--sub)' }, shortDate(dayStr(d))));
+  }
+  if (m.today >= m.min && m.today <= m.max) svg.append(sv('line', { x1: x(m.today), x2: x(m.today), y1: HEAD - 4, y2: H, stroke: 'var(--ng)', 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }), sv('text', { x: x(m.today), y: 26, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--ng)' }, '今日'));
+  let y = HEAD + ROW / 2;
+  svg.append(sv('text', { x: 4, y: y + 4, 'font-size': 12, 'font-weight': 700, fill: 'var(--ink)' }, `${qd.id} ${cut(qd.title, 12)}`));
+  if (m.start) { const x1 = x(dayNum(m.start)) - DW / 2, x2 = x(dayNum(m.due)) + DW / 2; svg.append(sv('rect', { x: x1, y: y - 7, width: Math.max(x2 - x1, 6), height: 14, rx: 3, fill: 'var(--surface2)', stroke: 'var(--brass)' })); }
+  for (const t of m.todos) {
+    y += ROW;
+    svg.append(sv('text', { x: 16, y: y + 4, 'font-size': 11, fill: 'var(--sub)' }, `${t.id} ${cut(t.title, 13)}`));
+    if (!t.scheduled) continue;
+    const cx = x(dayNum(t.scheduled)), s = 6;
+    svg.append(sv('path', { d: `M${cx} ${y - s} L${cx + s} ${y} L${cx} ${y + s} L${cx - s} ${y} Z`, fill: STATE_FILL[t.state] || 'var(--mute)', stroke: 'var(--ink)', 'stroke-width': 0.6 },
+      sv('title', null, `${t.id} ${t.title}\n予定日 ${t.scheduled}${t.due ? '　締切 ' + t.due : ''}\n${(TSTATE[t.state] || [t.state])[0]}`)));
+  }
+  return svg;
+}
+// 依頼の開始日・締切と、Todo ごとの予定日・締切を、まとめて直して送る。下書きは S.form の dt:<依頼>:… に持つ。
+// 空の欄は「変えない」（Todo の締切だけは、空にすると解除）。入力中は描き直さず、行の色・注意・ボタンだけをその場で直す（日付の欄の入力位置を保つ）
 function datesTab(qd) {
-  return [questDatesRow(qd), qd.todos.map((t) => h('div', { class: 'tag' }, h('div', { class: 'row' }, h('span', { class: 'tid' }, t.id), h('span', { class: 'ttl' }, t.title)), dueRow(qd, t)))];
+  const p = qd.q.plan, editable = (p.status === 'active' || p.status === undefined) && !p.accepted, k = `dt:${qd.id}`;
+  const val = (f, cur) => (S.form[`${k}:${f}`] !== undefined ? S.form[`${k}:${f}`] : (cur || ''));
+  const mk = (f, cur, label) => { const i = h('input', { type: 'date', 'aria-label': label, disabled: !editable }); i.value = val(f, cur); bindKey(i, `${k}:${f}`); return i; };
+  const qs = mk('start', p.start, '依頼の開始日'), qdue = mk('due', p.due, '依頼の締切'), qwarn = h('p', { class: 'dtw' });
+  const qbox = h('div', { class: 'dtq' }, h('b', null, '依頼の日付'), h('label', null, '開始日 ', qs), h('label', null, '締切 ', qdue), qwarn);
+  const rows = qd.todos.map((t) => {
+    const sch = mk(`${t.id}:scheduled`, t.scheduled, `${t.id} の予定日`), due = mk(`${t.id}:due`, t.due, `${t.id} の締切`), warn = h('span', { class: 'dtw' });
+    const tr = h('div', { class: 'dtr', role: 'row' }, h('b', { class: 'tid', role: 'cell' }, t.id), h('span', { role: 'cell', class: 'dtt' }, t.title, ' ', stampEl(t.stamp, t.cls + ' sm')),
+      h('span', { role: 'cell' }, sch), h('span', { role: 'cell' }, due), h('span', { role: 'cell' }, warn));
+    return { t, sch, due, warn, tr };
+  });
+  // 送る中身（変わったものだけ）。空の欄は今の値のまま。Todo の締切だけは空＝null（解除）
+  const changes = () => {
+    const out = [], st = qs.value || p.start, du = qdue.value || p.due;
+    if (st !== p.start || du !== p.due) out.push({ type: 'due', start: st, due: du });
+    for (const { t, sch, due } of rows) {
+      const scheduled = sch.value || t.scheduled, d = due.value || null;
+      if (scheduled !== t.scheduled || d !== (t.due || null)) out.push({ type: 'due', todo: t.id, scheduled, due: d });
+    }
+    return out;
+  };
+  const btn = h('button', { type: 'button', class: 'btn go sm' });
+  const undo = h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { for (const f of Object.keys(S.form)) if (f.startsWith(k + ':')) delete S.form[f]; render(); } }, '元に戻す');
+  const sync = () => {
+    const probe = { ...p, start: qs.value || p.start, due: qdue.value || p.due };
+    probe.todos = qd.todos.map((t, i) => ({ ...t, scheduled: rows[i].sch.value || t.scheduled, due: rows[i].due.value || null }));
+    rows.forEach((r, i) => {
+      r.tr.classList.toggle('chg', probe.todos[i].scheduled !== r.t.scheduled || probe.todos[i].due !== (r.t.due || null));
+      r.warn.textContent = dateIssues(probe, probe.todos[i]).join(' ');
+    });
+    qbox.classList.toggle('chg', probe.start !== p.start || probe.due !== p.due);
+    qwarn.textContent = okDate(probe.start) && okDate(probe.due) && probe.due < probe.start ? '締切が開始日より前です。' : '';
+    const n = changes().length;
+    btn.textContent = `変更を送る（${n}件）`; btn.disabled = !editable || S.conn !== 'ok' || !n; undo.disabled = !n;
+  };
+  btn.addEventListener('click', async () => {
+    const list = changes(); if (!list.length) return;
+    btn.disabled = true;
+    for (const body of list) { await send(qd.id, body, `${k}:sent`); if (S.fallback) return; }  // Todo ごとに別の入力（1つ失敗したら止める）
+    for (const f of Object.keys(S.form)) if (f.startsWith(k + ':')) delete S.form[f];
+    render();
+  });
+  for (const i of [qs, qdue, ...rows.flatMap((r) => [r.sch, r.due])]) { i.addEventListener('input', sync); i.addEventListener('change', sync); }
+  sync();
+  const pend = qd.q.inbox.some((x) => x.type === 'due');
+  return [
+    h('div', { class: 'ganttbox' }, questGantt(qd)),
+    h('p', { class: 'fine', style: 'margin:4px 0 12px' }, '帯は依頼の開始日〜締切、◆ は Todo の予定日（色は状態）、赤い点線は今日です。'),
+    qbox,
+    h('div', { class: 'dtable', role: 'table', 'aria-label': 'Todo の日付' }, h('div', { class: 'dtr dth', role: 'row' }, ['番号', 'Todo', '予定日', '締切', '注意'].map((c) => h('span', { role: 'columnheader' }, c))), rows.map((r) => r.tr)),
+    editable ? h('div', { class: 'btns' }, btn, undo, h('span', { class: 'fine', style: 'align-self:center' }, '注意は表示だけで、送れます。日付を変えても、ほかの Todo の日付は自動では動きません。空の欄は今の日付のままです（Todo の締切だけは、空にすると解除）。'))
+      : h('p', { class: 'fine' }, '中止・見直し中・受け取り後のクエストの日付は直せません。'),
+    pend ? h('p', { class: 'fine', role: 'status' }, '送った日付の変更が、反映を待っています（/guild:quest が動いていれば、すぐ反映されます）。') : null,
+    sentNote(`${k}:sent`)];
 }
 // インプットタブ（Task 10 で、追加・外す・既存から選ぶを足す）。今は、計画のインプットを読むだけ
 function inputsTab(qd) {
@@ -1771,7 +1830,7 @@ async function start() {
     if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
     if (k && t.type === 'date') S.form[k] = t.value;
   });
-  window.__guildBoard = { S, render, scheduleModel, ganttSvg, refresh, lsGet, lsSet, boardBucket, boardList, jumpQuest, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
+  window.__guildBoard = { S, render, scheduleModel, ganttSvg, refresh, lsGet, lsSet, boardBucket, boardList, jumpQuest, dateRange, qGanttModel, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
   if (params.has('demo')) {
     S.demo = true; S.fs = new PathMap(new MemFS(toPhysicalTree(demoTree(params.get('demo') || 'human')))); S.conn = 'ok'; await refresh(true); return;
   }

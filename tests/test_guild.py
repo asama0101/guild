@@ -1698,8 +1698,11 @@ class BoardPathsTest(unittest.TestCase):
         self.assertNotIn("<script src", self.board)  # 外部ライブラリを使わない
 
     def test_board_sends_the_date_inputs(self):
-        for needle in ("type: 'due', todo: t.id, scheduled:", "type: 'due', start:", "function questDatesRow(", "function dateIssues("):
+        for needle in ("type: 'due', todo: t.id, scheduled, due: d", "type: 'due', start: st, due: du", "function datesTab(", "function dateIssues(",
+                       "function dateRange(", "function qGanttModel(", "function questGantt(", "変更を送る（${n}件）", "'元に戻す'", "dateRange, qGanttModel"):
             self.assertIn(needle, self.board)
+        for gone in ("function dueRow(", "function questDatesRow(", ".duerow", ".tag{"):
+            self.assertNotIn(gone, self.board)
 
     def test_no_adventure_book_or_templates(self):
         for gone in ("function talkTab(", "function messagesOf(", "function roleOf(", "['talk'", "'冒険の書'", "S.tq", "S.role", "msgKey",
