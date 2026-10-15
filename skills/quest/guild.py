@@ -3,9 +3,9 @@
 
 plan.json を書けるのはこのファイルだけ。遷移は transitions.json で決め、定義にない遷移はエラー。
 使い方: guild.py {adopt|validate|sync|next|ingest} PLAN / guild.py advance PLAN ID EVENT
-adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を作る（承認前の状態で）。
+adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を作る（承認前の状態で）。inputs・candidates の名前が guild/inputs/ になければエラー。
 guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
-guild.py new ROOT [R…]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む。
+guild.py new ROOT [R…]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む（選んだインプットが guild/inputs/ になければ、依頼を .work/requests/rejected/ へ移して拒否する）。
 guild.py requests ROOT: 受付待ちの依頼を一覧する。
 guild.py inputs-list ROOT [--text 依頼文]: guild/inputs/ のファイル（名前・拡張子・大きさ・更新日・文字のファイルの先頭5行）と、依頼文に出てくる書庫の項目からのヒントを一覧する（地図師に渡す）。
 guild.py close ROOT: 完了・中止した依頼のインプットのバックアップを消す。
@@ -141,6 +141,7 @@ def validate(plan, tr):
             check_date(plan.get(k), k)
         except GuildError as e:
             errs.append(str(e))
+    errs += check_plan_inputs(plan)
     ids = [t.get("id") for t in todos]
     if len(set(ids)) != len(ids) or None in ids:
         errs.append("id が重複しているか、欠けています")
@@ -356,6 +357,95 @@ def quest_dates(qdir, old=None):
     return {"start": start, "due": due}
 
 
+INPUT_SOURCES = ("user", "auto")  # 依頼主の指定 / 地図師の選択
+
+
+def request_inputs(qdir):
+    """request.json の inputs（依頼主の指定。new が検査済み）。なければ []。"""
+    req_path = Path(qdir) / "request.json"
+    req = load_json(req_path) if req_path.exists() else {}
+    names = req.get("inputs", []) if isinstance(req, dict) else []
+    return unique_names([n for n in names if isinstance(n, str) and n]) if isinstance(names, list) else []
+
+
+def user_removed(old):
+    """旧計画の履歴（event が inputs）を順にたどり、依頼主が外したまま（後で足し直していない）名前を小文字で返す。"""
+    removed = set()
+    for h in (old or {}).get("history", []):
+        if isinstance(h, dict) and h.get("event") == "inputs":
+            removed |= {str(n).lower() for n in h.get("remove", [])}
+            removed -= {str(n).lower() for n in h.get("add", [])}
+    return removed
+
+
+def selected_inputs(qdir, draft, old=None):
+    """plan.json の inputs と candidates を決める。
+    依頼主の指定（request.json の inputs。source=user）が先頭で、地図師の選択（plan-draft.json の inputs。source=auto）を後ろに足す。
+    作り直し（replan）では、旧計画の inputs（依頼主の追加・外すを反映済み）を引き継ぎ、依頼主が外したままの名前は足さない。
+    地図師が書いた名前は guild/inputs/ にあること（なければエラー。地図師に差し戻す）。"""
+    have = existing_inputs(gdir_of(qdir))
+
+    def drafted(key):
+        items = draft.get(key, [])
+        if not isinstance(items, list):
+            raise GuildError(f"plan-draft.json の {key} は配列にしてください")
+        out = []
+        for x in items:
+            if not isinstance(x, dict) or not one_line(x.get("reason")):
+                raise GuildError(f"plan-draft.json の {key} の各要素には name と reason（理由）を書いてください: {x!r}")
+            check_input_name(x.get("name"), f"plan-draft.json の {key}")
+            actual = have.get(x["name"].lower())
+            if actual is None:
+                raise GuildError(f"plan-draft.json の {key} の {x['name']} が guild/inputs/ にありません")
+            out.append({"name": actual, "reason": one_line(x["reason"])})
+        return out
+
+    auto, cands = drafted("inputs"), drafted("candidates")
+    if old is not None and isinstance(old.get("inputs"), list):
+        chosen = [dict(x) for x in old["inputs"]]
+    else:
+        chosen = [{"name": n, "source": "user", "reason": "依頼主の指定"} for n in request_inputs(qdir)]
+    removed = user_removed(old)
+    seen = {x["name"].lower() for x in chosen}
+    for x in auto:
+        if x["name"].lower() not in seen and x["name"].lower() not in removed:
+            chosen.append({"name": x["name"], "source": "auto", "reason": x["reason"]})
+            seen.add(x["name"].lower())
+    candidates = []
+    for x in cands:
+        if x["name"].lower() not in seen:
+            candidates.append(x)
+            seen.add(x["name"].lower())
+    return chosen, candidates
+
+
+def check_plan_inputs(plan):
+    """plan.json の inputs・candidates の形を検査する（存在は adopt と ingest が見る）。名前は両方をまたいで重ならない。"""
+    errs, seen = [], set()
+    for key in ("inputs", "candidates"):
+        items = plan.get(key, [])
+        if not isinstance(items, list):
+            errs.append(f"{key} は配列にしてください")
+            continue
+        for x in items:
+            if not isinstance(x, dict):
+                errs.append(f"{key} の要素が不正です: {x!r}")
+                continue
+            try:
+                check_input_name(x.get("name"), key)
+            except GuildError as e:
+                errs.append(str(e))
+                continue
+            if key == "inputs" and x.get("source") not in INPUT_SOURCES:
+                errs.append(f"inputs の {x['name']} の source が不正です: {x.get('source')}")
+            if not isinstance(x.get("reason"), str):
+                errs.append(f"{key} の {x['name']} に reason がありません")
+            if x["name"].lower() in seen:
+                errs.append(f"{key} の {x['name']} が重なっています")
+            seen.add(x["name"].lower())
+    return errs
+
+
 def adopt(plan_path, tr):
     """reports/plan-draft.json（地図師の分解結果）を検査し、未承認の plan.json にする。"""
     plan_path = Path(plan_path)
@@ -371,8 +461,10 @@ def adopt(plan_path, tr):
     todos = draft.get("todos")
     if not isinstance(todos, list):
         raise GuildError("plan-draft.json に todos がありません")
+    inputs, candidates = selected_inputs(plan_path.parent, draft, old)  # 何も書く前に検査する（落ちたら地図師に差し戻す）
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False, "status": "active",
             **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}),
+            "inputs": inputs, "candidates": candidates,
             "todos": [], "history": [{"t": now(), "event": "adopted"}]}
     plan.update(quest_dates(plan_path.parent, old))
     for t in todos:
@@ -454,7 +546,8 @@ def list_requests(root):
                 d = load_json(f)
             except GuildError:
                 continue
-            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "files": d.get("files", [])})
+            out.append({"id": f.stem, "text": d.get("text", ""), "start": d.get("start"), "due": d.get("due"),
+                        "inputs": d.get("inputs", []), "files": d.get("files", [])})
     return out
 
 
@@ -484,6 +577,44 @@ def existing_inputs(gdir):
     """guild/inputs/ の直下のファイルを {小文字の名前: 実際の名前} で返す（同一判定は大文字小文字を区別しない）。"""
     d = Path(gdir) / INPUTS
     return {p.name.lower(): p.name for p in d.iterdir() if p.is_file()} if d.is_dir() else {}
+
+
+def picked_inputs(gdir, req, files_dir):
+    """依頼主が既存のインプットから選んだ名前（依頼の inputs）を検査し、guild/inputs/ の実際の名前にして返す。
+    同じ依頼でアップロードしたファイルの名前なら、まだ guild/inputs/ になくてもよい（取り込みで置かれる）。"""
+    if not isinstance(req, dict):
+        raise GuildError("依頼の形が不正です")
+    picked = req.get("inputs", [])
+    if not isinstance(picked, list):
+        raise GuildError("依頼の inputs は、ファイル名の配列にしてください")
+    have = existing_inputs(gdir)
+    fdir = Path(files_dir)
+    uploaded = {p.name.lower(): p.name for p in fdir.iterdir() if p.is_file()} if fdir.is_dir() else {}
+    out = []
+    for n in picked:
+        check_input_name(n, "依頼の inputs")
+        actual = have.get(n.lower()) or uploaded.get(n.lower())
+        if actual is None:
+            raise GuildError(f"選んだインプットが guild/inputs/ にありません（削除された可能性があります）: {n}")
+        out.append(actual)
+    return unique_names(out)
+
+
+def reject_request(wdir, request_id, reason):
+    """受け付けられない依頼を .work/requests/rejected/ へ移し、理由を <ID>.json.reason.txt に残す。添付も rejected/files/<ID>/ へ移す。
+    requests/ に残すと、arrivals が「届いた」と返し続けるため。"""
+    rdir = Path(wdir) / "requests"
+    dest = rdir / "rejected"
+    dest.mkdir(parents=True, exist_ok=True)
+    os.replace(rdir / f"{request_id}.json", dest / f"{request_id}.json")
+    (dest / f"{request_id}.json.reason.txt").write_text(reason, encoding="utf-8")
+    files = rdir / "files" / request_id
+    if files.is_dir():
+        target = dest / "files" / request_id
+        if target.exists():
+            shutil.rmtree(target)
+        target.parent.mkdir(exist_ok=True)
+        shutil.move(str(files), str(target))
 
 
 def import_inputs(gdir, files_dir, quest):
@@ -576,36 +707,43 @@ def publish_deliverables(qdir, plan=None):
 
 
 def new_quest(root, request_id=None):
-    """ROOT/guild/.work/ に次の依頼のフォルダ（Q001, Q002, …）を作る。request_id があれば、その受付待ちの依頼を取り込む。"""
+    """ROOT/guild/.work/ に次の依頼のフォルダ（Q001, Q002, …）を作る。request_id があれば、その受付待ちの依頼を取り込む。
+    依頼の inputs（依頼主が既存から選んだ名前）が guild/inputs/ になければ、依頼を requests/rejected/ へ移して拒否する（番号は進まない）。
+    request.json の inputs は、選んだ名前と、取り込んだアップロードの名前を合わせたもの（重なりを除き、選んだものが先）。"""
     gdir = Path(root) / "guild"
     if not (gdir / "config.json").exists():
         raise GuildError(f"{gdir} がありません（/guild:init を先に実行してください）")
     wdir = work_dir(gdir)
     wdir.mkdir(exist_ok=True)
-    src = None
+    src = req = files = None
+    picked = []
     if request_id is not None:
         if not REQUEST_ID.match(request_id):
             raise GuildError(f"依頼の ID が不正です: {request_id}")
         src = wdir / "requests" / f"{request_id}.json"
         if not src.exists():
             raise GuildError(f"{src} がありません")
+        req = load_json(src)
+        files = wdir / "requests" / "files" / request_id
+        try:
+            picked = picked_inputs(gdir, req, files)
+        except GuildError as e:
+            reject_request(wdir, request_id, str(e))
+            raise
     nums = [int(p.name[1:]) for p in wdir.iterdir() if p.is_dir() and p.name[:1] == "Q" and p.name[1:].isdigit()]
     qdir = wdir / f"Q{max(nums, default=0) + 1:03d}"
     for sub in ("reports", "output", "inbox"):
         (qdir / sub).mkdir(parents=True)
     out = {"quest": qdir.name, "dir": str(qdir), "plan": str(qdir / "plan.json")}
     if src is not None:
-        out["request"] = load_json(src)
         shutil.move(str(src), str(qdir / "request.json"))
-        files = wdir / "requests" / "files" / request_id
         names = []
         if files.is_dir():
             names = import_inputs(gdir, files, qdir.name)
             shutil.rmtree(files)
-        req = load_json(qdir / "request.json")
-        req["inputs"] = names
+        req["inputs"] = unique_names(picked + names)
         save_plan(qdir / "request.json", req)  # JSON を原子的に書く関数（plan 専用の名前だが中身は汎用）
-        out["inputs"], out["inputs_dir"] = names, str(gdir / INPUTS)
+        out["request"], out["inputs"], out["inputs_dir"] = req, req["inputs"], str(gdir / INPUTS)
     return out
 
 

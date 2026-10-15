@@ -2015,5 +2015,140 @@ class InputsListTest(unittest.TestCase):
         self.assertEqual(run("--text").returncode, 1)
 
 
+class InputsSelectTest(unittest.TestCase):
+    """依頼で選んだインプット（request.json の inputs）と、計画の inputs・candidates（adopt）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.g = self.root / "guild"
+        for n in ("KGI定義.md", "売上 2026Q3.csv", "提案書.pptx", "古い資料.pdf"):
+            (self.g / "inputs" / n).write_text("x", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def request(self, rid, picked=(), uploads=None):
+        w = self.g / ".work" / "requests"
+        uploads = uploads or {}
+        (w / f"{rid}.json").write_text(json.dumps({"type": "request", "text": "KGI をまとめて", "start": "2026-10-16", "due": None,
+                                                   "inputs": list(picked), "files": list(uploads)}, ensure_ascii=False), encoding="utf-8")
+        if uploads:
+            f = w / "files" / rid
+            f.mkdir(parents=True)
+            for n, body in uploads.items():
+                (f / n).write_text(body, encoding="utf-8")
+
+    def quest(self, picked=(), old=None):
+        self.request("R20261016-1", picked=picked)
+        q = Path(guild.new_quest(self.root, "R20261016-1")["dir"])
+        if old is not None:
+            guild.save_plan(q / "plan.json", old)
+        return q
+
+    def adopt(self, q, **extra):
+        draft = {"quest": "Q001", "title": "t", "todos": [{"id": "T1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT}], **extra}
+        (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+        guild.adopt(q / "plan.json", TR)
+        return guild.load_json(q / "plan.json")
+
+    def test_new_takes_picked_and_uploaded_inputs(self):
+        self.request("R20261016-1", picked=["kgi定義.md", "売上 2026Q3.csv"], uploads={"メモ.txt": "v1", "KGI定義.md": "x"})
+        q = guild.new_quest(self.root, "R20261016-1")
+        want = ["KGI定義.md", "売上 2026Q3.csv", "メモ.txt"]  # 実際の名前。重なりを除き、選んだものが先
+        self.assertEqual(q["inputs"], want)
+        req = guild.load_json(Path(q["dir"]) / "request.json")
+        self.assertEqual((req["inputs"], req["files"]), (want, ["メモ.txt", "KGI定義.md"]))
+
+    def test_picked_name_uploaded_in_the_same_request_is_accepted(self):
+        self.request("R20261016-1", picked=["新しい 資料.txt"], uploads={"新しい 資料.txt": "v1"})
+        self.assertEqual(guild.new_quest(self.root, "R20261016-1")["inputs"], ["新しい 資料.txt"])
+
+    def test_missing_picked_name_rejects_the_request(self):
+        self.request("R20261016-1", picked=["消された.xlsx"], uploads={"メモ.txt": "v1"})
+        with self.assertRaises(guild.GuildError):
+            guild.new_quest(self.root, "R20261016-1")
+        w = self.g / ".work"
+        self.assertFalse((w / "Q001").exists())
+        self.assertFalse((w / "requests" / "R20261016-1.json").exists())
+        self.assertIn("消された.xlsx", (w / "requests" / "rejected" / "R20261016-1.json.reason.txt").read_text(encoding="utf-8"))
+        self.assertTrue((w / "requests" / "rejected" / "R20261016-1.json").is_file())
+        self.assertTrue((w / "requests" / "rejected" / "files" / "R20261016-1" / "メモ.txt").is_file())
+        self.assertFalse((self.g / "inputs" / "メモ.txt").exists())  # 拒否した依頼の添付は取り込まない
+        self.assertEqual([a for a in guild.arrivals(self.root) if a["kind"] == "request"], [])  # 届いたと返し続けない
+        self.assertEqual(guild.list_requests(self.root), [])
+        self.assertEqual(guild.new_quest(self.root)["quest"], "Q001")  # 番号は進まない
+
+    def test_bad_inputs_shapes_reject_the_request(self):
+        for i, bad in enumerate(("KGI定義.md", ["../config.json"], [3], ["sub/KGI定義.md"])):
+            with self.subTest(bad=bad):
+                rid = f"R20261016-{i}"
+                (self.g / ".work" / "requests" / f"{rid}.json").write_text(json.dumps({"type": "request", "text": "t", "inputs": bad, "files": []}), encoding="utf-8")
+                with self.assertRaises(guild.GuildError):
+                    guild.new_quest(self.root, rid)
+                self.assertTrue((self.g / ".work" / "requests" / "rejected" / f"{rid}.json").is_file())
+
+    def test_list_requests_shows_start_and_inputs(self):
+        self.request("R20261016-1", picked=["KGI定義.md"])
+        r = guild.list_requests(self.root)[0]
+        self.assertEqual((r["start"], r["inputs"], r["files"]), ("2026-10-16", ["KGI定義.md"], []))
+
+    def test_adopt_puts_user_inputs_first_then_auto_and_keeps_candidates(self):
+        q = self.quest(picked=["KGI定義.md"])
+        p = self.adopt(q, inputs=[{"name": "売上 2026q3.CSV", "reason": "KGI の元データ"}, {"name": "kgi定義.md", "reason": "重複"}],
+                       candidates=[{"name": "古い資料.pdf", "reason": "名前だけでは関係が分からない"},
+                                   {"name": "売上 2026Q3.csv", "reason": "選んだもの"}])
+        self.assertEqual(p["inputs"], [{"name": "KGI定義.md", "source": "user", "reason": "依頼主の指定"},
+                                       {"name": "売上 2026Q3.csv", "source": "auto", "reason": "KGI の元データ"}])
+        self.assertEqual(p["candidates"], [{"name": "古い資料.pdf", "reason": "名前だけでは関係が分からない"}])
+        self.assertEqual(guild.validate(p, TR), [])
+
+    def test_adopt_without_inputs_writes_empty_lists(self):
+        p = self.adopt(self.quest())
+        self.assertEqual((p["inputs"], p["candidates"]), ([], []))
+
+    def test_adopt_rejects_unknown_names_or_missing_reasons(self):
+        q = self.quest()
+        for extra in ({"inputs": [{"name": "ない.xlsx", "reason": "r"}]}, {"candidates": [{"name": "ない.xlsx", "reason": "r"}]},
+                      {"inputs": [{"name": "KGI定義.md"}]}, {"inputs": [{"name": "KGI定義.md", "reason": " "}]},
+                      {"inputs": ["KGI定義.md"]}, {"inputs": {"name": "KGI定義.md"}},
+                      {"inputs": [{"name": "../config.json", "reason": "r"}]}):
+            with self.subTest(extra=extra), self.assertRaises(guild.GuildError):
+                self.adopt(q, **extra)
+        self.assertFalse((q / "plan.json").exists())
+
+    def test_replan_keeps_the_user_edits(self):
+        old = dict(plan(todo("T1", state="done")), status="replan",
+                   inputs=[{"name": "KGI定義.md", "source": "user", "reason": "依頼主の指定"},
+                           {"name": "提案書.pptx", "source": "user", "reason": "依頼主が追加"}],
+                   candidates=[],
+                   history=[{"t": "2026-10-16T10:00:00+09:00", "event": "inputs", "add": ["提案書.pptx"], "remove": ["売上 2026Q3.csv"]}])
+        q = self.quest(picked=["KGI定義.md"], old=old)
+        p = self.adopt(q, inputs=[{"name": "売上 2026Q3.csv", "reason": "元データ"}, {"name": "古い資料.pdf", "reason": "前回の資料"}])
+        # 依頼主が足したものは残り、外した「売上」は、地図師が選び直しても足さない
+        self.assertEqual([(x["name"], x["source"]) for x in p["inputs"]],
+                         [("KGI定義.md", "user"), ("提案書.pptx", "user"), ("古い資料.pdf", "auto")])
+
+    def test_replan_after_removing_a_requested_input_does_not_bring_it_back(self):
+        old = dict(plan(todo("T1")), status="replan", inputs=[], candidates=[],
+                   history=[{"t": "2026-10-16T10:00:00+09:00", "event": "inputs", "add": [], "remove": ["KGI定義.md"]}])
+        q = self.quest(picked=["KGI定義.md"], old=old)
+        self.assertEqual(self.adopt(q, inputs=[{"name": "KGI定義.md", "reason": "定義"}])["inputs"], [])
+
+    def test_validate_checks_inputs_shape(self):
+        p = plan(todo("T1"))
+        for bad in ({"inputs": "x"}, {"inputs": [{"name": "a.txt", "source": "x", "reason": ""}]},
+                    {"inputs": [{"name": "../a", "source": "auto", "reason": ""}]},
+                    {"inputs": [{"name": "a.txt", "source": "auto"}]},
+                    {"inputs": [{"name": "a.txt", "source": "auto", "reason": ""}, {"name": "A.TXT", "source": "user", "reason": ""}]},
+                    {"inputs": [{"name": "a.txt", "source": "auto", "reason": ""}], "candidates": [{"name": "a.txt", "reason": ""}]},
+                    {"candidates": [{"name": "b.txt"}]}, {"candidates": ["b.txt"]}):
+            with self.subTest(bad=bad):
+                self.assertTrue(guild.validate(dict(p, **bad), TR))
+        self.assertEqual(guild.validate(dict(p, inputs=[], candidates=[]), TR), [])
+        self.assertEqual(guild.validate(p, TR), [])  # inputs がない古い計画も通る
+
+
 if __name__ == "__main__":
     unittest.main()
