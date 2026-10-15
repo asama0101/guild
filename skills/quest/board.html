@@ -1421,9 +1421,9 @@ function obsidianTab() {
 // ============================================================ 書き込み
 function nowName(type, todo) { return `${stamp14(new Date())}-${type}${todo ? '-' + todo : ''}.json`; }
 async function writeOrFallback(path, text, onOk) {
-  if (S.conn !== 'ok' || !S.fs) { S.fallback = { path: `guild/${path}`, text, err: '保存先につながっていません' }; render(); return false; }
+  if (S.conn !== 'ok' || !S.fs) { S.fallback = { path: `guild/${physical(path)}`, text, err: '保存先につながっていません' }; render(); return false; }
   try { await S.fs.writeText(path, text); if (onOk) onOk(); return true; }
-  catch (e) { S.fallback = { path: `guild/${path}`, text, err: `${e.name || 'エラー'}：${e.message || e}` }; render(); return false; }
+  catch (e) { S.fallback = { path: `guild/${physical(path)}`, text, err: `${e.name || 'エラー'}：${e.message || e}` }; render(); return false; }
 }
 async function send(qid, obj, key) {
   const ok = await writeOrFallback(`${qid}/inbox/${nowName(obj.type, obj.todo)}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; });
@@ -1433,7 +1433,7 @@ async function sendResult(qid, t, key) {
   const files = S.files[key] || [], names = [];
   try {
     for (const f of files) { const n = `${t.id}-${f.name}`; await S.fs.writeBlob(`${qid}/inbox/files/${n}`, f); names.push(`inbox/files/${n}`); }
-  } catch (e) { S.fallback = { path: `guild/${qid}/inbox/files/`, text: '添付ファイルを保存できませんでした。', err: `${e.name}：${e.message}` }; render(); return; }
+  } catch (e) { S.fallback = { path: `guild/${physical(qid + '/inbox/files/')}`, text: '添付ファイルを保存できませんでした。', err: `${e.name}：${e.message}` }; render(); return; }
   await send(qid, { type: 'result', todo: t.id, ok: (S.form[key + ':ok'] || 'yes') === 'yes', note: (S.form[key + ':memo'] || '').trim(), files: names }, key);
 }
 // ローカルの今日（YYYY-MM-DD）。依頼の開始日の既定

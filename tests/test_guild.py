@@ -1655,6 +1655,12 @@ class BoardPathsTest(unittest.TestCase):
         self.assertIn("S.fs.list('deliverables')", self.board)
         self.assertIn("S.fs.list('inputs')", self.board)
 
+    def test_fallback_paths_are_physical(self):
+        self.assertIn("guild/${physical(path)}", self.board)
+        self.assertIn("guild/${physical(qid + '/inbox/files/')}", self.board)
+        self.assertNotIn("guild/${path}", self.board)
+        self.assertNotIn("guild/${qid}", self.board)
+
 
 if __name__ == "__main__":
     unittest.main()
