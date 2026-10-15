@@ -648,10 +648,22 @@ function keepOpen(key, ...kids) {
   d.addEventListener('toggle', () => { S.open[key] = d.open; });
   return d;
 }
+// Markdown 以外（PowerPoint・Excel など）が要るときの、Claude Code に渡すプロンプト。ファイル名が *.prompt.md
+function isPrompt(name) { return /\.prompt\.md$/i.test(String(name)); }
+function promptRow(f) {
+  return h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, f.replace(/^deliverables\//, '')),
+    h('span', { class: 'acts' },
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => openFile(f) }, '開く'),
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => { const t = await S.fs.readText(f); if (t == null) { S.toast = '読めませんでした'; render(); return; } copyText(t.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, ''), 'プロンプト'); } }, 'プロンプトをコピー'),
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyPath(f) }, 'パスをコピー')));
+}
 function deliverableBlock(qd) {
-  const d = deliverables(qd);
+  const d = deliverables(qd), docs = d.main.filter((f) => !isPrompt(f)), prompts = d.main.filter(isPrompt);
   return [
-    d.main.length ? h('ul', { class: 'flist' }, d.main.map((f) => fileRow(f))) : h('p', null, qd.allDone ? '納品物は準備中です（数秒で出ます）。' : '納品物のファイルはありません（報告だけです）。'),
+    docs.length ? h('ul', { class: 'flist' }, docs.map((f) => fileRow(f))) : (prompts.length ? null : h('p', null, qd.allDone ? '納品物はまだ置かれていません（全 Todo が済むと guild.py が deliverables/ に置きます）。' : '納品物のファイルはありません（報告だけです）。')),
+    prompts.length ? [h('p', { class: 'fine', style: 'margin:8px 0 4px' }, 'PowerPoint・Excel など Markdown 以外が要る部分は、Claude Code に渡すプロンプトにしてあります。「プロンプトをコピー」で貼り付けて、Claude Code に作らせてください。'),
+      h('ul', { class: 'flist' }, prompts.map(promptRow))] : null,
+    h('p', { class: 'fine', style: 'margin:0 0 8px' }, '納品物は ', code('guild/deliverables/'), ' にもあります（Obsidian で読めます）。「パスをコピー」は、フルパスでコピーします。'),
     d.rest.length ? keepOpen('rest:' + qd.id, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map((f) => fileRow(f)))) : null];
 }
 function fileField(key, label, multiple) {
@@ -749,7 +761,7 @@ function letterFor(qd, a) {
       h('label', { class: 'lbl', for: k + 'memo' }, '一言メモ（任意）'), textarea(memo, { id: k + 'memo' }),
       h('span', { class: 'lbl' }, '記録の添付（任意）'), fileField(k, '記録の添付', true),
       h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendResult(qd.id, t, k) }, '結果を送る')),
-      h('p', { class: 'fine', style: 'margin:10px 0 0' }, '送ると ', code(`${qd.id}/inbox/`), ' に保存されます。/guild:quest が動いていれば、すぐ進みます。'), sentNote(k));
+      h('p', { class: 'fine', style: 'margin:10px 0 0' }, '送ると ', code(`.work/${qd.id}/inbox/`), ' に保存されます。/guild:quest が動いていれば、すぐ進みます。'), sentNote(k));
   }
   if (a.kind === 'confirm') {
     const t = a.todo;
@@ -785,7 +797,7 @@ function infoLetter(qd) {
     return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, part.length ? '中止（一部の成果物あり）' : '中止'), h('h3', null, 'この依頼は中止されました'),
       part.length
         ? [h('p', null, '合格した Todo の成果物です。納品物ではなく、途中までのものです（未鑑定・不合格のものは含みません）。'), h('ul', { class: 'flist' }, part.map((f) => fileRow(f)))]
-        : h('p', null, '合格した Todo の成果物はありません。途中のファイルは ', code(`${qd.id}/output/`), ' に残っていることがあります。'));
+        : h('p', null, '合格した Todo の成果物はありません。途中のファイルは ', code(`.work/${qd.id}/output/`), ' に残っていることがあります。'));
   }
   if (qd.info === 'finished') {
     return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
@@ -1414,8 +1426,8 @@ function flowSvg() {
 // ヘルプの「役」。モデルは ROLE_MODELS（agents/*.md の model と、テストで一致を確かめている）から引く
 const ROLES = [
   ['ギルドマスター', null, '/guild:quest が動いている間、ずっと', '依頼を受け付け、役を呼び、あなたの答えを待ちます。進め方の判断（順序・遷移・やり直し）は guild.py に任せ、自分では判断しません。', '/guild:quest を動かしているセッションのモデル'],
-  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる Todo を決めます。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
-  ['冒険者', 'adventurer', '自動でできる Todo ごと', '調べる・書き写す・整理する・書く。最後のまとめの Todo では、納品物の資料を作ります。報告は reports/、成果物は output/ に書きます。'],
+  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる Todo を決めます。納品物は Markdown だけです。PowerPoint・Excel など Markdown 以外が要るときは、Claude Code に渡すプロンプト（*.prompt.md）にします。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
+  ['冒険者', 'adventurer', '自動でできる Todo ごと', '調べる・書き写す・整理する・書く。最後のまとめの Todo では、納品物の資料（Markdown）を作ります。Markdown 以外が要る部分は、Claude Code に渡すプロンプト（*.prompt.md）を書きます。報告は reports/、成果物は output/ に書き、納品物は全 Todo が済んだとき guild.py が deliverables/ に置きます。'],
   ['斥候', 'scout', '動的ページを読む Todo。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
   ['鑑定士', 'appraiser', 'Todo ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、斥候に読んでもらいます。成果物は直しません。'],
   ['司書', 'librarian', '依頼が完了したあと、中止したあと', '報告と成果物から、書庫に残す用語・業務フロー・業務情報・個人・心得の候補を、12件まで挙げます。登録はしません（選ぶのはあなたです。心得だけは、そのまま登録されます）。'],
@@ -1465,7 +1477,9 @@ function helpGrid() {
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
       faq('間違えて承認した', 'チャットで「計画を直したい」と伝えてください。実行が始まる前なら、計画を作り直せます。'),
-      faq('依頼を取り消したい', '進行中なら、失敗の判断で「この依頼を中止する」を選べます。受付待ちの依頼は、', code('guild/requests/'), ' の該当ファイルを削除してください。'))));
+      faq('予定や進み具合を見たい', '「クエスト進捗」のタブに、依頼ごとの帯と Todo の予定日（◆）、あなたの実行の日ごとの件数が出ます。日付は掲示板の依頼の「道のり」で直せます。'),
+      faq('PowerPoint や Excel がほしい', '納品物は Markdown です。Markdown 以外が要るときは、受け取りの確認の手紙に「プロンプトをコピー」が出ます。コピーして Claude Code に貼ると、作ってもらえます。'),
+      faq('依頼を取り消したい', '進行中なら、失敗の判断で「この依頼を中止する」を選べます。受付待ちの依頼は、', code('guild/.work/requests/'), ' の該当ファイルを削除してください。'))));
 }
 
 function reader() {
@@ -1531,11 +1545,13 @@ function obsidianTab() {
         h('ol', null,
           h('li', null, 'Obsidian で「保管庫を開く」→「フォルダを保管庫として開く」を選びます。'),
           h('li', null, h('b', null, 'プロジェクトの ', code('guild/'), ' フォルダ'), 'を選びます（書庫と納品物の両方が見えます）。'),
-          h('li', null, '設定 →「ファイルとリンク」→「除外ファイル」に ', code('inbox/'), '、', code('reports/'), '、', code('requests/'), ' を足します（やりとりの JSON と報告で、検索がうるさくなるため）。')),
+          h('li', null, '作業用のファイルは ', code('guild/.work/'), ' にあり、Obsidian には出ません（設定は要りません）。')),
         h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
-      sec('ディレクトリ構成', pre(['guild/', '  archive/            書庫', '    index.md          索引（役が最初に読む）', '    terms/            用語', '    flows/            業務フロー', '    facts/            業務情報', '    personal/         個人', '    lessons/          心得（役は読まない）', '  Q001/               依頼ごとのフォルダ', '    output/T3/…       納品物（最後のまとめの Todo の成果物）', '    reports/          役の報告', '    plan.json         計画（guild.py だけが書く。触らない）', '  templates/          納品物のテンプレート'].join('\n'))),
-      sec('納品物を見る', dl([['場所', h('span', null, code('Q###/output/<Todo>/'), '。依頼ごとのフォルダの中です。納品物は、最後の「まとめの Todo」の成果物です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
-      sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[terms/KGI]] のようにリンクします。'].join('\n')),
+      sec('ディレクトリ構成', pre(['guild/', '  board.html  config.json', '  archive/            書庫（用語名.md。種類は項目の type）', '    index.md          索引（役が最初に読む）',
+        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             共通のインプット（1つだけ。各依頼はファイル名で参照）', '  templates/          納品物のテンプレート（.md）',
+        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、バックアップ'].join('\n'))),
+      sec('納品物を見る', dl([['場所', h('span', null, code('deliverables/Q###_…'), '。全 Todo が済んで受け取りの確認の手紙が出た時に置かれます。Markdown 以外が要る部分は ', code('.prompt.md'), '（Claude Code に渡すプロンプト）です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
+      sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[KGI]] のようにリンクします。'].join('\n')),
         dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止']]),
         h('p', { class: 'fine' }, '本文は Obsidian で編集してもかまいませんが、先頭のフロントマターは Obsidian の「プロパティ」画面で編集しないでください（別名などの書き方が変わり、読めなくなって消えることがあります）。索引（', code('index.md'), '）は自動では更新されません。確実に反映するには、この画面の「書庫」から編集してください。')),
       sec('整形（フォーマッタ）の設定',
@@ -1708,7 +1724,7 @@ function demoTree(scene) {
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   return {
     'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), templates: { '週次報告.md': T('# 週次報告 / ## 概要 / ## 結果 / ## 課題') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
-    deliverables: { 'Q002_comparison.md': T('見本') },
+    deliverables: { 'Q001_report.md': T('見本'), 'Q001_スライド.prompt.md': T('---\ntype: prompt\n---\n# PowerPoint 5枚を作って…'), 'Q002_comparison.md': T('見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
     Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md' }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }

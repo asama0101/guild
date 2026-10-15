@@ -1655,6 +1655,15 @@ class BoardPathsTest(unittest.TestCase):
         self.assertIn("S.fs.list('deliverables')", self.board)
         self.assertIn("S.fs.list('inputs')", self.board)
 
+    def test_prompt_files_are_shown_with_a_copy_button(self):
+        for needle in ("function isPrompt(", "function promptRow(", "プロンプトをコピー", ".prompt.md"):
+            self.assertIn(needle, self.board)
+
+    def test_help_text_uses_the_new_layout(self):
+        for gone in ("guild/requests", "archive/terms", "output/T3", "準備中です（数秒", "[[terms/", "7つ"):
+            self.assertNotIn(gone, self.board)
+        self.assertIn("guild/.work/requests", self.board)
+
     def test_fallback_paths_are_physical(self):
         self.assertIn("guild/${physical(path)}", self.board)
         self.assertIn("guild/${physical(qid + '/inbox/files/')}", self.board)
