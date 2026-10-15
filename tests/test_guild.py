@@ -691,7 +691,7 @@ class BoardContractTest(unittest.TestCase):
 
     def test_board_source_writes_the_same_shapes(self):
         board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
-        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how", "type: 'due'", "type: 'retype'", "type: 'web', decisions:", "type: 'web', remove:", "type: 'web', add:"):
+        for needle in ("type: 'approve'", "type: 'decision', choice: 'replan'", "type: 'decision', choice: 'abort'", "type: 'confirm'", "type: 'result'", "choice: how", "type: 'due'", "type: 'retype'", "type: 'web', decisions:", "type: 'web', remove:", "type: 'web', add:", "type: 'inputs', add:"):
             self.assertIn(needle, board)
 
 
@@ -1730,6 +1730,14 @@ class BoardPathsTest(unittest.TestCase):
                        "'verify-scout'", "role: 'tablist'", "@container (min-width:860px)", "S.rcache = {}", "appraiserNote(qd, t),"):
             self.assertIn(needle, self.board)
         for gone in ("function ganttBlock(", "function ganttOf(", "const BARKIND", "function todoTags(", ".bar2{", ".nowline{", ".way{", ".gx{"):
+            self.assertNotIn(gone, self.board)
+
+    def test_inputs_tab_and_new_dialog(self):
+        for needle in ("type: 'inputs', add:", "function inputsTab(", "function inputsBlock(", "function inputPicker(", "function newDialog(", "function trapTab(",
+                       "'aria-modal': 'true'", "type: 'request', text, start, due, inputs: picked, files: names", "S.fs.list('requests/rejected')",
+                       "同名あり（上書き）", "既存から選ぶ", "e.key === 'Escape' && S.newOpen", "rejectedRequests"):
+            self.assertIn(needle, self.board)
+        for gone in ("function composer(", ".qmain{", "template:", "new:template"):
             self.assertNotIn(gone, self.board)
 
 

@@ -32,7 +32,6 @@ body{margin:0;background:var(--bg)}
 .qrow textarea{flex:1 1 auto;min-height:60px;margin:0}
 .qgo{flex:0 0 96px;min-height:60px;font-size:16px}
 .qmore{margin-top:10px}
-.qmain{grid-template-columns:repeat(auto-fit,minmax(220px,max-content));margin:12px 0 0}
 .qopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 20px;align-items:start;margin-top:10px}
 .saved{margin:8px 0 0;font-size:13.5px;color:var(--ok);font-weight:700}
 .toastfix{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);margin:0;z-index:40;background:var(--surface);border:1px solid var(--brass);border-radius:6px;padding:8px 16px;box-shadow:0 2px 10px rgba(0,0,0,.25);max-width:90vw}
@@ -257,6 +256,21 @@ svg.qgantt{min-width:560px}
 .dtr input[type=date]{min-height:34px;padding:2px 8px;font-size:13px;width:100%;box-sizing:border-box}
 .dtq input[type=date]{min-height:34px;padding:2px 8px;font-size:13px}
 @media (max-width:760px){.dtr{grid-template-columns:44px minmax(0,1fr)}.dth{display:none}.dtr>span:nth-child(n+3){grid-column:2}}
+/* インプット（タブ・承認の手紙・「＋ 新規」）と、新しいクエストのダイアログ */
+.flist .inm{min-width:0;word-break:break-all}
+.ihead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin-bottom:8px}
+.ipbox{border:1px solid var(--brass);border-radius:4px;background:var(--surface);padding:10px 12px;margin:8px 0}
+.ipick{display:flex;flex-direction:column;gap:6px;min-width:0}
+.iplist{max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:4px;background:var(--paper2)}
+.ipitem{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--grid);font-size:13.5px;cursor:pointer;word-break:break-all}
+.ipitem:has(input:checked){background:var(--sel-bg);font-weight:700}
+.ipitem input{width:18px;height:18px;margin:0;accent-color:var(--ok);flex:none}
+.nmodal{align-items:flex-start}
+.nbox{background:var(--paper2);border:2px solid var(--brass);border-radius:6px;max-width:900px;width:100%;max-height:calc(100vh - 40px);overflow:auto;padding:16px 22px 20px;box-sizing:border-box;overscroll-behavior:contain}
+.nbox textarea{min-height:96px}
+.ncols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px 18px}
+.ncols .cap{display:block;font-size:13px;margin-bottom:6px}
+.nsum{margin:10px 0 0;padding:8px 12px;background:var(--surface);border:1px dashed var(--brass);border-radius:4px}
 </style>
 </head>
 <body>
@@ -472,6 +486,12 @@ async function loadAll() {
   for (const f of (await S.fs.list('archive/inbox/rejected')).filter((x) => x.kind === 'file' && x.name.endsWith('.reason.txt')).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 5)) {
     archiveRejected.push({ file: f.name.replace(/\.reason\.txt$/, ''), reason: (await S.fs.readText(`archive/inbox/rejected/${f.name}`)) || '' });
   }
+  // 受け付けられなかった依頼（guild.py new が、選んだインプットがないなどの理由で .work/requests/rejected/ へ移したもの）。新しい5件
+  const rejectedRequests = [];
+  for (const f of (await S.fs.list('requests/rejected')).filter((x) => x.kind === 'file' && x.name.endsWith('.json.reason.txt')).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 5)) {
+    const id = f.name.replace(/\.json\.reason\.txt$/, ''), r = await readJSON(`requests/rejected/${id}.json`);
+    rejectedRequests.push({ id, text: (r && r.text) || '', reason: (await S.fs.readText(`requests/rejected/${f.name}`)) || '' });
+  }
   // 冒険者の WebFetch の許可（フックと guild.py が書く）。答えの JSON が web/inbox/ に残っている間は「送信済み」
   const wa = (await readJSON('web/access.json')) || {};
   const webList = (k) => (Array.isArray(wa[k]) ? wa[k] : []);
@@ -479,7 +499,7 @@ async function loadAll() {
   const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), wait: webWait };
   // 共通のインプット（guild/inputs/ の直下だけ。サブフォルダは見ない）。名前の同一判定は、大文字小文字を区別しない（guild.py と同じ）
   const inputs = (await S.fs.list('inputs')).filter((e) => e.kind === 'file').map((e) => ({ name: e.name, mtime: e.mtime || 0 })).sort((a, b) => a.name.localeCompare(b.name));
-  return { requests, quests, archive, archiveWait, archiveRejected, web, inputs, root: (cfg && cfg.root) || '' };
+  return { requests, rejectedRequests, quests, archive, archiveWait, archiveRejected, web, inputs, root: (cfg && cfg.root) || '' };
 }
 
 // ============================================================ 読み解き
@@ -558,7 +578,7 @@ function derive(q) {
 
 function buildModel(raw) {
   const quests = raw.quests.map(derive);
-  return { root: raw.root, requests: raw.requests, archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, inputs: raw.inputs || [], quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
+  return { root: raw.root, requests: raw.requests, rejectedRequests: raw.rejectedRequests || [], archive: raw.archive, archiveWait: raw.archiveWait, archiveRejected: raw.archiveRejected || [], web: raw.web || { allow: [], once: [], denied: [], pending: [], wait: 0 }, inputs: raw.inputs || [], quests, needs: quests.flatMap((x) => x.asks.filter((a) => !a.sent).map((a) => ({ q: x.id, text: `${x.id}：${askText(x, a)}` }))) };
 }
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
@@ -724,6 +744,7 @@ function letterFor(qd, a) {
     return h('section', { class: 'letter', 'aria-label': '計画の承認' }, seal('印'),
       h('div', { class: 'kick' }, 'お願い：承認'), h('h3', null, 'この計画で進めてよいですか'),
       h('p', null, `地図師が、依頼を ${qd.total} つの Todo に分けました。下の「道のり」タブで Todo と合格基準を確かめて、承認してください。日付は「日付」タブで直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
+      h('span', { class: 'lbl' }, `使うインプット（${qd.inputs.length}件。外す・候補の追加は、承認の前でもできます）`), inputsBlock(qd),
       h('label', { class: 'lbl', for: k + 'fix' }, '直してほしいこと（直す場合だけ）'),
       (() => { const t = textarea(k + ':fix', { id: k + 'fix', placeholder: '例：T2 の前に、資料を共有する Todo を足してほしい' }); return t; })(),
       h('div', { class: 'btns' },
@@ -942,11 +963,53 @@ function datesTab(qd) {
     pend ? h('p', { class: 'fine', role: 'status' }, '送った日付の変更が、反映を待っています（/guild:quest が動いていれば、すぐ反映されます）。') : null,
     sentNote(`${k}:sent`)];
 }
-// インプットタブ（Task 10 で、追加・外す・既存から選ぶを足す）。今は、計画のインプットを読むだけ
+// ---- インプット：このクエストが使うファイル（guild/inputs/）。追加・外すは入力 inputs で送る（plan.json は guild.py が書く）
+const TEXT_INPUT = /\.(md|txt|csv)$/i;  // 画面で開けるもの（それ以外は、パスをコピーして開く）
+function inputsEditable(qd) { const p = qd.q.plan; return !!p && (p.status === 'active' || p.status === undefined) && !p.accepted; }
+function sendInputs(qd, names, drops, key) { return send(qd.id, { type: 'inputs', add: names, remove: drops }, key); }
+// インプットの一覧（指定・自動の印と理由）と候補。承認の手紙とインプットタブで使う。同一判定は大文字小文字を区別しない
+function inputsBlock(qd) {
+  const ed = inputsEditable(qd), have = new Map(S.model.inputs.map((f) => [f.name.toLowerCase(), f]));
+  const pend = qd.q.inbox.filter((x) => x.type === 'inputs'), waiting = new Set(pend.flatMap((x) => [...(x.add || []), ...(x.remove || [])]).map((n) => String(n).toLowerCase()));
+  const when = (n) => { const f = have.get(n.toLowerCase()); if (!f) return 'guild/inputs/ にありません'; if (!f.mtime) return ''; const d = new Date(f.mtime); return `${d.getMonth() + 1}/${d.getDate()} 更新`; };
+  const row = (x, cand) => h('li', null,
+    h('span', { class: 'inm' }, h('b', null, x.name), ' ',
+      cand ? stampEl('候補', 'sd-draft sm') : stampEl(x.source === 'user' ? '指定' : '自動', x.source === 'user' ? 'sd-ok sm' : 'sd-run sm'),
+      waiting.has(x.name.toLowerCase()) ? [' ', stampEl('反映待ち', 'sd-turn sm')] : null,
+      h('span', { class: 'fine', style: 'display:block' }, [x.reason, when(x.name)].filter(Boolean).join('　'))),
+    h('span', { class: 'acts' },
+      TEXT_INPUT.test(x.name) && have.has(x.name.toLowerCase()) ? h('button', { type: 'button', class: 'btn ghost sm', onclick: () => openFile(`inputs/${have.get(x.name.toLowerCase()).name}`) }, '開く') : null,
+      h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${x.name} のパスをコピー`, onclick: () => copyPath(`inputs/${x.name}`) }, 'パスをコピー'),
+      !ed ? null : cand
+        ? h('button', { type: 'button', class: 'btn sm', disabled: !have.has(x.name.toLowerCase()) || S.conn !== 'ok', onclick: () => sendInputs(qd, [x.name], [], `in:${qd.id}`) }, '追加')
+        : h('button', { type: 'button', class: 'btn ghost sm', disabled: S.conn !== 'ok', onclick: () => sendInputs(qd, [], [x.name], `in:${qd.id}`) }, '外す')));
+  return [
+    qd.inputs.length ? h('ul', { class: 'flist' }, qd.inputs.map((x) => row(x, false))) : h('p', { class: 'sub' }, 'このクエストのインプットはありません。'),
+    qd.candidates.length ? [h('p', { class: 'fine', style: 'margin:8px 0 4px' }, '候補（地図師が迷って選ばなかったもの。「追加」で入れられます）'), h('ul', { class: 'flist' }, qd.candidates.map((x) => row(x, true)))] : null,
+    sentNote(`in:${qd.id}`)];
+}
+// 既存のインプット（guild/inputs/）から選ぶチェックリスト。「＋ 新規」とインプットタブで使う。
+// 選んだ名前は S.form[key]（配列）、検索語は S.form[qkey]（f: で始め、入力のたびに絞り込む）。except は出さない名前（小文字の Set）
+function inputPicker(key, qkey, except) {
+  const q = (S.form[qkey] || '').trim().toLowerCase(), picked = new Set((S.form[key] || []).map((n) => n.toLowerCase()));
+  const all = S.model.inputs.filter((f) => !except.has(f.name.toLowerCase())), list = q ? all.filter((f) => f.name.toLowerCase().includes(q)) : all;
+  const search = h('input', { type: 'search', class: 'qsearch', placeholder: `ファイル名で探す（全${all.length}件）`, 'aria-label': 'インプットを探す' }); search.value = S.form[qkey] || ''; bindKey(search, qkey);
+  const toggle = (name, on) => { const cur = (S.form[key] || []).filter((n) => n.toLowerCase() !== name.toLowerCase()); S.form[key] = on ? [...cur, name] : cur; render(); };
+  return h('div', { class: 'ipick' }, search,
+    h('div', { class: 'iplist', role: 'group', 'aria-label': '既存のインプット' },
+      list.length ? list.map((f) => { const c = h('input', { type: 'checkbox', checked: picked.has(f.name.toLowerCase()) }); bindKey(c, `pk:${key}:${f.name}`); c.addEventListener('change', () => toggle(f.name, c.checked));
+        return h('label', { class: 'ipitem' }, c, h('span', null, f.name)); })
+        : h('p', { class: 'fine', style: 'margin:6px 8px' }, all.length ? '見つかりません。' : 'guild/inputs/ に選べるファイルはありません。')));
+}
 function inputsTab(qd) {
-  if (!qd.inputs.length) return h('p', { class: 'sub' }, 'このクエストのインプットはありません。');
-  return h('ul', { class: 'flist' }, qd.inputs.map((x) => h('li', null, h('span', null, h('b', null, x.name), ' ', stampEl(x.source === 'user' ? '指定' : '自動', x.source === 'user' ? 'sd-ok sm' : 'sd-run sm'),
-    x.reason ? h('span', { class: 'fine', style: 'display:block' }, x.reason) : null))));
+  const ed = inputsEditable(qd), key = `ipk:${qd.id}`, open = !!S.open[key], chosen = S.form[key] || [];
+  return [
+    h('div', { class: 'ihead' }, h('p', { class: 'fine', style: 'margin:0' }, 'このクエストが使うファイル（', code('guild/inputs/'), '）。「指定」は依頼主、「自動」は地図師が選んだものです。'),
+      ed ? h('button', { type: 'button', class: 'btn sm', 'aria-expanded': String(open), onclick: () => { S.open[key] = !open; render(); } }, open ? '選ぶのをやめる' : '既存から選ぶ') : null),
+    inputsBlock(qd),
+    ed && open ? h('div', { class: 'ipbox' }, inputPicker(key, `f:ipq:${qd.id}`, new Set(qd.inputs.map((x) => x.name.toLowerCase()))),
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn go sm', disabled: !chosen.length || S.conn !== 'ok', onclick: async () => { await sendInputs(qd, chosen, [], `in:${qd.id}`); S.form[key] = []; S.open[key] = false; render(); } }, `${chosen.length}件を追加`))) : null,
+    h('p', { class: 'fine' }, ed ? '新しいファイルは、「＋ 新規」でクエストを出すときにアップロードします（出したあとのアップロードは、この版ではできません）。' : '中止・見直し中・受け取り後のクエストのインプットは直せません。')];
 }
 function detailTabs(qd) {
   if (!DTABS.some(([k]) => k === S.dtab)) S.dtab = 'way';
@@ -1105,22 +1168,52 @@ function connectBox() {
   return box;
 }
 
-function composer() {
-  const key = 'new:text', ta = textarea(key, { id: 'qreq', rows: '2', placeholder: '困りごとや、やってほしいことを書いて、「依頼」を押してください（Ctrl + Enter でも送れます）' });
+// ---- 「＋ 新規」ダイアログ：依頼の内容・開始日（未指定なら今日）・締切（未定なら開始日）・インプット（既存から選ぶ／アップロード）
+function newDialog() {
+  if (!S.newOpen) return null;
+  const have = new Map(((S.model && S.model.inputs) || []).map((f) => [f.name.toLowerCase(), f.name]));
+  const ta = textarea('new:text', { id: 'qreq', rows: '4', placeholder: '例：新人向けのオンボーディング資料を見直して、PowerPoint にまとめたい（Ctrl + Enter でも出せます）' });
   ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendRequest(); } });
-  const start = h('input', { type: 'date', 'aria-label': '開始日' }); start.value = S.form['new:start'] || ''; bindKey(start, 'new:start');
+  const start = h('input', { type: 'date', 'aria-label': '開始日' }); start.value = S.form['new:start'] || localToday(); bindKey(start, 'new:start');
   const due = h('input', { type: 'date', 'aria-label': '締切' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
-  const more = h('details', { class: 'qmore', open: !!S.open.qmore }, h('summary', null, '素材ファイルをつける（任意）'),
-    h('div', { class: 'qopts' },
-      h('div', { class: 'fld wide' }, h('span', { class: 'cap' }, '素材ファイル'), fileField('new', '素材ファイル', true))));
-  more.addEventListener('toggle', () => { S.open.qmore = more.open; });
-  return h('section', { class: 'quick', 'aria-label': '新しい依頼' },
-    h('label', { class: 'lbl', for: 'qreq', style: 'margin:0 0 6px' }, '新しい依頼'),
-    h('div', { class: 'qrow' }, ta, h('button', { type: 'button', class: 'btn go qgo', onclick: sendRequest, disabled: S.conn !== 'ok' }, '依頼')),
-    h('div', { class: 'qopts qmain' }, fld('開始日（未指定なら登録日）', start), fld('締切（未定なら登録日）', due)),
-    more,
+  const picked = S.form['new:inputs'] || [], ups = S.files.new || [], over = ups.filter((f) => have.has(f.name.toLowerCase()));
+  const box = h('div', { class: 'nbox', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'new-title' },
+    h('div', { class: 'rhead' }, h('h2', { class: 'h2', id: 'new-title' }, '新しいクエスト'), h('button', { type: 'button', class: 'btn ghost sm', onclick: closeNew }, '閉じる')),
+    h('label', { class: 'lbl', for: 'qreq' }, '依頼の内容'), ta,
+    h('div', { class: 'qopts' }, fld('開始日（未指定なら今日）', start), fld('締切（未定なら開始日と同じ日）', due)),
+    h('section', { 'aria-label': 'インプット' },
+      h('p', { style: 'margin:14px 0 6px' }, h('b', null, 'インプット（任意）'), h('span', { class: 'fine' }, '　このクエストで使う資料です。納品物の型（見出しの並びなど）も、ここに付けて依頼文で伝えます。', code('guild/inputs/'), ' に1つだけ置かれ、各クエストは名前で参照します。')),
+      h('div', { class: 'ncols' },
+        h('div', null, h('b', { class: 'cap' }, 'すでにあるファイルから選ぶ'), inputPicker('new:inputs', 'f:npq', new Set())),
+        h('div', null, h('b', { class: 'cap' }, '新しくアップロードする'),
+          h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'Word・Excel・PDF もそのまま置けます。', h('b', null, '同じ名前のファイルがあると上書きされます'), '（古い版は、このクエストが閉じるまでバックアップに残ります）。'),
+          fileField('new', 'アップロードするファイル', true),
+          over.length ? h('p', { class: 'warnline', role: 'status' }, '同名あり（上書き）：' + over.map((f) => f.name).join('、')) : null)),
+      h('p', { class: 'fine nsum' }, newSummary(picked, ups, over))),
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
-    S.newNote ? h('p', { class: 'saved', role: 'status' }, S.newNote) : null);
+    h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn go', disabled: S.conn !== 'ok', onclick: sendRequest }, 'クエストを出す'), h('button', { type: 'button', class: 'btn ghost', onclick: closeNew }, 'やめる'),
+      h('span', { class: 'fine', style: 'align-self:center' }, '出すと、地図師が Todo に分け、日付も付けて、承認を求めます。')));
+  box.addEventListener('keydown', trapTab);
+  return h('div', { class: 'reader nmodal', onclick: (e) => { if (e.target === e.currentTarget) closeNew(); } }, box);
+}
+function newSummary(picked, ups, over) {
+  if (!picked.length && !ups.length) return '選んだもの：なし（インプットなしでも出せます）';
+  const a = picked.length ? `${picked.join('、')}（既存 ${picked.length}件）` : '';
+  const b = ups.length ? `${ups.map((f) => f.name).join('、')}（新規 ${ups.length}件${over.length ? `・うち上書き ${over.length}件` : ''}）` : '';
+  return '選んだもの：' + [a, b].filter(Boolean).join(' ＋ ');
+}
+function closeNew() {
+  S.newOpen = false; S.newError = ''; render();
+  const b = document.querySelector('.tabs .tools button:last-child'); if (b) b.focus();  // 開いたボタン（タブの右の「＋ 新しい依頼」）へ戻す
+}
+// ダイアログの中で Tab を回す（最後の次は最初、最初の前は最後）。外の画面にフォーカスが出ないようにする
+function trapTab(e) {
+  if (e.key !== 'Tab') return;
+  const els = [...e.currentTarget.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea, select, a[href]')];
+  if (!els.length) return;
+  const first = els[0], last = els[els.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
 function cancelCell(r) {
@@ -1180,7 +1273,7 @@ function jumpQuest(id) {
 }
 function openNew() {
   S.tab = 'board'; S.newOpen = true; S.newSaved = ''; render();
-  const ta = document.getElementById('qreq'); if (ta) { ta.scrollIntoView({ block: 'center' }); ta.focus(); }
+  const ta = document.getElementById('qreq'); if (ta) ta.focus();
 }
 const shortDate = (s) => `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}`;
 function questRow(qd) {
@@ -1299,7 +1392,10 @@ function boardTab() {
     m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text))));
   if (m) { const wl = webLetter(m); if (wl) out.push(wl); }
   if (S.newSaved) out.push(h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。一覧の先頭に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`));
-  if (S.newOpen) out.push(composer(), h('div', { class: 'btns', style: 'margin:-6px 0 16px' }, h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.newOpen = false; S.newError = ''; render(); } }, 'やめる')));
+  if (m && m.rejectedRequests.length) out.push(h('div', { class: 'card', role: 'status', style: 'margin-bottom:12px' }, h('b', null, '受け付けられなかった依頼（新しい5件まで）'),
+    h('ul', { style: 'margin:6px 0 0' }, m.rejectedRequests.map((r) => h('li', { class: 'fine' }, code(r.id), '「', r.text.split('\n')[0].slice(0, 40), '」：', r.reason, ' ',
+      h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.form['new:text'] = r.text; S.form['new:inputs'] = []; openNew(); } }, '出し直す')))),
+    h('p', { class: 'fine', style: 'margin:6px 0 0' }, 'この知らせは、', code('guild/.work/requests/rejected/'), ' のファイルを消すと出なくなります。')));
   if (!m) return out;
   const L = boardList(m);
   out.push(h('div', { class: `qb${S.listOpen ? '' : ' nolist'} pane-${S.pane}` }, questListPane(m, L), questPanel(m, L)));
@@ -1614,7 +1710,7 @@ function render() {
   const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' + (S.tab === 'board' ? ' wide' : '') }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
-    h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox(), toastBox()].filter(Boolean));
+    h('div', { class: 'panel' }, connectBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
   keepToast();
   window.scrollTo(0, sy);
   KEEP_SCROLL.forEach((s, i) => { const e = document.querySelector(s); if (e && tops[i]) e.scrollTop = tops[i]; });
@@ -1674,13 +1770,18 @@ async function sendRequest() {
   S.newError = ''; S.newSaved = ''; S.newNote = '';
   if (!text) { S.newError = '依頼の内容を書いてください。'; render(); return; }
   if (S.conn !== 'ok') { S.newError = '保存先につながっていません。上の「フォルダを選ぶ」から選んでください。'; render(); return; }
+  // 選んだ名前が、表示のあとで guild/inputs/ から消されていたら、出さずに知らせる（guild.py new も拒否する）
+  const have = new Map(((S.model && S.model.inputs) || []).map((f) => [f.name.toLowerCase(), f.name]));
+  const gone = (S.form['new:inputs'] || []).filter((n) => !have.has(n.toLowerCase()));
+  if (gone.length) { S.form['new:inputs'] = (S.form['new:inputs'] || []).filter((n) => have.has(n.toLowerCase())); S.newError = `選んだインプットが見つかりません（削除された可能性があります）：${gone.join('、')}。選び直してください。`; render(); return; }
   const id = 'R' + stamp14(new Date()).replace(/^(\d{8})/, '$1-'), files = S.files.new || [], names = [];
-  const start = S.form['new:start'] || localToday();
+  const picked = (S.form['new:inputs'] || []).map((n) => have.get(n.toLowerCase()));
+  const start = S.form['new:start'] || localToday(), due = S.form['new:due'] || null;
   try {
     for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
-    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due: S.form['new:due'] || null, files: names, created: new Date().toISOString() }, null, 2));
+    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due, inputs: picked, files: names, created: new Date().toISOString() }, null, 2));
   } catch (e) { S.newError = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); return; }
-  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.files.new = []; S.newSaved = id; S.newOpen = false;
+  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.form['new:inputs'] = []; S.form['f:npq'] = ''; S.files.new = []; S.newSaved = id; S.newOpen = false;
   await refresh(true);
 }
 async function openFile(full) {
@@ -1797,13 +1898,16 @@ function demoTree(scene) {
   const d0 = (n) => new Date(now + n * 86400000).toISOString().slice(0, 10);
   p1.start = d0(-2); p1.due = d0(5); p1.todos.forEach((t, i) => { t.scheduled = d0(i); t.due = t.due || d0(i + 1); });
   p2.start = d0(-10); p2.due = d0(-3); p2.todos.forEach((t, i) => { t.scheduled = d0(-9 + i * 2); t.due = d0(-8 + i * 2); });
+  p1.inputs = [{ name: 'notes.txt', source: 'user', reason: '依頼主の指定' }, { name: 'KGI定義.md', source: 'auto', reason: '要点の書き方の参考（書庫の用語『KPI』のヒント）' }];
+  p1.candidates = [{ name: '古い資料.pdf', reason: '中身は読んでいない。名前からは関係が分からない' }]; p2.inputs = []; p2.candidates = [];
   const rep = {};
   ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
   if (scene === 'failed') { rep['T2-user.md'] = T('# T2 の結果\nできた：上司に口頭で共有した\nメモ：返事は「検討する」だった'); rep['T2-appraiser.md'] = T('---\ntodo: T2\n---\n# T2 の鑑定\n## 判定\n不合格\n## 指摘\n- 合格ラインの「了承する」という返事が、報告にない\n- 返事は「検討する」で、了承ではない\n- やり直しの回数（1回）を超えた\n## 未確認\n- なし'); }
   return {
-    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
+    'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), inputs: { 'notes.txt': T('- 要点1\n- 要点2\n- 要点3\n- 要点4'), 'KGI定義.md': T('# KGI の定義\n最終目標の達成度を測る指標'), '売上 2026Q3.csv': T('月,売上\n7月,100'), '古い資料.pdf': T('(PDF の見本)') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
     deliverables: { 'Q001_report.md': T('見本'), 'Q001_スライド.prompt.md': T('---\ntype: prompt\n---\n# PowerPoint 5枚を作って…'), 'Q002_comparison.md': T('見本') },
-    requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', due: null, files: [] }) },
+    requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', start: null, due: null, inputs: [], files: [] }),
+      rejected: { 'R20261009-090000.json': J({ type: 'request', text: '売上の資料をまとめてほしい', inputs: ['消えた資料.xlsx'], files: [] }), 'R20261009-090000.json.reason.txt': T('選んだインプットが guild/inputs/ にありません（削除された可能性があります）: 消えた資料.xlsx') } },
     Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md' }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }
   };
@@ -1816,7 +1920,8 @@ async function start() {
   for (const ev of ['dragover', 'drop']) document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest('.dz')) e.preventDefault(); });
   window.addEventListener('scroll', spyKn, { passive: true });
   S.listOpen = lsGet(LS_LIST, true) !== false;  // 前回の「一覧を隠す」。読めない・使えないときは、表示で開く
-  document.addEventListener('compositionstart', () => { S.composing = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.newOpen && !e.isComposing && !S.reader && !S.fallback) { e.preventDefault(); closeNew(); } });
+  document.addEventListener('compositionstart',() => { S.composing = true; });
   document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); const k = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key; if (k && k.startsWith('f:')) { S.form[k] = document.activeElement.value; render(); } });
   document.addEventListener('input', (e) => {
     S.lastInput = Date.now();
