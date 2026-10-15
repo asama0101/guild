@@ -672,6 +672,7 @@ class BoardContractTest(unittest.TestCase):
         ({"type": "due", "todo": "T1", "due": None}, lambda: plan(todo("T1"), approved=False), {"T1": "pending"}),
         ({"type": "due", "todo": "T1", "scheduled": "2026-10-20", "due": "2026-10-22"}, lambda: plan(todo("T1", state="running")), {"T1": "running"}),
         ({"type": "due", "start": "2026-10-16", "due": "2026-10-30"}, lambda: plan(todo("T1")), {"T1": "pending"}),
+        ({"type": "inputs", "add": [], "remove": ["メモ.txt"]}, lambda: dict(plan(todo("T1"), approved=False), inputs=[{"name": "メモ.txt", "source": "auto", "reason": "r"}], candidates=[]), {"T1": "pending"}),
     ]
 
     def test_every_input_the_board_writes_is_accepted(self):
@@ -2148,6 +2149,81 @@ class InputsSelectTest(unittest.TestCase):
                 self.assertTrue(guild.validate(dict(p, **bad), TR))
         self.assertEqual(guild.validate(dict(p, inputs=[], candidates=[]), TR), [])
         self.assertEqual(guild.validate(p, TR), [])  # inputs がない古い計画も通る
+
+
+class InputsInputTest(unittest.TestCase):
+    """入力 inputs（このクエストのインプットの追加・外す）。足す名前は guild/inputs/ にあること。承認前・進行中に受け付ける。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.g = self.root / "guild"
+        for n in ("a.txt", "売上 2026Q3.csv", "古い資料.pdf"):
+            (self.g / "inputs" / n).write_text("x", encoding="utf-8")
+        self.q = Path(guild.new_quest(self.root)["dir"])
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def plan(self, **kw):
+        p = dict(plan(todo("T1", state="running")),
+                 inputs=[{"name": "a.txt", "source": "user", "reason": "依頼主の指定"},
+                         {"name": "売上 2026Q3.csv", "source": "auto", "reason": "元データ"}],
+                 candidates=[{"name": "古い資料.pdf", "reason": "関係が分からない"}])
+        p.update(kw)
+        return p
+
+    def send(self, p, data):
+        (self.q / "inbox" / "20261016120000-inputs.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        return guild.ingest(self.q / "plan.json", p, TR)
+
+    def names(self, p):
+        return [(x["name"], x["source"]) for x in p["inputs"]]
+
+    def test_add_a_candidate_and_remove_an_auto_input(self):
+        p = self.plan()
+        r = self.send(p, {"type": "inputs", "add": ["古い資料.PDF"], "remove": ["売上 2026Q3.csv"]})
+        self.assertEqual(r["rejected"], [])
+        self.assertEqual(self.names(p), [("a.txt", "user"), ("古い資料.pdf", "user")])
+        self.assertEqual(p["inputs"][1]["reason"], "依頼主が追加")
+        self.assertEqual(p["candidates"], [])
+        h = p["history"][-1]
+        self.assertEqual((h["event"], h["add"], h["remove"]), ("inputs", ["古い資料.pdf"], ["売上 2026Q3.csv"]))
+        self.assertNotIn("id", h)  # タイムラインは id を持つ記録を状態の変化として読む
+        self.assertEqual(guild.validate(p, TR), [])
+
+    def test_user_inputs_can_be_removed_and_unapproved_plans_accept(self):
+        p = self.plan(approved=False)
+        self.assertEqual(self.send(p, {"type": "inputs", "add": [], "remove": ["A.TXT"]})["rejected"], [])
+        self.assertEqual(self.names(p), [("売上 2026Q3.csv", "auto")])
+
+    def test_bad_inputs_are_rejected_and_plan_is_unchanged(self):
+        for bad in ({"type": "inputs", "add": ["ない.xlsx"], "remove": []},
+                    {"type": "inputs", "add": [], "remove": ["古い資料.pdf"]},  # 計画の inputs にない
+                    {"type": "inputs", "add": ["a.txt"], "remove": ["a.txt"]},
+                    {"type": "inputs", "add": ["../config.json"]},
+                    {"type": "inputs", "add": "古い資料.pdf"},
+                    {"type": "inputs", "add": [], "remove": []},
+                    {"type": "inputs"},
+                    {"type": "inputs", "add": ["a.txt"]},  # すでに入っているだけで、変わらない
+                    {"type": "inputs", "add": ["古い資料.pdf", "ない.xlsx"]}):  # 一部だけ反映しない
+            with self.subTest(bad=bad):
+                p = self.plan()
+                before = copy.deepcopy(p)
+                self.assertEqual(len(self.send(p, bad)["rejected"]), 1)
+                self.assertEqual(p, before)
+
+    def test_closed_or_replanning_plans_reject(self):
+        for extra in ({"status": "aborted"}, {"status": "replan", "approved": False}, {"accepted": True}):
+            with self.subTest(extra=extra):
+                p = self.plan(**extra)
+                self.assertEqual(len(self.send(p, {"type": "inputs", "add": ["古い資料.pdf"]})["rejected"]), 1)
+
+    def test_old_plan_without_inputs_accepts_add(self):
+        p = plan(todo("T1"))
+        self.assertEqual(self.send(p, {"type": "inputs", "add": ["a.txt"]})["rejected"], [])
+        self.assertEqual(p["inputs"], [{"name": "a.txt", "source": "user", "reason": "依頼主が追加"}])
 
 
 if __name__ == "__main__":

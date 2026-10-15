@@ -18,7 +18,7 @@ guild.py archive-ingest ROOT: .work/archive-inbox/ の入力（entry・promote�
 guild.py web-ingest ROOT: .work/web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
 guild.py web-pending ROOT: 冒険者が止められて、依頼主の答え待ちのドメインを一覧する。
 guild.py web-reset ROOT: 「今回だけ」の許可と、許可しなかった記録を空にする（依頼の完了・中止のとき）。
-入力（inbox の JSON）の type の1つに due（依頼の開始日・締切、Todo の予定日・締切の設定。Todo の締切だけ解除できる）がある。
+入力（inbox の JSON）の type には、due（依頼の開始日・締切、Todo の予定日・締切の設定。Todo の締切だけ解除できる）と、inputs（このクエストのインプットの追加・外す。足す名前は guild/inputs/ にあること）がある。
 エラーは終了コード 1。
 """
 import datetime
@@ -238,7 +238,7 @@ def ingest(plan_path, plan, tr):
             if isinstance(data, dict) and data.get("type") == "archive":
                 archive_decide(Path(plan_path).parent, data)  # 書庫の確認は、中止された依頼でも受け付ける
             else:
-                apply_input(plan, data, tr)
+                apply_input(plan, data, tr, Path(plan_path).parent)
                 write_user_report(Path(plan_path).parent, data)
                 qdir = Path(plan_path).parent
                 if data.get("type") == "accept":
@@ -266,7 +266,7 @@ def write_user_report(qdir, data):
     (rep / f"{data['todo']}-user.md").write_text(body, encoding="utf-8")
 
 
-def apply_input(plan, data, tr):
+def apply_input(plan, data, tr, qdir=None):
     kind = data.get("type")
     tm = todo_map(plan)
     status = plan.get("status", "active")
@@ -297,6 +297,11 @@ def apply_input(plan, data, tr):
         return
     if kind == "due":
         apply_dates(plan, data)
+        return
+    if kind == "inputs":
+        if plan.get("accepted"):
+            raise GuildError("受け取り済みの依頼のインプットは変えられません")
+        apply_inputs(plan, data, gdir_of(qdir) if qdir is not None else None)
         return
     t = tm.get(data.get("todo"))
     if t is None:
@@ -345,6 +350,41 @@ def apply_dates(plan, data):
         new[k] = v
     (todo if todo is not None else plan).update(new)
     note(plan, event="due", **({"todo": todo["id"]} if todo is not None else {}), **new)
+
+
+def apply_inputs(plan, data, gdir):
+    """このクエストのインプットの追加・外す（依頼主の入力）。足す名前は guild/inputs/ にあること、外す名前は計画の inputs にあること。
+    足したものは source=user・reason「依頼主が追加」で後ろに付け、候補（candidates）から除く。全部を検査してから変える。"""
+    add, remove = data.get("add", []), data.get("remove", [])
+    if not isinstance(add, list) or not isinstance(remove, list):
+        raise GuildError("inputs の add・remove は、ファイル名の配列にしてください")
+    cur = plan.get("inputs", [])
+    have = {x["name"].lower(): x["name"] for x in cur}
+    rm = []
+    for n in remove:
+        check_input_name(n, "inputs の remove")
+        if n.lower() not in have:
+            raise GuildError(f"外すインプットが計画にありません: {n}")
+        rm.append(have[n.lower()])
+    gone = {r.lower() for r in rm}
+    on_disk = existing_inputs(gdir) if gdir is not None else {}
+    ad = []
+    for n in add:
+        check_input_name(n, "inputs の add")
+        if n.lower() in gone:
+            raise GuildError(f"同じ名前を足して外すことはできません: {n}")
+        actual = on_disk.get(n.lower())
+        if actual is None:
+            raise GuildError(f"足すインプットが guild/inputs/ にありません: {n}")
+        if actual.lower() not in have:
+            ad.append(actual)  # すでに入っている名前は足さない
+    rm, ad = unique_names(rm), unique_names(ad)
+    if not rm and not ad:
+        raise GuildError("インプットの変更がありません")
+    added = {a.lower() for a in ad}
+    plan["inputs"] = [x for x in cur if x["name"].lower() not in gone] + [{"name": a, "source": "user", "reason": "依頼主が追加"} for a in ad]
+    plan["candidates"] = [x for x in plan.get("candidates", []) if x["name"].lower() not in added]
+    note(plan, event="inputs", add=ad, remove=rm)
 
 
 def quest_dates(qdir, old=None):
