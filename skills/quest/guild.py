@@ -370,18 +370,9 @@ def adopt(plan_path, tr):
     todos = draft.get("todos")
     if not isinstance(todos, list):
         raise GuildError("plan-draft.json に todos がありません")
-    template = draft.get("template")
-    if template:
-        # テンプレートは guild/templates/ の中のファイルだけ（外を指せない）
-        parts = str(template).replace("\\", "/").split("/")
-        tpl = gdir_of(plan_path.parent) / str(template)
-        if len(parts) != 2 or parts[0] != "templates" or parts[1] in ("", ".", "..") or not tpl.is_file():
-            raise GuildError(f"template が不正か、見つかりません: {template}")
-        if not str(template).lower().endswith(".md"):
-            raise GuildError(f"template は Markdown（.md）だけです: {template}")
-    plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
-            "status": "active", **({"template": template} if template else {}),
-            **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
+    plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False, "status": "active",
+            **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}),
+            "todos": [], "history": [{"t": now(), "event": "adopted"}]}
     plan.update(quest_dates(plan_path.parent, old))
     for t in todos:
         if not isinstance(t, dict):
@@ -434,7 +425,7 @@ def init_guild(root):
     gdir.mkdir(parents=True, exist_ok=True)
     init_archive(gdir / "archive")
     (work_dir(gdir) / "requests").mkdir(parents=True, exist_ok=True)
-    for sub in ("inputs", DELIV, "templates"):
+    for sub in (INPUTS, DELIV):
         (gdir / sub).mkdir(exist_ok=True)
     board = HERE / "board.html"
     if board.exists():
@@ -462,7 +453,7 @@ def list_requests(root):
                 d = load_json(f)
             except GuildError:
                 continue
-            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "template": d.get("template"), "files": d.get("files", [])})
+            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "files": d.get("files", [])})
     return out
 
 

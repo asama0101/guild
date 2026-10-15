@@ -86,7 +86,6 @@ guild/
   archive/        書庫（用語名.md と index.md。種類は項目の type）
   deliverables/   納品物と、Claude Code に渡すプロンプト（Q001_….md / .prompt.md）
   inputs/         共通のインプット（1つだけ。各依頼はファイル名で参照）
-  templates/      納品物のテンプレート（.md）
   .work/          作業用（Obsidian に出ない）
     Q001/         依頼ごとのフォルダ（plan.json、reports/、output/、inbox/）
     requests/ web/ archive-inbox/ backup/

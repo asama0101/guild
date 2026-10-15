@@ -354,10 +354,10 @@ class InitAndNewTest(unittest.TestCase):
         guild.init_guild(self.root)  # 再実行しても依頼は消えない
         self.assertTrue(Path(q["dir"]).is_dir())
 
-    def test_init_creates_inputs_deliverables_templates(self):
+    def test_init_creates_inputs_and_deliverables(self):
         guild.init_guild(self.root)
         guild.init_guild(self.root)
-        for d in ("inputs", "deliverables", "templates"):
+        for d in ("inputs", "deliverables"):
             self.assertTrue((self.root / "guild" / d).is_dir(), d)
 
     def test_new_requires_init(self):
@@ -629,7 +629,7 @@ class AcceptTest(unittest.TestCase):
 
 
 class MarkdownOnlyTest(unittest.TestCase):
-    """納品物は Markdown だけ。format の項目はなく、テンプレートも .md だけ。"""
+    """納品物は Markdown だけ。format の項目はない。"""
 
     def test_no_format_machinery(self):
         self.assertFalse(hasattr(guild, "FORMATS"))
@@ -649,43 +649,6 @@ class MarkdownOnlyTest(unittest.TestCase):
 
     def test_prompt_suffix(self):
         self.assertEqual(guild.PROMPT_SUFFIX, ".prompt.md")
-
-
-class TemplateTest(unittest.TestCase):
-    """納品物のテンプレート。guild/templates/ の中だけを指せる。"""
-
-    def make(self, d, template):
-        q = Path(d) / "guild" / ".work" / "Q001"
-        (q / "reports").mkdir(parents=True)
-        (Path(d) / "guild" / "templates").mkdir()
-        (Path(d) / "guild" / "templates" / "週次.md").write_text("# 週次", encoding="utf-8")
-        draft = {"quest": "Q001", "title": "t", "template": template, "todos": [
-            {"id": "T1", "title": "x", "kind": "auto", "deps": [], "deliverable": True,
-             "criteria": {"viewpoint": "a", "pass_line": "b", "check": "c"}}]}
-        (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
-        return q
-
-    def test_adopt_keeps_existing_template(self):
-        with tempfile.TemporaryDirectory() as d:
-            q = self.make(d, "templates/週次.md")
-            guild.adopt(q / "plan.json", TR)
-            saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
-        self.assertEqual(saved["template"], "templates/週次.md")
-
-    def test_adopt_rejects_non_markdown_template(self):
-        for ext in ("docx", "txt", "csv"):
-            with self.subTest(ext=ext), tempfile.TemporaryDirectory() as d:
-                q = self.make(d, f"templates/週次.{ext}")
-                (Path(d) / "guild" / "templates" / f"週次.{ext}").write_bytes(b"x")
-                with self.assertRaises(guild.GuildError):
-                    guild.adopt(q / "plan.json", TR)
-
-    def test_adopt_rejects_missing_or_outside_template(self):
-        for bad in ("templates/ない.md", "../config.json", "templates/../config.json", "/etc/passwd", "board.html"):
-            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
-                q = self.make(d, bad)
-                with self.assertRaises(guild.GuildError):
-                    guild.adopt(q / "plan.json", TR)
 
 
 class BoardContractTest(unittest.TestCase):
@@ -1791,6 +1754,37 @@ class DocsContractTest(unittest.TestCase):
         for needle in ("deliverables/", "inputs/", ".work/", "クエスト進捗", "Playwright MCP"):
             self.assertIn(needle, s)
         self.assertNotIn(".mcp.json", s)
+
+
+class NoTemplateTest(unittest.TestCase):
+    """納品物のテンプレートは廃止した。guild.py は templates/ を作らず、plan.json に template を持たない。"""
+
+    def test_init_does_not_create_templates(self):
+        with tempfile.TemporaryDirectory() as d:
+            guild.init_guild(Path(d))
+            self.assertFalse((Path(d) / "guild" / "templates").exists())
+
+    def test_adopt_ignores_a_template_in_the_draft(self):
+        with tempfile.TemporaryDirectory() as d:
+            q = Path(d) / "guild" / ".work" / "Q001"
+            (q / "reports").mkdir(parents=True)
+            draft = {"quest": "Q001", "title": "t", "template": "templates/ない.md", "todos": [
+                {"id": "T1", "title": "x", "kind": "auto", "deps": [], "deliverable": True, "criteria": CRIT}]}
+            (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+            guild.adopt(q / "plan.json", TR)  # テンプレートの検査はしない（ないファイルを書いてきても落ちない）
+            self.assertNotIn("template", guild.load_json(q / "plan.json"))
+
+    def test_requests_do_not_list_a_template(self):
+        with tempfile.TemporaryDirectory() as d:
+            guild.init_guild(Path(d))
+            rdir = Path(d) / "guild" / ".work" / "requests"
+            (rdir / "R20261016-1.json").write_text(json.dumps({"type": "request", "text": "t", "template": "templates/x.md", "files": []}), encoding="utf-8")
+            self.assertNotIn("template", guild.list_requests(Path(d))[0])
+
+    def test_engine_has_no_template_machinery(self):
+        s = (ROOT / "skills" / "quest" / "guild.py").read_text(encoding="utf-8")
+        for gone in ("template", "テンプレート"):
+            self.assertNotIn(gone, s)
 
 
 if __name__ == "__main__":
