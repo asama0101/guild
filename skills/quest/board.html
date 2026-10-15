@@ -220,6 +220,10 @@ input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .qa{margin:16px 0 4px;padding-top:6px;border-top:1px dashed var(--line)}
 .qa:first-of-type{border-top:0}
 
+.ganttbox{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--paper2);padding:6px}
+svg.gantt{display:block;min-width:720px}
+svg.humbars{min-width:0;max-width:100%}
+.plegend .lg{margin-right:12px;font-size:13px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -868,6 +872,98 @@ function questDetail(qd) {
     abortBlock(qd));
 }
 
+// ============================================================ クエスト進捗（ガント）
+const DAY_MS = 86400000;
+const dayNum = (s) => Math.floor(Date.parse(s + 'T00:00:00Z') / DAY_MS);
+const dayStr = (n) => new Date(n * DAY_MS).toISOString().slice(0, 10);
+
+// 予定のモデル。計画のない依頼は載せない。includeClosed が false なら、完了・中止の依頼を除く
+function scheduleModel(quests, includeClosed) {
+  const rows = [];
+  for (const q of quests) {
+    const p = q.q.plan; if (!p || !p.start) continue;
+    const state = p.status === 'aborted' ? 'aborted' : (p.accepted ? 'done' : 'active');
+    if (!includeClosed && state !== 'active') continue;
+    const todos = p.todos.map((t) => ({ id: t.id, title: t.title, kind: t.kind, state: t.state, scheduled: t.scheduled || p.start, due: t.due || null }));
+    rows.push({ id: q.id, title: q.title, start: p.start, due: p.due || p.start, state, done: todos.filter((t) => closed(t.state)).length, total: todos.length, todos });
+  }
+  rows.sort((a, b) => a.id.localeCompare(b.id));
+  const days = rows.flatMap((r) => [r.start, r.due, ...r.todos.map((t) => t.scheduled)]).map(dayNum);
+  const today = Math.floor(Date.now() / DAY_MS);
+  let min = days.length ? Math.min(...days, today) : today, max = days.length ? Math.max(...days, today) : today;
+  min -= 1; max += 1; if (max - min < 7) max = min + 7;
+  const byDay = new Map();
+  for (const r of rows) for (const t of r.todos) if (t.kind === 'human') {
+    const k = dayNum(t.scheduled), e = byDay.get(k) || { day: k, open: 0, done: 0 };
+    if (closed(t.state)) e.done++; else e.open++;
+    byDay.set(k, e);
+  }
+  return { rows, min, max, humanDays: [...byDay.values()].sort((a, b) => a.day - b.day) };
+}
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+const sv = (tag, attrs, ...kids) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c)); return e; };
+// Todo の状態の色（印と同じ系統）
+const STATE_FILL = { pending: 'var(--mute)', blocked: 'var(--stop)', awaiting_confirm: 'var(--warn)', running: 'var(--brass)', waiting_user: 'var(--warn)', review: 'var(--brass)', done: 'var(--ok)', failed: 'var(--ng)', skipped: 'var(--stop)' };
+
+function ganttSvg(m) {
+  const LABEL = 210, PAD = 16, ROW = 26, HEAD = 34, W = 1000, n = m.max - m.min + 1, DW = (W - LABEL - PAD) / n;
+  const x = (day) => LABEL + (day - m.min) * DW + DW / 2;
+  const rows = m.rows.flatMap((r) => [{ q: r }, ...r.todos.map((t) => ({ q: r, t }))]);
+  const H = HEAD + rows.length * ROW + 10, today = Math.floor(Date.now() / DAY_MS);
+  const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': '依頼と Todo の予定', class: 'gantt' });
+  for (let d = m.min; d <= m.max; d++) {
+    const major = n <= 31 || new Date(d * DAY_MS).getUTCDate() === 1 || (d - m.min) % 7 === 0;
+    svg.append(sv('line', { x1: x(d), x2: x(d), y1: HEAD - 6, y2: H, stroke: 'var(--line)', 'stroke-width': major ? 1 : 0.4, opacity: major ? 0.7 : 0.4 }));
+    if (major && (n <= 31 || (d - m.min) % 7 === 0)) svg.append(sv('text', { x: x(d), y: 16, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--sub)' }, dayStr(d).slice(5)));
+  }
+  if (today >= m.min && today <= m.max) svg.append(sv('line', { x1: x(today), x2: x(today), y1: HEAD - 6, y2: H, stroke: 'var(--ng)', 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }), sv('text', { x: x(today), y: 30, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--ng)' }, '今日'));
+  rows.forEach((row, i) => {
+    const y = HEAD + i * ROW, cy = y + ROW / 2, r = row.q;
+    if (!row.t) {
+      const x1 = x(dayNum(r.start)) - DW / 2, x2 = x(dayNum(r.due)) + DW / 2, w = Math.max(x2 - x1, 6), pct = r.total ? r.done / r.total : 0;
+      svg.append(sv('text', { x: 4, y: cy + 4, 'font-size': 12, 'font-weight': 700, fill: 'var(--ink)' }, `${r.id} ${r.title.length > 14 ? r.title.slice(0, 14) + '…' : r.title}`),
+        sv('rect', { x: x1, y: cy - 7, width: w, height: 14, rx: 3, fill: 'var(--surface2)', stroke: r.state === 'aborted' ? 'var(--stop)' : 'var(--brass)' }),
+        sv('rect', { x: x1, y: cy - 7, width: w * pct, height: 14, rx: 3, fill: r.state === 'aborted' ? 'var(--stop)' : 'var(--ok)', opacity: 0.8 }),
+        sv('text', { x: x1 + w + 6, y: cy + 4, 'font-size': 11, fill: 'var(--sub)' }, `${r.done}/${r.total}${r.state === 'aborted' ? '（中止）' : r.state === 'done' ? '（完了）' : ''}`));
+    } else {
+      const t = row.t, cx = x(dayNum(t.scheduled)), s = 7, fill = STATE_FILL[t.state] || 'var(--mute)', late = t.due && t.state !== 'done' && t.state !== 'skipped' && t.due < dayStr(today);
+      svg.append(sv('text', { x: 18, y: cy + 4, 'font-size': 11, fill: 'var(--sub)' }, `${t.id} ${t.kind === 'human' ? '👤 ' : ''}${t.title.length > 12 ? t.title.slice(0, 12) + '…' : t.title}`),
+        sv('path', { d: `M${cx} ${cy - s} L${cx + s} ${cy} L${cx} ${cy + s} L${cx - s} ${cy} Z`, fill, stroke: late ? 'var(--ng)' : 'var(--ink)', 'stroke-width': late ? 2 : 0.6 },
+          sv('title', null, `${t.id} ${t.title}\n予定日 ${t.scheduled}${t.due ? '　締切 ' + t.due : ''}\n${(TSTATE[t.state] || [t.state])[0]}`)));
+    }
+  });
+  return svg;
+}
+
+function humanBars(m) {
+  if (!m.humanDays.length) return h('p', { class: 'sub' }, 'あなたの実行（human）の Todo はありません。');
+  const peak = Math.max(...m.humanDays.map((d) => d.open + d.done)), BW = 46, BH = 120, W = Math.max(m.humanDays.length * BW + 40, 300);
+  const svg = sv('svg', { viewBox: `0 0 ${W} ${BH + 44}`, width: Math.min(W, 1000), role: 'img', 'aria-label': '予定日ごとのあなたの実行の件数', class: 'gantt humbars' });
+  m.humanDays.forEach((d, i) => {
+    const x0 = 20 + i * BW, ho = (d.open / peak) * BH, hd = (d.done / peak) * BH;
+    svg.append(sv('rect', { x: x0, y: 8 + BH - ho - hd, width: BW - 14, height: hd, fill: 'var(--ok)', opacity: 0.55 }),
+      sv('rect', { x: x0, y: 8 + BH - ho, width: BW - 14, height: ho, fill: 'var(--warn)' }),
+      sv('text', { x: x0 + (BW - 14) / 2, y: 8 + BH - ho - hd - 3, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--ink)' }, d.open + d.done),
+      sv('text', { x: x0 + (BW - 14) / 2, y: BH + 24, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--sub)' }, dayStr(d.day).slice(5)));
+  });
+  return svg;
+}
+
+function progressTab() {
+  const m0 = S.model; if (!m0) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
+  const inc = !!S.form['prog:closed'];
+  const m = scheduleModel(m0.quests, inc);
+  const chk = h('input', { type: 'checkbox', id: 'prog:closed' }); chk.checked = inc; chk.addEventListener('change', () => { S.form['prog:closed'] = chk.checked; render(); });
+  const legend = h('div', { class: 'plegend', style: 'margin:6px 0 12px' }, ['pending', 'running', 'waiting_user', 'review', 'done', 'failed', 'skipped'].map((s) => h('span', { class: 'lg' }, h('i', { style: `display:inline-block;width:10px;height:10px;transform:rotate(45deg);margin:0 6px 0 4px;background:${STATE_FILL[s]}` }), TSTATE[s][0])));
+  return [h('h2', { class: 'h2' }, 'クエスト進捗'),
+    h('p', { class: 'sub', style: 'margin:0 0 8px' }, '依頼は開始日から締切までの帯です（緑の塗りが、合格した Todo の割合）。◆ は Todo の予定日で、色が状態です。赤い点線は今日です。'),
+    h('label', { class: 'fine', for: 'prog:closed' }, chk, ' 完了・中止した依頼も含める'), legend,
+    m.rows.length ? h('div', { class: 'ganttbox' }, ganttSvg(m)) : h('p', { class: 'sub' }, '進行中の依頼はありません。'),
+    h('h3', { class: 'sec' }, 'あなたの実行（human）の予定日ごとの件数'),
+    h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'オレンジが未了、緑が済んだ件数です。'), humanBars(m)];
+}
+
 // ============================================================ 描画（画面）
 function banner() {
   const conn = h('div', { class: 'conn' });
@@ -1409,8 +1505,8 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const oldBox = document.querySelector('.rbox'), boxTop = oldBox ? oldBox.scrollTop : 0;
-  const tabs = [['board', '掲示板'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '冒険の書'], ['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
-  const body = { board: boardTab, deliv: delivTab, know: knowTab, talk: talkTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
+  const tabs = [['board', '掲示板'], ['prog', 'クエスト進捗'], ['deliv', '納品物'], ['know', '書庫'], ['talk', '冒険の書'], ['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
+  const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, talk: talkTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox()].filter(Boolean));
@@ -1643,7 +1739,7 @@ async function start() {
     if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
     if (k && t.type === 'date') S.form[k] = t.value;
   });
-  window.__guildBoard = { S, render, refresh, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
+  window.__guildBoard = { S, render, scheduleModel, refresh, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
   if (params.has('demo')) {
     S.demo = true; S.fs = new PathMap(new MemFS(toPhysicalTree(demoTree(params.get('demo') || 'human')))); S.conn = 'ok'; await refresh(true); return;
   }

@@ -1661,6 +1661,11 @@ class BoardPathsTest(unittest.TestCase):
         self.assertNotIn("guild/${path}", self.board)
         self.assertNotIn("guild/${qid}", self.board)
 
+    def test_progress_tab_exists(self):
+        for needle in ("['prog', 'クエスト進捗']", "function scheduleModel(", "function progressTab(", "function ganttSvg(", "function humanBars("):
+            self.assertIn(needle, self.board)
+        self.assertNotIn("<script src", self.board)  # 外部ライブラリを使わない
+
     def test_board_sends_the_date_inputs(self):
         for needle in ("type: 'due', todo: t.id, scheduled:", "type: 'due', start:", "function questDatesRow(", "function dateIssues("):
             self.assertIn(needle, self.board)
