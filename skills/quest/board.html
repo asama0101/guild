@@ -271,6 +271,24 @@ svg.qgantt{min-width:560px}
 .ncols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px 18px}
 .ncols .cap{display:block;font-size:13px;margin-bottom:6px}
 .nsum{margin:10px 0 0;padding:8px 12px;background:var(--surface);border:1px dashed var(--brass);border-radius:4px}
+/* クエスト進捗のフィルタ（表示するクエスト）。ポップオーバーは、検索・状態ごとのグループ（見出しは固定）・選択の件数 */
+.pbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:8px 0}
+.pwrap{position:relative}
+.pbtn{font:inherit;font-size:14px;min-height:40px;padding:4px 14px;border:1px solid var(--brass);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}
+.ppop{position:absolute;top:calc(100% + 4px);left:0;z-index:30;width:min(420px,90vw);box-sizing:border-box;background:var(--paper2);border:2px solid var(--brass);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:10px;display:flex;flex-direction:column;gap:8px}
+.pacts{display:flex;gap:4px 12px;flex-wrap:wrap}
+.plist{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.pgh{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;gap:8px;padding:4px 10px;background:var(--head);font-size:12px;font-weight:700;color:var(--sub)}
+.popt{display:grid;grid-template-columns:20px 48px minmax(0,1fr);gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--grid);font-size:13.5px;cursor:pointer}
+.popt[aria-selected="true"]{background:var(--sel-bg)}
+.popt .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.popt .pmark{display:inline-flex;width:16px;height:16px;align-items:center;justify-content:center;border:1px solid var(--brass);border-radius:3px;font-size:12px;color:var(--on)}
+.popt[aria-selected="true"] .pmark{background:var(--seal);border-color:var(--seal)}
+.popt:focus-visible{outline:3px solid var(--gold);outline-offset:-3px}
+.pfoot{display:flex;align-items:center;justify-content:space-between}
+.pquick{display:flex;flex-wrap:wrap;gap:6px}
+.ptags{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 8px}
+.qprog{margin-left:auto}
 </style>
 </head>
 <body>
@@ -426,7 +444,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', openTodo: null, rcache: {}, kn: { cur: null },
+  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', openTodo: null, rcache: {}, prog: { sel: null, open: false }, kn: { cur: null },
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -1046,13 +1064,14 @@ const dayNum = (s) => Math.floor(Date.parse(s + 'T00:00:00Z') / DAY_MS);
 const dayStr = (n) => new Date(n * DAY_MS).toISOString().slice(0, 10);
 const okDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(dayNum(s));  // 不正な日付は無視する
 
-// 予定のモデル。計画のない依頼は載せない。includeClosed が false なら、完了・中止の依頼を除く
-function scheduleModel(quests, includeClosed) {
-  const rows = [];
+// 予定のモデル。計画のない依頼は載せない。includeClosed が false なら、完了・中止の依頼を除く。ids（Set か配列）があれば、その依頼だけ
+function scheduleModel(quests, includeClosed, ids) {
+  const rows = [], only = ids == null ? null : (ids instanceof Set ? ids : new Set(ids));
   for (const q of quests) {
     const p = q.q.plan; if (!p || !okDate(p.start)) continue;  // 開始日が不正な依頼は載せない
     const state = p.status === 'aborted' ? 'aborted' : (p.accepted ? 'done' : 'active');
     if (!includeClosed && state !== 'active') continue;
+    if (only && !only.has(q.id)) continue;
     const todos = p.todos.map((t) => ({ id: t.id, title: t.title, kind: t.kind, state: t.state, scheduled: okDate(t.scheduled) ? t.scheduled : p.start, due: okDate(t.due) ? t.due : null }));
     rows.push({ id: q.id, title: q.title, start: p.start, due: okDate(p.due) ? p.due : p.start, state, done: todos.filter((t) => closed(t.state)).length, total: todos.length, todos });
   }
@@ -1121,17 +1140,95 @@ function humanBars(m) {
   return svg;
 }
 
+// ---- クエスト進捗のフィルタ（表示するクエスト）。選んだ組み合わせは、ブラウザの保存（lsGet・lsSet）の guild.progress.sel に覚える（使えなければ毎回、既定）
+const LS_PROG = 'guild.progress.sel';
+const PROG_GROUPS = [['turn', 'あなたの番'], ['run', '進行中'], ['wait', '受け取り待ち'], ['done', '完了・中止']];
+const planClosed = (x) => { const p = x.q.plan; return !!p && (p.status === 'aborted' || !!p.accepted); };  // scheduleModel の「完了・中止」と同じ
+const progGroup = (x) => (planClosed(x) ? 'done' : boardBucket(x));
+// 選べる依頼：ガントに載せられるもの（計画と正しい開始日がある）。完了・中止は includeClosed のときだけ
+function progCandidates(quests, includeClosed) {
+  return quests.filter((x) => x.q.plan && okDate(x.q.plan.start) && (includeClosed || !planClosed(x)));
+}
+// 表示する依頼の ID。sel が null（一度も選んでいない）なら、進行中のすべて。消えた ID・いま選べない ID は落とす
+function progEffective(quests, sel, includeClosed) {
+  const cands = progCandidates(quests, includeClosed);
+  if (sel == null) return new Set(cands.filter((x) => !planClosed(x)).map((x) => x.id));
+  const want = new Set(sel);
+  return new Set(cands.filter((x) => want.has(x.id)).map((x) => x.id));
+}
+// すぐ選ぶ：run＝進行中だけ／turn＝自分の番だけ（答えていない手紙がある）／soon＝締切が近い5件（締切が正しい日付の、進行中の依頼）
+function progQuick(quests, kind) {
+  const act = progCandidates(quests, false);
+  if (kind === 'turn') return act.filter((x) => x.asks.some((a) => !a.sent)).map((x) => x.id);
+  if (kind === 'soon') return act.filter((x) => okDate(x.q.plan.due)).sort((a, b) => a.q.plan.due.localeCompare(b.q.plan.due) || a.id.localeCompare(b.id)).slice(0, 5).map((x) => x.id);
+  return act.map((x) => x.id);
+}
+function progLoad() { const v = lsGet(LS_PROG, null); return Array.isArray(v) ? v.filter((x) => typeof x === 'string' && /^Q\d+$/.test(x)) : null; }
+function setProg(ids) { S.prog.sel = ids == null ? null : [...ids]; lsSet(LS_PROG, S.prog.sel); render(); }
+function closeProg() { S.prog.open = false; render(); const b = document.getElementById('pbtn'); if (b) b.focus(); }
+// 「表示するクエスト」のボタンとポップオーバー。base は、いまの選択（既定のときは、表示中の ID）
+function progPicker(m0, inc, eff, base) {
+  const cands = progCandidates(m0.quests, inc), q = (S.form['f:pq'] || '').trim().toLowerCase(), shown = q ? cands.filter((x) => hit(q, x.id, x.title)) : cands;
+  const btn = h('button', { type: 'button', class: 'pbtn', id: 'pbtn', 'aria-haspopup': 'listbox', 'aria-expanded': String(!!S.prog.open), 'aria-controls': 'ppop',
+    onclick: () => { S.prog.open = !S.prog.open; render(); const s = document.getElementById(S.prog.open ? 'pq' : 'pbtn'); if (s) s.focus(); } },
+    '表示するクエスト　', h('b', null, `${eff.size}件`), h('span', { class: 'fine' }, `／${cands.length}件`), ' ▾');
+  if (!S.prog.open) return h('div', { class: 'pwrap' }, btn);
+  const toggle = (id) => { const cur = new Set(base); if (cur.has(id)) cur.delete(id); else cur.add(id); setProg(cur); };
+  const keys = (e, id) => {
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(id); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const all = [...document.querySelectorAll('#ppop [role=option]')], i = all.indexOf(e.currentTarget), n = all[i + (e.key === 'ArrowDown' ? 1 : -1)];
+    if (n) n.focus(); else if (e.key === 'ArrowUp') { const s = document.getElementById('pq'); if (s) s.focus(); }
+  };
+  const opt = (x) => h('div', { role: 'option', class: 'popt', tabindex: '-1', 'aria-selected': String(eff.has(x.id)), 'data-key': 'po:' + x.id, onclick: () => toggle(x.id), onkeydown: (e) => keys(e, x.id) },
+    h('span', { class: 'pmark', 'aria-hidden': 'true' }, eff.has(x.id) ? '✓' : ''), h('b', null, x.id), h('span', { class: 'tt' }, x.title));
+  const groups = PROG_GROUPS.map(([g, label]) => ({ g, label, xs: shown.filter((x) => progGroup(x) === g) })).filter((x) => x.xs.length);
+  const search = h('input', { type: 'search', id: 'pq', class: 'qsearch', placeholder: '番号・題名で探す（例：Q009、KPI）', 'aria-label': 'クエストを探す', 'aria-controls': 'plist' });
+  search.value = S.form['f:pq'] || ''; bindKey(search, 'f:pq');
+  search.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); const o = document.querySelector('#ppop [role=option]'); if (o) o.focus(); } });
+  const pop = h('div', { class: 'ppop', id: 'ppop', role: 'dialog', 'aria-label': '表示するクエストを選ぶ', onkeydown: (e) => { if (e.key === 'Escape' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); closeProg(); } } },
+    search,
+    h('div', { class: 'pacts' },
+      h('button', { type: 'button', class: 'linkbtn', disabled: !shown.length, onclick: () => setProg(new Set([...base, ...shown.map((x) => x.id)])) }, '表示中の全部を選ぶ'),
+      h('button', { type: 'button', class: 'linkbtn', onclick: () => setProg([]) }, '選択を解除')),
+    h('div', { class: 'plist', id: 'plist', role: 'listbox', 'aria-multiselectable': 'true', 'aria-label': 'クエスト' },
+      groups.length ? groups.map(({ g, label, xs }) => h('div', { role: 'group', 'aria-labelledby': 'pg-' + g },
+        h('div', { class: 'pgh', id: 'pg-' + g }, h('span', null, `${label}（${xs.length}）`), h('span', null, `${xs.filter((x) => eff.has(x.id)).length}件選択`)), xs.map(opt)))
+        : h('p', { class: 'fine', style: 'margin:8px' }, cands.length ? '見つかりません。' : '選べるクエストはありません。'),
+      inc ? null : h('p', { class: 'fine', style: 'margin:8px' }, '完了・中止は、「完了・中止した依頼も含める」を入れると出ます。')),
+    h('div', { class: 'pfoot' }, h('span', { class: 'fine' }, `${eff.size}件を選択中`), h('button', { type: 'button', class: 'btn sm', onclick: closeProg }, '閉じる')));
+  return h('div', { class: 'pwrap' }, btn, pop);
+}
+// 詳細パネルの「進捗で見る」：そのクエストだけを選んだ状態で、クエスト進捗を開く（完了・中止なら「含める」も入れる）
+function showInProgress(id) {
+  const qd = S.model && S.model.quests.find((x) => x.id === id); if (!qd) return;
+  if (planClosed(qd)) S.form['prog:closed'] = true;
+  S.prog.sel = [id]; lsSet(LS_PROG, S.prog.sel); S.prog.open = false; S.tab = 'prog'; render(); window.scrollTo(0, 0);
+}
 function progressTab() {
   const m0 = S.model; if (!m0) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
-  const inc = !!S.form['prog:closed'];
-  const m = scheduleModel(m0.quests, inc);
+  const inc = !!S.form['prog:closed'], byId = new Map(m0.quests.map((x) => [x.id, x]));
+  if (Array.isArray(S.prog.sel)) { const kept = S.prog.sel.filter((id) => byId.has(id)); if (kept.length !== S.prog.sel.length) { S.prog.sel = kept; lsSet(LS_PROG, kept); } }  // 消えた依頼を落とす
+  const eff = progEffective(m0.quests, S.prog.sel, inc), base = Array.isArray(S.prog.sel) ? S.prog.sel : [...eff];
+  const m = scheduleModel(m0.quests, inc, eff);
   const chk = h('input', { type: 'checkbox', id: 'prog:closed' }); chk.checked = inc; chk.addEventListener('change', () => { S.form['prog:closed'] = chk.checked; render(); });
   const legend = h('div', { class: 'plegend', style: 'margin:6px 0 12px' }, ['pending', 'running', 'waiting_user', 'review', 'done', 'failed', 'skipped'].map((s) => h('span', { class: 'lg' }, h('i', { style: `display:inline-block;width:10px;height:10px;transform:rotate(45deg);margin:0 6px 0 4px;background:${STATE_FILL[s]}` }), TSTATE[s][0])));
+  const quick = h('div', { class: 'pquick', role: 'group', 'aria-label': 'すぐ選ぶ' },
+    [['run', '進行中だけ'], ['turn', '自分の番だけ'], ['soon', '期限が近い5件']].map(([k, l]) => h('button', { type: 'button', class: 'btn ghost sm', onclick: () => setProg(k === 'run' ? null : progQuick(m0.quests, k)) }, l)));
+  const ids = [...eff].sort(), MAX_TAGS = 12;
+  const tags = h('div', { class: 'ptags', 'aria-label': '選んだクエスト' }, h('span', { class: 'fine' }, '表示中：'),
+    ids.length ? ids.slice(0, MAX_TAGS).map((id) => { const x = byId.get(id); return h('span', { class: 'chip' }, h('b', null, id), ' ', x.title.length > 16 ? x.title.slice(0, 16) + '…' : x.title,
+      h('button', { type: 'button', class: 'chipx', 'aria-label': `${id} を外す`, onclick: () => setProg(base.filter((y) => y !== id)) }, '×')); }) : h('span', { class: 'fine' }, 'なし'),
+    ids.length > MAX_TAGS ? h('span', { class: 'fine' }, `ほか ${ids.length - MAX_TAGS}件`) : null);
+  const hiddenClosed = !inc && Array.isArray(S.prog.sel) && S.prog.sel.some((id) => byId.has(id) && planClosed(byId.get(id)));
   return [h('h2', { class: 'h2' }, 'クエスト進捗'),
     h('p', { class: 'sub', style: 'margin:0 0 8px' }, '依頼は開始日から締切までの帯です（緑の塗りが、合格した Todo の割合）。◆ は Todo の予定日で、色が状態です。赤い点線は今日です。'),
-    h('label', { class: 'fine', for: 'prog:closed' }, chk, ' 完了・中止した依頼も含める'), legend,
-    m.rows.length ? h('div', { class: 'ganttbox' }, ganttSvg(m)) : h('p', { class: 'sub' }, '進行中の依頼はありません。'),
-    h('h3', { class: 'sec' }, 'あなたの実行（human）の予定日ごとの件数'),
+    h('section', { class: 'pbar', 'aria-label': '絞り込み' }, progPicker(m0, inc, eff, base), quick, h('label', { class: 'fine', for: 'prog:closed' }, chk, ' 完了・中止した依頼も含める')),
+    tags, legend,
+    m.rows.length ? h('div', { class: 'ganttbox' }, ganttSvg(m))
+      : h('p', { class: 'sub' }, hiddenClosed ? '選んだクエストは完了・中止です。「完了・中止した依頼も含める」を入れると出ます。' : eff.size ? '選んだクエストに、表示できる予定がありません。' : '表示するクエストが選ばれていません。「表示するクエスト」か、すぐ選ぶボタンから選んでください。'),
+    h('h3', { class: 'sec' }, 'あなたの実行（human）の予定日ごとの件数', h('span', { class: 'fine' }, `　表示中の${m.rows.length}件分`)),
     h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'オレンジが未了、緑が済んだ件数です。'), humanBars(m)];
 }
 
@@ -1309,7 +1406,8 @@ function questPanel(m, L) {
   const tool = h('div', { class: 'qtool' },
     h('button', { type: 'button', class: 'btn ghost sm qback', onclick: () => { S.pane = 'list'; render(); } }, '‹ 一覧へ戻る'),
     h('button', { type: 'button', class: 'btn ghost sm qhide', 'aria-expanded': String(S.listOpen), 'aria-controls': 'quest-list', onclick: () => { S.listOpen = !S.listOpen; lsSet(LS_LIST, S.listOpen); render(); } }, S.listOpen ? '一覧を隠す' : '一覧を表示'),
-    S.listOpen ? null : hiddenBar(m, L, i, go));
+    S.listOpen ? null : hiddenBar(m, L, i, go),
+    qd && qd.q.plan ? h('button', { type: 'button', class: 'linkbtn qprog', onclick: () => showInProgress(qd.id) }, '進捗で見る') : null);
   if (!qd) return h('section', { class: 'qpanel', 'aria-label': 'クエストの詳細' }, tool, h('p', { class: 'sub' }, m.quests.length ? '一覧からクエストを選んでください。' : 'まだクエストはありません。「＋ 新規」から出してください。'));
   const p = qd.q.plan, pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
   return h('section', { class: 'qpanel', 'aria-label': `${qd.id} の詳細` }, tool,
@@ -1920,6 +2018,9 @@ async function start() {
   for (const ev of ['dragover', 'drop']) document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest('.dz')) e.preventDefault(); });
   window.addEventListener('scroll', spyKn, { passive: true });
   S.listOpen = lsGet(LS_LIST, true) !== false;  // 前回の「一覧を隠す」。読めない・使えないときは、表示で開く
+  S.prog.sel = progLoad();  // 前回の「表示するクエスト」。読めない・壊れているときは null（進行中のすべて）
+  // ポップオーバーは、外側をクリックすると閉じる。押した部品が描き直しで外れた（isConnected が false）ときは、中の操作なので閉じない
+  document.addEventListener('click', (e) => { if (S.prog.open && e.target instanceof Element && e.target.isConnected && !e.target.closest('.pbar')) { S.prog.open = false; render(); } });  // 絞り込みの帯（.pbar）の中の操作では閉じない：「含める」のチェックを押しても、開いたまま選べる
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.newOpen && !e.isComposing && !S.reader && !S.fallback) { e.preventDefault(); closeNew(); } });
   document.addEventListener('compositionstart',() => { S.composing = true; });
   document.addEventListener('compositionend', () => { S.composing = false; S.lastInput = Date.now(); const k = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.key; if (k && k.startsWith('f:')) { S.form[k] = document.activeElement.value; render(); } });
@@ -1935,7 +2036,7 @@ async function start() {
     if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
     if (k && t.type === 'date') S.form[k] = t.value;
   });
-  window.__guildBoard = { S, render, scheduleModel, ganttSvg, refresh, lsGet, lsSet, boardBucket, boardList, jumpQuest, dateRange, qGanttModel, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
+  window.__guildBoard = { S, render, scheduleModel, ganttSvg, refresh, lsGet, lsSet, boardBucket, boardList, jumpQuest, dateRange, qGanttModel, progCandidates, progEffective, progQuick, showInProgress, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
   if (params.has('demo')) {
     S.demo = true; S.fs = new PathMap(new MemFS(toPhysicalTree(demoTree(params.get('demo') || 'human')))); S.conn = 'ok'; await refresh(true); return;
   }

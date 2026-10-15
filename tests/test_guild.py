@@ -1740,6 +1740,13 @@ class BoardPathsTest(unittest.TestCase):
         for gone in ("function composer(", ".qmain{", "template:", "new:template"):
             self.assertNotIn(gone, self.board)
 
+    def test_progress_filter(self):
+        for needle in ("function scheduleModel(quests, includeClosed, ids)", "function progCandidates(", "function progEffective(", "function progQuick(",
+                       "function progPicker(", "function showInProgress(", "'guild.progress.sel'", "'aria-haspopup': 'listbox'", "role: 'listbox'",
+                       "'aria-multiselectable': 'true'", "表示中の全部を選ぶ", "選択を解除", "進行中だけ", "自分の番だけ", "期限が近い5件", "進捗で見る",
+                       ".pgh{position:sticky", "progCandidates, progEffective, progQuick, showInProgress"):
+            self.assertIn(needle, self.board)
+
 
 class DocsContractTest(unittest.TestCase):
     def read(self, *p):
