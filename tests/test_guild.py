@@ -390,7 +390,7 @@ class InitAndNewTest(unittest.TestCase):
         q = guild.new_quest(self.root, "R20261010-1100")
         self.assertEqual(q["request"]["text"], "依頼文")
         self.assertTrue((Path(q["dir"]) / "request.json").exists())
-        self.assertEqual((Path(q["dir"]) / "inputs" / "memo.txt").read_text(encoding="utf-8"), "素材")
+        self.assertEqual((self.root / "guild" / "inputs" / "memo.txt").read_text(encoding="utf-8"), "素材")
         self.assertEqual(guild.list_requests(self.root), [])  # 受付待ちから消える
 
     def test_new_rejects_bad_or_missing_request(self):
@@ -1388,6 +1388,86 @@ class WorkDirTest(unittest.TestCase):
         webaccess.save(self.g, dict(webaccess.load(self.g), allow=["example.jp"]))
         self.assertTrue((self.g / ".work" / "web" / "access.json").is_file())
         self.assertFalse((self.g / "web").exists())
+
+
+class InputsTest(unittest.TestCase):
+    """素材は guild/inputs/ に1つだけ置く。上書き前の版はバックアップし、上書きした依頼が閉じたら消す。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.g = self.root / "guild"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def request(self, rid, **files):
+        w = self.g / ".work"
+        (w / "requests").mkdir(parents=True, exist_ok=True)
+        (w / "requests" / f"{rid}.json").write_text(json.dumps({"type": "request", "text": "t", "files": list(files)}), encoding="utf-8")
+        fdir = w / "requests" / "files" / rid
+        fdir.mkdir(parents=True)
+        for name, body in files.items():
+            (fdir / name).write_text(body, encoding="utf-8")
+
+    def test_new_quest_puts_inputs_in_the_shared_folder(self):
+        self.request("R20261010-1", **{"メモ.txt": "v1"})
+        q = guild.new_quest(self.root, "R20261010-1")
+        self.assertEqual((self.g / "inputs" / "メモ.txt").read_text(encoding="utf-8"), "v1")
+        self.assertEqual(q["inputs"], ["メモ.txt"])
+        self.assertEqual(guild.load_json(Path(q["dir"]) / "request.json")["inputs"], ["メモ.txt"])
+        self.assertFalse((Path(q["dir"]) / "inputs").exists())
+        self.assertFalse((self.g / ".work" / "requests" / "files" / "R20261010-1").exists())
+
+    def test_same_content_does_nothing_and_different_content_overwrites_with_backup(self):
+        self.request("R20261010-1", **{"メモ.txt": "v1"})
+        guild.new_quest(self.root, "R20261010-1")
+        self.request("R20261010-2", **{"メモ.txt": "v1"})
+        guild.new_quest(self.root, "R20261010-2")
+        self.assertFalse((self.g / ".work" / "backup").exists())  # 同じ内容なら何も起きない
+        self.request("R20261010-3", **{"メモ.TXT": "v2"})  # 大文字小文字だけ違う名前も同じもの
+        guild.new_quest(self.root, "R20261010-3")
+        self.assertEqual([p.name for p in (self.g / "inputs").iterdir()], ["メモ.txt"])
+        self.assertEqual((self.g / "inputs" / "メモ.txt").read_text(encoding="utf-8"), "v2")
+        self.assertEqual((self.g / ".work" / "backup" / "Q003" / "メモ.txt").read_text(encoding="utf-8"), "v1")
+
+    def test_a_quest_overwriting_twice_keeps_the_first_backup(self):
+        self.request("R20261010-1", **{"a.txt": "v1"})
+        guild.new_quest(self.root, "R20261010-1")
+        self.request("R20261010-2", **{"a.txt": "v2"})
+        guild.new_quest(self.root, "R20261010-2")
+        bak = self.g / ".work" / "backup" / "Q002" / "a.txt"
+        guild.import_inputs(self.g, self._files(**{"a.txt": "v3"}), "Q002")  # 同じ依頼が、もう一度上書きする
+        self.assertEqual(bak.read_text(encoding="utf-8"), "v1")  # 依頼前の版を失わない
+        self.assertEqual((self.g / "inputs" / "a.txt").read_text(encoding="utf-8"), "v3")
+
+    def _files(self, **kw):
+        d = Path(tempfile.mkdtemp(dir=self.tmp.name))
+        for n, b in kw.items():
+            (d / n).write_text(b, encoding="utf-8")
+        return d
+
+    def test_close_removes_only_backups_of_closed_quests(self):
+        self.request("R20261010-1", **{"a.txt": "v1"})
+        guild.new_quest(self.root, "R20261010-1")
+        for rid, body in (("R20261010-2", "v2"), ("R20261010-3", "v3")):
+            self.request(rid, **{"a.txt": body})
+            guild.new_quest(self.root, rid)
+        for q, extra in (("Q002", {"accepted": True}), ("Q003", {})):
+            guild.save_plan(self.g / ".work" / q / "plan.json", dict(plan(todo("T1")), **extra))
+        self.assertEqual(guild.close_quests(self.root), {"removed": ["Q002"]})
+        self.assertFalse((self.g / ".work" / "backup" / "Q002").exists())
+        self.assertTrue((self.g / ".work" / "backup" / "Q003").is_dir())  # 進行中の依頼のバックアップは残る
+        guild.save_plan(self.g / ".work" / "Q003" / "plan.json", dict(plan(todo("T1")), status="aborted"))
+        self.assertEqual(guild.close_quests(self.root), {"removed": ["Q003"]})
+
+    def test_unsafe_names_are_skipped(self):
+        d = self._files(**{"ok.txt": "x"})
+        (d / "sub").mkdir()
+        (d / "sub" / "inner.txt").write_text("y", encoding="utf-8")
+        self.assertEqual(guild.import_inputs(self.g, d, "Q001"), ["ok.txt"])  # サブフォルダは取り込まない
+        self.assertEqual([p.name for p in (self.g / "inputs").iterdir()], ["ok.txt"])
 
 
 if __name__ == "__main__":

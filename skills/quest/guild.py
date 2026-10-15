@@ -7,6 +7,7 @@ adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を�
 guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
 guild.py new ROOT [R…]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む。
 guild.py requests ROOT: 受付待ちの依頼を一覧する。
+guild.py close ROOT: 完了・中止した依頼のインプットのバックアップを消す。
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
@@ -418,6 +419,49 @@ def list_requests(root):
     return out
 
 
+INPUTS = "inputs"
+
+
+def import_inputs(gdir, files_dir, quest):
+    """依頼の素材を guild/inputs/ に取り込む（共通の置き場に1つだけ）。
+    ファイル名（大文字小文字は区別しない）が同じなら同じもの。内容が同じなら何もせず、違えば上書きする。
+    上書き前の版は .work/backup/<依頼>/ に残す（その依頼で最初に上書きする版だけ。依頼が閉じたら close で消す）。"""
+    inputs = Path(gdir) / INPUTS
+    inputs.mkdir(parents=True, exist_ok=True)
+    names = []
+    for src in sorted(Path(files_dir).iterdir()):
+        if not src.is_file():
+            continue  # サブフォルダは取り込まない
+        existing = {p.name.lower(): p for p in inputs.iterdir() if p.is_file()}
+        dest = existing.get(src.name.lower(), inputs / src.name)
+        if dest.exists():
+            if dest.read_bytes() != src.read_bytes():
+                bak = work_dir(gdir) / "backup" / quest
+                bak.mkdir(parents=True, exist_ok=True)
+                if not (bak / dest.name).exists():
+                    shutil.copy2(dest, bak / dest.name)
+                shutil.copy2(src, dest)
+        else:
+            shutil.copy2(src, dest)
+        names.append(dest.name)
+    return names
+
+
+def close_quests(root):
+    """閉じた依頼（受け取り済み、または中止）のインプットのバックアップを消す。進行中の依頼のものは残す。"""
+    wdir = work_dir(Path(root) / "guild")
+    removed = []
+    for q in sorted(wdir.glob("Q[0-9]*")):
+        bak, plan_path = wdir / "backup" / q.name, q / "plan.json"
+        if not bak.is_dir() or not plan_path.exists():
+            continue
+        plan = load_json(plan_path)
+        if plan.get("accepted") or plan.get("status") == "aborted":
+            shutil.rmtree(bak)
+            removed.append(q.name)
+    return {"removed": removed}
+
+
 def new_quest(root, request_id=None):
     """ROOT/guild/.work/ に次の依頼のフォルダ（Q001, Q002, …）を作る。request_id があれば、その受付待ちの依頼を取り込む。"""
     gdir = Path(root) / "guild"
@@ -441,9 +485,14 @@ def new_quest(root, request_id=None):
         out["request"] = load_json(src)
         shutil.move(str(src), str(qdir / "request.json"))
         files = wdir / "requests" / "files" / request_id
+        names = []
         if files.is_dir():
-            shutil.move(str(files), str(qdir / "inputs"))
-            out["inputs"] = str(qdir / "inputs")
+            names = import_inputs(gdir, files, qdir.name)
+            shutil.rmtree(files)
+        req = load_json(qdir / "request.json")
+        req["inputs"] = names
+        save_plan(qdir / "request.json", req)  # JSON を原子的に書く関数（plan 専用の名前だが中身は汎用）
+        out["inputs"], out["inputs_dir"] = names, str(gdir / INPUTS)
     return out
 
 
@@ -801,7 +850,7 @@ def archive_ingest(root):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "wait", "arrivals", "answers", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
@@ -831,6 +880,9 @@ def main(argv):
             else:
                 result = new_quest(path, argv[3] if len(argv) > 3 else None)
             print(json.dumps(result, ensure_ascii=False))
+            return 0
+        if cmd == "close":
+            print(json.dumps(close_quests(path), ensure_ascii=False))
             return 0
         if cmd == "adopt":
             print(json.dumps(adopt(path, load_transitions()), ensure_ascii=False))
