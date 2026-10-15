@@ -1342,5 +1342,24 @@ class PiledLettersTest(unittest.TestCase):
             self.assertEqual(guild.next_view(plan_)["review"], [f"H{i}" for i in range(1, 11)])
 
 
+class McpContractTest(unittest.TestCase):
+    """MCP は同梱しない。斥候は環境の Playwright MCP（サーバー名 playwright）を使い、init が先に確認する。"""
+
+    def test_no_bundled_mcp(self):
+        self.assertFalse((ROOT / ".mcp.json").exists())
+
+    def test_scout_uses_environment_playwright(self):
+        head = (ROOT / "agents" / "scout.md").read_text(encoding="utf-8").split("---")[1]
+        tools = re.search(r"^tools:(.*)$", head, re.M).group(1)
+        for name in ("navigate", "snapshot", "wait_for", "press_key", "take_screenshot", "tabs", "close"):
+            self.assertIn(f"mcp__playwright__browser_{name}", tools)
+        self.assertNotIn("plugin_guild_browser", tools)
+
+    def test_init_skill_checks_the_mcp_first(self):
+        s = (ROOT / "skills" / "init" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("mcp__playwright__browser_navigate", s)
+        self.assertLess(s.index("mcp__playwright__browser_navigate"), s.index("使える Python を探す"))
+
+
 if __name__ == "__main__":
     unittest.main()

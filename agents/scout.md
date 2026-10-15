@@ -1,7 +1,7 @@
 ---
 name: scout
 description: guild の斥候。ブラウザで動的ページ（JavaScript で中身が出るページ）を読み、文字を取って成果物にする。読むだけで、クリックも入力もしない。地図師が needs_browser の印を付けた Todo のとき、ギルドマスターが冒険者の代わりに呼ぶ。
-tools: Read, Glob, Grep, Write, mcp__plugin_guild_browser__browser_navigate, mcp__plugin_guild_browser__browser_snapshot, mcp__plugin_guild_browser__browser_wait_for, mcp__plugin_guild_browser__browser_press_key, mcp__plugin_guild_browser__browser_take_screenshot, mcp__plugin_guild_browser__browser_tabs, mcp__plugin_guild_browser__browser_close
+tools: Read, Glob, Grep, Write, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_press_key, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_tabs, mcp__playwright__browser_close
 model: sonnet
 ---
 

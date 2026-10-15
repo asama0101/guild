@@ -16,7 +16,7 @@
 - Claude Code
 - Python 3（`/guild:init` が `py`、`python3`、`python` の順に探します）
 - Chrome または Edge（ボードを開くため）
-- Node.js（`npx`。斥候が動的ページを読むときだけ。`.mcp.json` の Playwright MCP を使います）
+- Playwright MCP（斥候が動的ページを読むときに使う。`playwright` という名前で導入・接続しておく。未接続だと `/guild:init` が警告して止まる）
 
 ## 導入
 
