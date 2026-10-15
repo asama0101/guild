@@ -49,6 +49,7 @@ model: sonnet
 - `id`：`C1`, `C2`, …（重ならない）。
 - `confidence`：`sourced`（公開情報などの出典がある）か `guess`（推測）。`confirmed`（確認済み）は、依頼主が確認するまで付けない。
 - `source`：`sourced` のときは必須（URL と閲覧日、読んだファイルと場所）。`guess` のときは空でよい。
+- `inputs`（任意）：候補が `guild/inputs/` のファイルから分かったこと（例：用語の定義が書かれた資料）なら、そのファイル名を `"inputs": ["KGI定義.md"]` のように書く。次の依頼で、依頼文にこの項目の名前が出てきたとき、そのファイルが地図師に勧められる。ファイル名は `plan.json` の `inputs` の `name` を書き写す（作らない）。
 - 既存の項目と値が食い違うときは、`"conflict": true` を付けて、新しい値を `body` に書く（上書きされず、両方が残って「要確認」になる）。
 - `lesson` は `confidence` を `sourced`、`source` に根拠の報告（例 `Q001/reports/T1-appraiser.md`）にする。
 

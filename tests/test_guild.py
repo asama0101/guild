@@ -1757,6 +1757,41 @@ class DocsContractTest(unittest.TestCase):
             self.assertIn(needle, s)
         self.assertNotIn(".mcp.json", s)
 
+    def test_live_docs_have_no_template(self):
+        files = ["README.md", "skills/quest/SKILL.md", "docs/graph-format.md", "docs/archive-spec.md", "docs/spec.md"]
+        files += ["agents/" + p.name for p in (ROOT / "agents").glob("*.md")]
+        for f in files:
+            s = self.read(*f.split("/"))
+            for gone in ("template", "テンプレート", "templates/"):
+                self.assertNotIn(gone, s, f"{f} に {gone} が残っている")
+
+    def test_cartographer_selects_inputs_with_reasons(self):
+        s = self.read("agents", "cartographer.md")
+        for needle in ("`inputs-list` の出力", "**`guild/inputs/` にない名前を書かない**", "\"candidates\": [", "中身は読んでいない",
+                       "依頼主が外したファイルを、もう一度 `inputs` に書かない"):
+            self.assertIn(needle, s)
+
+    def test_roles_read_the_plan_inputs(self):
+        for name in ("adventurer.md", "appraiser.md", "scout.md"):
+            s = self.read("agents", name)
+            self.assertIn("`plan.json` の `inputs`", s, name)
+            self.assertIn("`guild/inputs/<name>`", s, name)
+        self.assertIn("\"inputs\": [\"KGI定義.md\"]", self.read("agents", "librarian.md"))
+
+    def test_quest_skill_passes_inputs_list_to_the_cartographer(self):
+        s = self.read("skills", "quest", "SKILL.md")
+        for needle in ("inputs-list <root> --text", "ファイルに保存せず、チャットにも書かない", "`.work/requests/rejected/`", "`guild/inputs/<name>`"):
+            self.assertIn(needle, s)
+
+    def test_graph_format_and_archive_spec_document_inputs(self):
+        g = self.read("docs", "graph-format.md")
+        for needle in ("inputs-list <root> [--text 依頼文]", '{"name": "KGI定義.md", "source": "user", "reason": "依頼主の指定"}',
+                       '{"type": "inputs", "add": [名前…], "remove": [名前…]}', ".work/requests/rejected/", "\"candidates\": ["):
+            self.assertIn(needle, g)
+        a = self.read("docs", "archive-spec.md")
+        for needle in ("## インプットへの紐づけ", "存在は検査しない", "書庫の用語『KGI』→ このファイル"):
+            self.assertIn(needle, a)
+
 
 class NoTemplateTest(unittest.TestCase):
     """納品物のテンプレートは廃止した。guild.py は templates/ を作らず、plan.json に template を持たない。"""

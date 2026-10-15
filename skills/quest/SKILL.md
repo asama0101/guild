@@ -35,7 +35,7 @@ disable-model-invocation: true
 
 依頼は2通りで届く。
 
-- **ボードから**：`guild.py requests <root>` で受付待ちの依頼を一覧し、**全部を受け付ける**（どれを受け付けるかは聞かない）。古い順に、依頼ごとに `guild.py new <root> <依頼のID>` で依頼のフォルダを作る。依頼文は `text`、素材は `files`。取り込むと共通の `guild/inputs/` に1つだけ置かれ（同名で内容が違えば上書き）、依頼の `request.json` の `inputs` にファイル名が入る。地図師・冒険者には `guild/inputs/<ファイル名>` で渡す。開始日は `start`、締切は `due`（未指定は、開始日が登録日、締切が開始日）。
+- **ボードから**：`guild.py requests <root>` で受付待ちの依頼を一覧し、**全部を受け付ける**（どれを受け付けるかは聞かない）。古い順に、依頼ごとに `guild.py new <root> <依頼のID>` で依頼のフォルダを作る。依頼文は `text`。インプットは、既存から選んだもの（`inputs`）とアップロードしたもの（`files`）。アップロードは共通の `guild/inputs/` に1つだけ置かれ（同名で内容が違えば上書き）、依頼の `request.json` の `inputs` に、選んだものとアップロードしたものの名前が入る。選んだインプットが `guild/inputs/` から消されていると、`new` は依頼を拒否して `.work/requests/rejected/` に移す（エラーの文をチャットで短く伝え、ボードの「＋ 新規」から出し直してもらう）。開始日は `start`、締切は `due`（未指定は、開始日が登録日、締切が開始日）。
 - **チャットから**：`/guild:quest` のあとに書かれた依頼文は、`guild.py new <root>` でフォルダを作り、`<dir>/request.json` に `{"type": "request", "text": "<依頼文>", "files": []}` を書く。
 
 何も届いていなければ、進行中の依頼があるかを見る（手順4へ）。進行中の依頼もなければ、「ボードの『新しい依頼』に書くか、`/guild:quest` のあとに依頼文を書いてください」と伝えて終える。
@@ -44,25 +44,27 @@ disable-model-invocation: true
 
 依頼ごとに、計画がまだないものについて行う。複数あれば、地図師は同時に呼んでよい。
 
-1. 地図師を呼ぶ（`subagent_type: guild:cartographer`）。メッセージに次を書く。
-   - 依頼文（`<dir>/request.json`）、素材（`request.json` の `inputs` のファイル名を `guild/inputs/<ファイル名>` で）
+1. 地図師を呼ぶ前に、`<python> "${CLAUDE_SKILL_DIR}/guild.py" inputs-list <root> --text "<依頼文>"` を実行する（`<依頼文>` は `request.json` の `text`。聞き取りの回答があれば、続けて足す）。出力は、`guild/inputs/` のファイルの一覧と、書庫の項目からのヒント。
+2. 地図師を呼ぶ（`subagent_type: guild:cartographer`）。メッセージに次を書く。
+   - 依頼文（`<dir>/request.json`）と、依頼主が指定したインプット（`request.json` の `inputs`）
+   - `inputs-list` の出力（JSON）を、そのまま。**ファイルに保存せず、チャットにも書かない**（ファイルの先頭の行に秘密が含まれうるため、地図師にだけ渡す）
    - 依頼の開始日・締切（`request.json` の `start`・`due`）
    - 依頼のフォルダ、書庫の場所（`guild/archive/`）
    - 出力先：`<dir>/reports/plan-draft.json`
-   - テンプレート（`template`。あれば `guild/` からのパスを、そのまま渡す。テンプレートは Markdown だけ）
-   - 質問への回答があるとき、またはやり直しのときは、その内容（下の3・4）
-2. `plan-draft.json` を読む。
+   - 質問への回答があるとき、またはやり直しのときは、その内容（下の4・5）
+3. `plan-draft.json` を読む。
    - `questions` が空でなければ、そこで止める。ボードが `plan-draft.json` を読んで、質問の手紙を出す。あなたは何もしない（手順4で、回答の到着を待つ）。
-   - `questions` が空なら、`guild.py adopt <dir>/plan.json` を実行する。検査に落ちたら、エラーを添えて地図師に差し戻す（2回まで）。直らなければ、状況を短くチャットで伝えて、その依頼は止める。
-3. 質問への回答が届いたら（`guild.py answers <dir>` で取り出す）、その内容を添えて地図師をもう一度呼ぶ（手順1へ）。
-4. 「計画を直す」が届いたら（計画の `status` が `replan`）、地図師を呼び直す（手順1へ）。
+   - `questions` が空なら、`guild.py adopt <dir>/plan.json` を実行する。検査に落ちたら（`inputs`・`candidates` の名前が `guild/inputs/` にない、など）、エラーを添えて地図師に差し戻す（2回まで）。直らなければ、状況を短くチャットで伝えて、その依頼は止める。
+4. 質問への回答が届いたら（`guild.py answers <dir>` で取り出す）、その内容を添えて地図師をもう一度呼ぶ（手順1へ。回答を足して `inputs-list` からやり直す）。
+5. 「計画を直す」が届いたら（計画の `status` が `replan`）、地図師を呼び直す（手順1へ）。
    - 渡すもの：これまでの計画と、`plan.json` の `history` の最後の `decision`（`choice` が `replan`）の `comment`。
    - メッセージに必ず書くこと：「完了済み（`done`）の Todo は、`id`・種別・題名・合格基準を変えずにそのまま残す。直すのは、できなかった部分と、足す部分だけ」。
    - `adopt` は `replan` のときだけ上書きできる。完了済みの Todo と経緯（`history`）は引き継がれ、引き継がなかった Todo の古い成果物と報告は `<dir>/prev/` へ退避される。
+   - 計画の `inputs` は、依頼主の追加・外すを含めて引き継がれる（`adopt` が決める。依頼主が外したものは、地図師が選び直しても戻らない）。
 
 ## 3. 承認（1回だけ）
 
-計画ができたら（`adopt` のあと）、ボードに「計画の承認」の手紙が出る。あなたは何もしない。依頼主が承認すると `approve` が届くので、`guild.py ingest <plan>` で反映する（手順4）。
+計画ができたら（`adopt` のあと）、ボードに「計画の承認」の手紙が出る。あなたは何もしない。依頼主が承認すると `approve` が届くので、`guild.py ingest <plan>` で反映する（手順4）。承認の手紙と、ボードの「インプット」タブには、選ばれたインプットが「指定」「自動（理由つき）」の印つきで出る。依頼主が追加・外すをすると、`inputs` の入力が `inbox/` に届くので、`guild.py ingest <plan>` で反映する（承認の前でも後でも）。
 
 承認は計画のこの1回だけ。以降は、確認の印がある Todo の前と、失敗の判断、そして最後の受け取りの確認以外では、承認を取らない（どれもボードの手紙）。
 
@@ -75,7 +77,7 @@ disable-model-invocation: true
    - 書庫への入力（`kind` が `archive`。依頼主がボードで書庫に直接登録・昇格・廃止・種類の付け替えをしたもの）→ `guild.py archive-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
    - 外部アクセスの答え（`kind` が `web`。依頼主がボードで、冒険者の WebFetch の許可・不許可や、許可リストの変更をしたもの）→ `guild.py web-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
    - `inbox`（計画あり。登録候補への答え `archive` も含む）→ `guild.py ingest <dir>/plan.json`。拒否された入力があれば、理由を短くチャットで伝える。
-   - `inbox`（計画なし）→ `guild.py answers <dir>` で回答を取り出し、手順2の3へ。
+   - `inbox`（計画なし）→ `guild.py answers <dir>` で回答を取り出し、手順2の4へ。
 2. **進める**：計画のある依頼ごとに、`guild.py sync <plan>`、続けて `guild.py next <plan>` を実行する。`next` の各グループを次のように扱う。
 
    | グループ | 対応 |
@@ -83,6 +85,8 @@ disable-model-invocation: true
    | `ready` | 冒険者を呼ぶ（`guild:adventurer`）。ただし `plan.json` でその Todo に `needs_browser: true` があれば、斥候（`guild:scout`）を呼ぶ。互いに独立な冒険者は同時に呼んでよい。**斥候は、ブラウザが1つなので、同時に1人まで**（複数あれば1人ずつ）。メッセージに、依頼のフォルダ、Todo の `id`、`criteria`、やり直しなら鑑定士の指摘の場所を書く。返ってきたら、下の「外部アクセスの確認」を済ませてから `guild.py advance <plan> <id> submitted` |
    | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の Todo なら冒険者の `reports/<id>-adventurer.md`（斥候なら `reports/<id>-scout.md`）、「あなたの実行」の Todo なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる）。`needs_scout`（開けない出典の確認待ち）のときは `advance` を送らず、下の「出典の確認」を行う |
    | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える（`awaiting_accept` の納品物の置き方は、下の「納品物を置く」） |
+
+   冒険者・斥候・鑑定士へのメッセージには、`plan.json` の `inputs` のファイルを `guild/inputs/<name>` の形で並べて書く（`source` と `reason` も添える）。各役は、その Todo に関係するものだけ読む。
 
    **納品物を置く**：`next` の出力で `awaiting_accept` が `true` になった依頼は、`"${CLAUDE_SKILL_DIR}/guild.py" publish <dir>` を実行する（`<python>` を前に付ける。何度実行しても同じ。依頼主の「受け取る」を `ingest` が取り込んだときも、`ingest` が同じ納品物を置く。`complete` になったのに `guild/deliverables/Q###_…` がなければ、`publish <dir>` をもう一度実行してよい。納品物と `*.prompt.md` が `guild/deliverables/Q###_…` に置かれ、ボードの「受け取りの確認」の手紙と Obsidian の両方で読める）。「直してほしい」（`replan`）になると、`adopt` が置いたものを取り下げるので、また全 Todo が済んだ時に実行する。
 
@@ -102,7 +106,7 @@ disable-model-invocation: true
 3. **何か進めたら**、手順1に戻る。
 4. **何も進められないとき**：
    - `complete`（全 Todo が済み、依頼主が受け取った）、または `status` が `aborted`（`next` の出力に `status` と `approved` がある）になった依頼で、`<dir>/archive.json` がまだないものは、`guild.py web-reset <root>` と `guild.py close <root>`（閉じた依頼のインプットのバックアップを消す）の両方を実行してから、手順5・6を行う（進めたことになるので、手順1に戻る）。
-   - すべての依頼が `complete` か `aborted` で、どれも `archive.json` の `status` が `done`（書庫の登録候補の確認が済んでいる）なら、終える。`archive.json` の `status` が `proposed` のもの（依頼主が登録候補に答えていない）は、終わりにしない。**`awaiting_accept`（全 Todo は済んだが、依頼主が受け取っていない）は、終わりにしない。** ボードの「受け取りの確認」の手紙に依頼主が答えるのを待つ。ギルドマスターが勝手に完了にしない。`replan` のものは、手順2の4で地図師を呼んでいる最中なので、終わりにしない。
+   - すべての依頼が `complete` か `aborted` で、どれも `archive.json` の `status` が `done`（書庫の登録候補の確認が済んでいる）なら、終える。`archive.json` の `status` が `proposed` のもの（依頼主が登録候補に答えていない）は、終わりにしない。**`awaiting_accept`（全 Todo は済んだが、依頼主が受け取っていない）は、終わりにしない。** ボードの「受け取りの確認」の手紙に依頼主が答えるのを待つ。ギルドマスターが勝手に完了にしない。`replan` のものは、手順2の5で地図師を呼んでいる最中なので、終わりにしない。
    - そうでなければ（依頼主の答えを待っている）、`guild.py wait <root> 43200`（12時間）を、**バックグラウンドで実行する**（Bash の `run_in_background: true`）。待っている間は、会話は止まり、トークンを使わない。答えが届くと `wait` が1秒ほどで終わり、終了の通知が来る。通知が来たら、出力（`arrived`）を読み、手順1へ。
      - 実行したら、チャットに「ボードで答えを待っています」と**1回だけ**書いて、手を止める。ほかの命令を重ねて出さない。通知が来る前に、結果を推測して進めない。
      - 通知が `timeout`（12時間たっても来なかった）なら、**何も書かずに**、同じ待機をもう一度バックグラウンドで始める。**回数で打ち切らない**（依頼主がすぐに確認できないことがある。何日でも待つ）。
