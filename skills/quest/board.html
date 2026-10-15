@@ -51,6 +51,7 @@ body{margin:0;background:var(--bg)}
 .qmain{grid-template-columns:repeat(auto-fit,minmax(220px,max-content));margin:12px 0 0}
 .qopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 20px;align-items:start;margin-top:10px}
 .saved{margin:8px 0 0;font-size:13.5px;color:var(--ok);font-weight:700}
+.toastfix{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);margin:0;z-index:40;background:var(--surface);border:1px solid var(--brass);border-radius:6px;padding:8px 16px;box-shadow:0 2px 10px rgba(0,0,0,.25);max-width:90vw}
 .legend2{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--sub);margin:0 0 12px}
 .legend2 .sw{display:inline-block;width:22px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 .gantt{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 18px 16px;margin-bottom:16px}
@@ -654,7 +655,7 @@ function promptRow(f) {
   return h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, f.replace(/^deliverables\//, '')),
     h('span', { class: 'acts' },
       h('button', { type: 'button', class: 'btn ghost sm', onclick: () => openFile(f) }, '開く'),
-      h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => { const t = await S.fs.readText(f); if (t == null) { S.toast = '読めませんでした'; render(); return; } copyText(t.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, ''), 'プロンプト'); } }, 'プロンプトをコピー'),
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: async () => { const t = await S.fs.readText(f); if (t == null) { S.toast = '読めませんでした'; render(); return; } copyText(t.replace(/^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---\r?\n?/, ''), 'プロンプト'); } }, 'プロンプトをコピー'),
       h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyPath(f) }, 'パスをコピー')));
 }
 function deliverableBlock(qd) {
@@ -1427,7 +1428,7 @@ function flowSvg() {
 const ROLES = [
   ['ギルドマスター', null, '/guild:quest が動いている間、ずっと', '依頼を受け付け、役を呼び、あなたの答えを待ちます。進め方の判断（順序・遷移・やり直し）は guild.py に任せ、自分では判断しません。', '/guild:quest を動かしているセッションのモデル'],
   ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる Todo を決めます。納品物は Markdown だけです。PowerPoint・Excel など Markdown 以外が要るときは、Claude Code に渡すプロンプト（*.prompt.md）にします。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
-  ['冒険者', 'adventurer', '自動でできる Todo ごと', '調べる・書き写す・整理する・書く。最後のまとめの Todo では、納品物の資料（Markdown）を作ります。Markdown 以外が要る部分は、Claude Code に渡すプロンプト（*.prompt.md）を書きます。報告は reports/、成果物は output/ に書き、納品物は全 Todo が済んだとき guild.py が deliverables/ に置きます。'],
+  ['冒険者', 'adventurer', '自動でできる Todo ごと', '調べる・書き写す・整理する・書く。最後のまとめの Todo では、納品物の資料（Markdown）を作ります。Markdown 以外が要る部分は、Claude Code に渡すプロンプト（*.prompt.md）を書きます。報告は .work/Q###/reports/、成果物は .work/Q###/output/ に書き、納品物は全 Todo が済んだとき guild.py が deliverables/ に置きます。'],
   ['斥候', 'scout', '動的ページを読む Todo。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
   ['鑑定士', 'appraiser', 'Todo ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、斥候に読んでもらいます。成果物は直しません。'],
   ['司書', 'librarian', '依頼が完了したあと、中止したあと', '報告と成果物から、書庫に残す用語・業務フロー・業務情報・個人・心得の候補を、12件まで挙げます。登録はしません（選ぶのはあなたです。心得だけは、そのまま登録されます）。'],
@@ -1517,6 +1518,15 @@ function goCompose() {
   const ta = document.getElementById('qreq'); if (ta) { ta.scrollIntoView({ block: 'center' }); ta.focus(); }
 }
 
+// 読み・コピーの結果は、手紙や納品物のタブにも出す（読み取り画面・保存失敗の枠が開いているときは、その中に出るので重ねない）。3秒で消す
+function toastBox() { return S.toast && !S.reader && !S.fallback ? h('p', { class: 'saved toastfix', role: 'status' }, S.toast) : null; }
+function keepToast() {
+  if (S.toast === S.toastFor) return;
+  clearTimeout(S.toastTimer); S.toastFor = S.toast;
+  if (!S.toast) return;
+  const shown = S.toast;
+  S.toastTimer = setTimeout(() => { S.toastFor = ''; if (S.toast === shown) { S.toast = ''; render(); } }, 3000);
+}
 function render() {
   const app = document.getElementById('app');
   const ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.key : null, ss = ae && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
@@ -1527,7 +1537,8 @@ function render() {
   const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, talk: talkTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
-    h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox()].filter(Boolean));
+    h('div', { class: 'panel' }, connectBox(), body)), ...[reader(), fallbackBox(), toastBox()].filter(Boolean));
+  keepToast();
   window.scrollTo(0, sy);
   const newBox = document.querySelector('.rbox'); if (newBox && boxTop) newBox.scrollTop = boxTop;
   if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus({ preventScroll: true }); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
