@@ -622,29 +622,27 @@ class AcceptTest(unittest.TestCase):
         self.assertFalse(p.get("accepted"))
 
 
-class FormatTest(unittest.TestCase):
-    """納品物の形式。未対応の形式は検査で落ちる。"""
+class MarkdownOnlyTest(unittest.TestCase):
+    """納品物は Markdown だけ。format の項目はなく、テンプレートも .md だけ。"""
 
-    def test_default_is_md_and_unknown_is_rejected(self):
+    def test_no_format_machinery(self):
+        self.assertFalse(hasattr(guild, "FORMATS"))
         self.assertEqual(guild.validate(plan(todo("T1")), TR), [])
-        p = plan(todo("T1"))
-        p["format"] = "pptx"
-        self.assertTrue(any("format" in e for e in guild.validate(p, TR)))
-        p["format"] = "md"
-        self.assertEqual(guild.validate(p, TR), [])
 
-    def test_adopt_carries_format(self):
+    def test_adopt_does_not_carry_format(self):
         with tempfile.TemporaryDirectory() as d:
             q = Path(d) / "Q001"
             (q / "reports").mkdir(parents=True)
-            draft = {"quest": "Q001", "title": "t", "format": "md", "todos": [
-                {"id": "T1", "title": "x", "kind": "auto", "deps": [], "deliverable": True,
-                 "criteria": {"viewpoint": "a", "pass_line": "b", "check": "c"}}]}
+            draft = {"quest": "Q001", "title": "t", "format": "pptx", "todos": [
+                {"id": "T1", "title": "x", "kind": "auto", "deps": [], "deliverable": True, "criteria": CRIT}]}
             (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
-        self.assertEqual(saved["format"], "md")
+        self.assertNotIn("format", saved)
         self.assertTrue(saved["todos"][0]["deliverable"])
+
+    def test_prompt_suffix(self):
+        self.assertEqual(guild.PROMPT_SUFFIX, ".prompt.md")
 
 
 class TemplateTest(unittest.TestCase):
@@ -668,12 +666,13 @@ class TemplateTest(unittest.TestCase):
             saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
         self.assertEqual(saved["template"], "templates/週次.md")
 
-    def test_adopt_rejects_unreadable_template_format(self):
-        with tempfile.TemporaryDirectory() as d:
-            q = self.make(d, "templates/週次.docx")
-            (Path(d) / "guild" / "templates" / "週次.docx").write_bytes(b"PK")
-            with self.assertRaises(guild.GuildError):
-                guild.adopt(q / "plan.json", TR)
+    def test_adopt_rejects_non_markdown_template(self):
+        for ext in ("docx", "txt", "csv"):
+            with self.subTest(ext=ext), tempfile.TemporaryDirectory() as d:
+                q = self.make(d, f"templates/週次.{ext}")
+                (Path(d) / "guild" / "templates" / f"週次.{ext}").write_bytes(b"x")
+                with self.assertRaises(guild.GuildError):
+                    guild.adopt(q / "plan.json", TR)
 
     def test_adopt_rejects_missing_or_outside_template(self):
         for bad in ("templates/ない.md", "../config.json", "templates/../config.json", "/etc/passwd", "board.html"):

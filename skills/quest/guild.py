@@ -44,11 +44,8 @@ def gdir_of(qdir):
     """依頼のフォルダ（guild/.work/Q001）から guild/ を返す。"""
     return Path(qdir).parent.parent
 
-# 納品物の形式（拡張子）。作れるようになったものから足す
-FORMATS = {"md": ".md"}
-# 納品物のテンプレートとして、中身を読んで使える形式（文字のファイル）
-TEMPLATE_READABLE = (".md", ".markdown", ".txt", ".csv")
 SATISFIED = ("done", "skipped")
+PROMPT_SUFFIX = ".prompt.md"  # Markdown 以外（PowerPoint・Excel など）が要るときの、Claude Code に渡すプロンプトのファイル名
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -137,8 +134,6 @@ def validate(plan, tr):
     todos = plan.get("todos")
     if not isinstance(todos, list) or not todos:
         return ["todos がありません"]
-    if plan.get("format", "md") not in FORMATS:
-        errs.append(f"format が未対応です: {plan.get('format')}（対応: {', '.join(FORMATS)}）")
     for k in ("start", "due"):
         try:
             check_date(plan.get(k), k)
@@ -376,10 +371,10 @@ def adopt(plan_path, tr):
         tpl = gdir_of(plan_path.parent) / str(template)
         if len(parts) != 2 or parts[0] != "templates" or parts[1] in ("", ".", "..") or not tpl.is_file():
             raise GuildError(f"template が不正か、見つかりません: {template}")
-        if not str(template).lower().endswith(TEMPLATE_READABLE):
-            raise GuildError(f"template の形式は、今は読めません: {template}（読める形式: {', '.join(TEMPLATE_READABLE)}）")
+        if not str(template).lower().endswith(".md"):
+            raise GuildError(f"template は Markdown（.md）だけです: {template}")
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False,
-            "status": "active", "format": draft.get("format", "md"), **({"template": template} if template else {}),
+            "status": "active", **({"template": template} if template else {}),
             **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}), "todos": [], "history": [{"t": now(), "event": "adopted"}]}
     plan.update(quest_dates(plan_path.parent, old))
     for t in todos:
@@ -458,7 +453,7 @@ def list_requests(root):
                 d = load_json(f)
             except GuildError:
                 continue
-            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "format": d.get("format", "md"), "template": d.get("template"), "files": d.get("files", [])})
+            out.append({"id": f.stem, "text": d.get("text", ""), "due": d.get("due"), "template": d.get("template"), "files": d.get("files", [])})
     return out
 
 
