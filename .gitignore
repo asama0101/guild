@@ -1,3 +1,23 @@
+# 会議・調査の作業フォルダ
 *_roundtable_*/
+
+# Claude Code・Superpowers のローカル作業用（プラグインに不要）
+.claude/
+.superpowers/
 .playwright-mcp/
+
+# 実行時に作られるギルドのデータ（作業するプロジェクト側のもの）
+/guild/
+
+# Python
 __pycache__/
+*.py[cod]
+.pytest_cache/
+
+# エディタ・OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
