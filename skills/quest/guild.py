@@ -52,6 +52,7 @@ def gdir_of(qdir):
     return Path(qdir).parent.parent
 
 SATISFIED = ("done", "skipped")
+MAX_RETRIES_LIMIT = 5  # Todo ごとの max_retries の上限
 PROMPT_SUFFIX = ".prompt.md"  # Markdown 以外（PowerPoint・Excel など）が要るときの、Claude Code に渡すプロンプトのファイル名
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -200,7 +201,7 @@ def effective(tr, kind):
 def guard_ok(name, todo, tr):
     if name is None:
         return True
-    left = todo.get("retries", 0) < tr.get("max_retries", 0)
+    left = todo.get("retries", 0) < todo.get("max_retries", tr.get("max_retries", 0))  # Todo ごとの max_retries が先
     return {"confirm": bool(todo.get("confirm")), "no_confirm": not todo.get("confirm"),
             "retries_left": left, "no_retries_left": not left}[name]
 
@@ -254,6 +255,10 @@ def validate(plan, tr):
         for k in CRITERIA_KEYS:
             if not str(c.get(k, "")).strip():
                 errs.append(f"{i}: criteria.{k} が空です")
+        if "max_retries" in t:
+            m = t["max_retries"]
+            if not isinstance(m, int) or isinstance(m, bool) or not 0 <= m <= MAX_RETRIES_LIMIT:
+                errs.append(f"{i}: max_retries は 0〜{MAX_RETRIES_LIMIT} の整数にしてください: {m!r}")
         if t.get("confirm") and t.get("kind") != "auto":
             errs.append(f"{i}: confirm は auto の Todo だけに付けられます")
         for k in ("scheduled", "due"):
@@ -342,11 +347,28 @@ def next_view(plan, qdir=None):
     return out
 
 
+def check_evidence(plan, todo_id, qdir):
+    """passed の証拠ゲート：鑑定士の報告 reports/<id>-appraiser.md があり、空でなく、Todo が鑑定待ちになったあとに書かれていること。
+    報告を読まずに、または古い報告のまま合格にすることを防ぐ（rejected には要らない）。"""
+    f = Path(qdir) / "reports" / f"{todo_id}-appraiser.md"
+    if not f.is_file() or f.stat().st_size == 0:
+        raise GuildError(f"{todo_id}: 鑑定士の報告 reports/{todo_id}-appraiser.md がないか空です。鑑定士が報告を書いてから passed を送ってください")
+    sent = [h for h in plan.get("history", []) if h.get("id") == todo_id and h.get("to") == "review"]
+    if sent:
+        try:
+            ts = datetime.datetime.fromisoformat(sent[-1]["t"]).timestamp()
+        except (KeyError, ValueError, TypeError):
+            return
+        if f.stat().st_mtime < ts - 2:
+            raise GuildError(f"{todo_id}: 鑑定士の報告が、鑑定待ちになる前の古いものです。鑑定士にもう一度判定させてください")
+
+
 def ingest(plan_path, plan, tr, commit=None):
     inbox = Path(plan_path).parent / "inbox"
     report = {"applied": [], "rejected": [], "warnings": []}
     if not inbox.is_dir():
         return report
+    after = []  # 計画の保存のあとにする、ファイルの退避（retry の古い成果物）
     moves = []  # 入力ファイルの移動は、計画の保存（commit）のあとに行う。保存前に落ちても、入力は inbox に残る
     for f in sorted(inbox.glob("*.json")):
         try:
@@ -354,7 +376,7 @@ def ingest(plan_path, plan, tr, commit=None):
             if isinstance(data, dict) and data.get("type") == "archive":
                 archive_decide(Path(plan_path).parent, data)  # 書庫の確認は、中止された依頼でも受け付ける
             else:
-                apply_input(plan, data, tr, Path(plan_path).parent)
+                apply_input(plan, data, tr, Path(plan_path).parent, after)
                 write_user_report(Path(plan_path).parent, data)
                 qdir = Path(plan_path).parent
                 try:
@@ -372,6 +394,11 @@ def ingest(plan_path, plan, tr, commit=None):
         report[key].append(item)
     if commit is not None:
         commit()
+    for job in after:
+        try:
+            job()
+        except OSError as e:
+            report["warnings"].append(f"古い成果物の退避に失敗しました（{e}）。output/ と reports/ に残った古いファイルを、手で prev/ へ移してください")
     for f, dest in moves:
         try:
             dest.mkdir(exist_ok=True)
@@ -394,7 +421,7 @@ def write_user_report(qdir, data):
     (rep / f"{data['todo']}-user.md").write_text(body, encoding="utf-8")
 
 
-def apply_input(plan, data, tr, qdir=None):
+def apply_input(plan, data, tr, qdir=None, after=None):
     kind = data.get("type")
     tm = todo_map(plan)
     status = plan.get("status", "active")
@@ -441,6 +468,13 @@ def apply_input(plan, data, tr, qdir=None):
         t["output"] = {"note": data.get("note", ""), "files": data.get("files", [])}
     elif kind == "decision" and data.get("choice") == "skip":
         apply_event(t, "skip", tr, plan)
+    elif kind == "decision" and data.get("choice") == "retry":
+        # 失敗した Todo をもう一度やる。やり直しの回数は数え直し、古い成果物と報告は prev/ へ退避する（保存のあと）
+        apply_event(t, "retry", tr, plan)
+        t["retries"], t["output"] = 0, None
+        if qdir is not None:
+            job = lambda: archive_outputs({"todos": [t]}, [], qdir)
+            after.append(job) if after is not None else job()
     elif kind == "decision" and data.get("choice") == "drop":
         # 失敗した Todo と、それに(間接にでも)依存する後続をやめる。後続は実行しない
         apply_event(t, "skip", tr, plan)
@@ -1504,6 +1538,8 @@ def mutate_plan(cmd, path, argv):
         t = todo_map(plan).get(argv[3])
         if t is None:
             raise GuildError(f"todo がありません: {argv[3]}")
+        if argv[4] == "passed":
+            check_evidence(plan, t["id"], Path(path).parent)
         apply_event(t, argv[4], tr, plan)
         result = {"id": t["id"], "state": t["state"]}
     else:

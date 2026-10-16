@@ -933,6 +933,8 @@ class CliAndScenarioTest(unittest.TestCase):
         self.cli("sync", str(self.path))
         self.assertEqual(self.current(), {"T1": "running", "T2": "pending", "T3": "pending"})
         self.cli("advance", str(self.path), "T1", "submitted")
+        (self.path.parent / "reports").mkdir(exist_ok=True)
+        (self.path.parent / "reports" / "T1-appraiser.md").write_text("## 判定\npassed\n", encoding="utf-8")  # 証拠ゲート：鑑定士の報告
         self.cli("advance", str(self.path), "T1", "passed")
         self.cli("sync", str(self.path))
         self.assertEqual(self.current()["T2"], "waiting_user")

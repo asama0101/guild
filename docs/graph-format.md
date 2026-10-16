@@ -30,7 +30,9 @@
     {"from": "review", "event": "passed", "to": "done"},
     {"from": "review", "event": "rejected", "to": "running", "guard": "retries_left"},
     {"from": "review", "event": "rejected", "to": "failed", "guard": "no_retries_left"},
-    {"from": "failed", "event": "skip", "to": "skipped"}
+    {"from": "failed", "event": "skip", "to": "skipped"},
+    {"from": "failed", "event": "retry", "to": "awaiting_confirm", "guard": "confirm"},
+    {"from": "failed", "event": "retry", "to": "running", "guard": "no_confirm"}
   ],
   "kinds": {
     "auto": {"override": []},
@@ -39,6 +41,7 @@
         {"from": "pending", "event": "deps_done", "to": "waiting_user"},
         {"from": "waiting_user", "event": "submitted", "to": "review"},
         {"from": "waiting_user", "event": "reported_failed", "to": "failed"},
+        {"from": "failed", "event": "retry", "to": "waiting_user"},
         {"from": "review", "event": "rejected", "to": "waiting_user", "guard": "retries_left"},
         {"from": "review", "event": "rejected", "to": "failed", "guard": "no_retries_left"}
       ]
@@ -47,7 +50,7 @@
 }
 ```
 
-- 共通の流れ: `pending → running → review → done`。不合格なら `running` に戻り、回数を超えたら `failed`。`failed` は終端ではなく、依頼主の判断（`skip`）で `skipped` になる。
+- 共通の流れ: `pending → running → review → done`。不合格なら `running` に戻り、回数を超えたら `failed`。`failed` は終端ではなく、依頼主の判断（`skip`）で `skipped` になるか、`retry`（もう一度やる）で戻る。やり直しの回数の上限は、既定は `max_retries`（2）で、Todo に `max_retries`（0〜5 の整数）を書くとその Todo だけ変えられる。
 - `confirm: true` の Todo は `running` の前に `awaiting_confirm` を通る。前提が失敗した Todo は `blocked` になり、前提が済めば `pending` に戻る。
 - `human` 種別だけ、`running`（自動実行中）の代わりに `waiting_user`（ボードで依頼主の入力待ち）を通る。不合格のときも `waiting_user` に戻る。差分はこの種別だけ。
 - `guard` は Python 側の固定の判定名（`confirm`、`no_confirm`、`retries_left`、`no_retries_left`）。式は書かない。
@@ -182,7 +185,8 @@
 | `pause-status <root>` | pause.json があるか（`paused`）。中身は見ず、壊れていても「あり」。ギルドマスターが周回の頭で見る。あれば、新しい役を呼ばず、実行中の役が終わるのを待って止まる |
 | `pause-clear <root>` | pause.json を消す（`cleared`）。`/guild:quest` の起動時（ギルドを開ける）。なくても何も起きない |
 
-イベント: `deps_done`（`sync` が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。ほかに `dep_failed`・`unblock`・`confirmed`・`declined`・`reported_failed`・`skip`。
+イベント: `deps_done`（`sync` が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。ほかに `dep_failed`・`unblock`・`confirmed`・`declined`・`reported_failed`・`skip`・`retry`。
+`advance <plan> <id> passed` は、証拠ゲートを通らないと拒否される：鑑定士の報告 `reports/<id>-appraiser.md` があり、空でなく、その Todo が鑑定待ち（`review`）になったあとに書かれていること（古い報告のままの合格を防ぐ。`rejected` には要らない）。
 
 ## 決定（未決だった3点）
 
@@ -191,7 +195,7 @@
   - 反映の合図は要らない。`/guild:quest` が `guild.py wait` で到着を待ち、届いたら `ingest` で取り込む。
 - **入力の契約と書き込み側の方針**: 境界は『`guild/.work/Q###/inbox/*.json` に入力が置かれたら `guild.py ingest` が拾う』に固定する。最初の版の書き込み側は File System Access API とし、書けないときは『JSON をコピー』ボタンに落とす。保存の失敗は理由を画面に出す。ローカルサーバー（`guild.py serve`）は最初の版では作らない。自動で進めたくなったら書き込み側だけを差し替える。
 - **確認の印**: Todo に `confirm: true` を持たせる。分解時に付け、計画の承認で見える。`next` は、`confirm: true` の Todo を『確認待ち』として別に返し、確認が済むまで `running` にしない。
-- **失敗の扱い**: `failed` の Todo に依存する後続は止める（`blocked`）。依存しない系統は進め続ける。ボードで依頼主に『その Todo だけやめて後続は進める（`skip`）／後続もやめる（`drop`）／計画を直す（`replan`）／中止（`abort`）』を選んでもらい、`decision` として戻す。
+- **失敗の扱い**: `failed` の Todo に依存する後続は止める（`blocked`）。依存しない系統は進め続ける。ボードで依頼主に『もう一度やる（`retry`。やり直しの回数を 0 に戻し、古い成果物と報告を `prev/` へ退避する。確認の印の Todo は、もう一度確認を聞く）／その Todo だけやめて後続は進める（`skip`）／後続もやめる（`drop`）／計画を直す（`replan`）／中止（`abort`）』を選んでもらい、`decision` として戻す。
 
 ## 排他ロックと保存の順序
 

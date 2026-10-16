@@ -86,7 +86,7 @@ disable-model-invocation: true
    | グループ | 対応 |
    |---|---|
    | `ready` | 冒険者を呼ぶ（`guild:adventurer`）。ただし `plan.json` でその Todo に `needs_browser: true` があれば、斥候（`guild:scout`）を呼ぶ。互いに独立な冒険者は同時に呼んでよい。**斥候は、ブラウザが1つなので、同時に1人まで**（複数あれば1人ずつ）。メッセージに、依頼のフォルダ、Todo の `id`、`criteria`、やり直しなら鑑定士の指摘の場所を書く。返ってきたら、下の「外部アクセスの確認」を済ませてから `guild.py advance <plan> <id> submitted` |
-   | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の Todo なら冒険者の `reports/<id>-adventurer.md`（斥候なら `reports/<id>-scout.md`）、「あなたの実行」の Todo なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる）。`needs_scout`（開けない出典の確認待ち）のときは `advance` を送らず、下の「出典の確認」を行う |
+   | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の Todo なら冒険者の `reports/<id>-adventurer.md`（斥候なら `reports/<id>-scout.md`）、「あなたの実行」の Todo なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`（鑑定士の報告 `reports/<id>-appraiser.md` がない・空・古いと `guild.py` が拒否する。拒否されたら、鑑定士を呼び直して報告を書かせる。自分で報告を作らない）、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる）。`needs_scout`（開けない出典の確認待ち）のときは `advance` を送らず、下の「出典の確認」を行う |
    | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える（`awaiting_accept` の納品物の置き方は、下の「納品物を置く」） |
 
    冒険者・斥候・鑑定士へのメッセージには、`plan.json` の `inputs` のファイルを `guild/inputs/<name>` の形で並べて書く（`source` と `reason` も添える）。各役は、その Todo に関係するものだけ読む。
