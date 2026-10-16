@@ -248,6 +248,9 @@ def validate(plan, tr):
         if t.get("state") not in tr["states"]:
             errs.append(f"{i}: state が不明です: {t.get('state')}")
         c = t.get("criteria") or {}
+        if not isinstance(c, dict):
+            errs.append(f"{i}: criteria はオブジェクト（viewpoint・pass_line・check）にしてください")
+            continue
         for k in CRITERIA_KEYS:
             if not str(c.get(k, "")).strip():
                 errs.append(f"{i}: criteria.{k} が空です")
@@ -612,6 +615,8 @@ def check_plan_inputs(plan):
 
 
 AMBIGUOUS = ("適切", "十分", "適宜", "なるべく", "できるだけ", "速やか", "高品質", "わかりやすく", "分かりやすく", "きちんと", "しっかり", "必要に応じて")
+# 「不適切」「二十分」のような別の意味の語に当たらないよう、前に付く字で除く
+_AMBIGUOUS_RE = {w: re.compile(("(?<!不)" if w == "適切" else "(?<![二三四五六七八九〇0-9０-９])" if w == "十分" else "") + re.escape(w)) for w in AMBIGUOUS}
 MAX_TODOS = 12  # これを超えたら、粒度が細かすぎないかの警告
 MIN_CRITERIA_LEN = 6  # これより短い合格基準は、測れる書き方になっていない可能性の警告
 
@@ -655,11 +660,11 @@ def plan_quality(plan, brief):
         errs.append(f"deliverable: true の Todo は、最後のまとめ 1 つだけにしてください（いま {n} 件）")
     for t in todos:
         i = t.get("id")
-        if t.get("kind") == "human" and not str(t.get("instruction") or "").strip():
+        if t.get("kind") == "human" and not (isinstance(t.get("instruction"), str) and t["instruction"].strip()):
             errs.append(f"{i}: human の Todo には instruction（依頼主への頼み方）が要ります")
         for k in CRITERIA_KEYS:
             v = str((t.get("criteria") or {}).get(k, "")).strip()
-            hit = [w for w in AMBIGUOUS if w in v]
+            hit = [w for w in AMBIGUOUS if _AMBIGUOUS_RE[w].search(v)]
             if hit:
                 warns.append(f"{i}: criteria.{k} に測れない言葉があります（{'・'.join(hit)}）。数や有無で言える書き方にしてください")
             elif v and len(v) < MIN_CRITERIA_LEN:

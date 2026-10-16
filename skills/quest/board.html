@@ -1008,7 +1008,7 @@ function planBriefBlock(p) {
       w.over_deadline && w.over_deadline.length ? h('p', { class: 'fine warnlist', style: 'margin:4px 0 0' }, `依頼の締切を過ぎる予定があります：${w.over_deadline.join('、')}`) : null) : null,
     df ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, '前の計画からの変更'),
       h('p', { class: 'fine', style: 'margin:4px 0 0' }, `引き継いだ（やり直さない）：${df.carried && df.carried.length ? df.carried.join('、') : 'なし'}`),
-      list('足した Todo', (df.added || []).map(idTitle)), list('なくした Todo', (df.removed || []).map(idTitle)), list('変えた Todo（やり直します）', (df.changed || []).map(idTitle))) : null);
+      list('足した Todo', (df.added || []).map(idTitle)), list('なくした Todo', (df.removed || []).map(idTitle)), list('変えた Todo', (df.changed || []).map(idTitle))) : null);
 }
 const TEXT_INPUT = /\.(md|txt|csv)$/i;  // 画面で開けるもの（それ以外は、パスをコピーして開く）
 function inputsEditable(qd) { const p = qd.q.plan; return !!p && (p.status === 'active' || p.status === undefined) && !p.accepted; }

@@ -58,6 +58,20 @@ class PlanQualityTest(unittest.TestCase):
         self.assertEqual(errs, [])
         self.assertTrue(any("T1" in w and "適切" in w for w in warns))
 
+    def test_ambiguous_words_do_not_hit_other_words(self):
+        t = good_todos()
+        t[0]["criteria"]["pass_line"] = "不適切な表現がなく、三十分以内に読める長さである"
+        self.assertEqual(self.q(t)[1], [])
+
+    def test_instruction_must_be_a_string(self):
+        t = good_todos() + [todo("T3", kind="human", deps=["T2"], instruction=5)]
+        self.assertTrue(any("T3" in e for e in self.q(t)[0]))
+
+    def test_non_object_criteria_is_an_error_not_a_crash(self):
+        p = {"quest": "Q1", "title": "t", "approved": False, "status": "active",
+             "todos": [dict(todo("T1"), criteria="abc", state="pending", retries=0, output=None)]}
+        self.assertTrue(any("criteria" in e for e in guild.validate(p, TR)))
+
     def test_short_criteria_is_warning(self):
         t = good_todos()
         t[0]["criteria"]["check"] = "見る"
