@@ -1030,7 +1030,30 @@ function inputsTab(qd) {
     inputsBlock(qd),
     ed && open ? h('div', { class: 'ipbox' }, inputPicker(key, `f:ipq:${qd.id}`, new Set(qd.inputs.map((x) => x.name.toLowerCase()))),
       h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn go sm', disabled: !chosen.length || S.conn !== 'ok', onclick: async () => { await sendInputs(qd, chosen, [], `in:${qd.id}`); S.form[key] = []; S.open[key] = false; render(); } }, `${chosen.length}件を追加`))) : null,
-    h('p', { class: 'fine' }, ed ? '新しいファイルは、「＋ 新規」でクエストを出すときにアップロードします（出したあとのアップロードは、この版ではできません）。' : '中止・見直し中・受け取り後のクエストのインプットは直せません。')];
+    ed ? uploadBox(qd) : h('p', { class: 'fine' }, '中止・見直し中・受け取り後のクエストのインプットは直せません。')];
+}
+// インプットタブからのアップロード：guild/inputs/ に置いて、このクエストのインプットに足す。
+// 同名のファイルを上書きするとバックアップが残らないので、同名は置かずに知らせる（上書きしたいときは「＋ 新規」から出す）
+function uploadBox(qd) {
+  const key = `up:${qd.id}`, errKey = `${key}:err`, ups = S.files[key] || [];
+  const have = new Set(S.model.inputs.map((f) => f.name.toLowerCase()));
+  const seen = new Set(), dup = ups.filter((f) => { const n = f.name.toLowerCase(), d = have.has(n) || seen.has(n); seen.add(n); return d; }), bad = ups.filter((f) => /[\\/:\x00-\x1f\x7f]/.test(f.name));
+  const go = async () => {
+    S.form[errKey] = '';
+    if (S.conn !== 'ok') { S.form[errKey] = '保存先につながっていません。上の「フォルダを選ぶ」から選んでください。'; render(); return; }
+    const names = [];
+    try { for (const f of ups) { await S.fs.writeBlob(`inputs/${f.name}`, f); names.push(f.name); } }
+    catch (e) { S.form[errKey] = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。${names.length ? `置けたもの：${names.join('、')}` : ''}`; render(); return; }
+    S.files[key] = [];
+    await sendInputs(qd, names, [], `in:${qd.id}`);
+  };
+  return h('div', { class: 'ipbox' }, h('b', { class: 'cap' }, '新しくアップロードして追加する'),
+    h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'Word・Excel・PDF もそのまま置けます（', code('guild/inputs/'), ' に置き、このクエストのインプットに足します）。同じ名前のファイルがあるときは置けません。名前を変えてください。'),
+    fileField(key, 'アップロードするファイル', true),
+    dup.length ? h('p', { class: 'warnline', role: 'status' }, '同じ名前がすでにあります（置けません）：' + dup.map((f) => f.name).join('、')) : null,
+    bad.length ? h('p', { class: 'warnline', role: 'status' }, '名前に使えない文字（\\ / : など）があります：' + bad.map((f) => f.name).join('、')) : null,
+    S.form[errKey] ? h('p', { class: 'err', role: 'alert' }, S.form[errKey]) : null,
+    h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn go sm', disabled: !ups.length || dup.length || bad.length || S.conn !== 'ok', onclick: go }, `${ups.length}件をアップロードして追加`)));
 }
 function detailTabs(qd) {
   if (!DTABS.some(([k]) => k === S.dtab)) S.dtab = 'way';

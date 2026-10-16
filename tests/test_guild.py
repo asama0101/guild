@@ -1755,7 +1755,7 @@ class BoardPathsTest(unittest.TestCase):
     def test_inputs_tab_and_new_dialog(self):
         for needle in ("type: 'inputs', add:", "function inputsTab(", "function inputsBlock(", "function inputPicker(", "function newDialog(", "function trapTab(",
                        "'aria-modal': 'true'", "type: 'request', text, start, due, inputs: picked, files: names", "S.fs.list('requests/rejected')",
-                       "同名あり（上書き）", "既存から選ぶ", "e.key === 'Escape' && S.newOpen", "rejectedRequests"):
+                       "同名あり（上書き）", "既存から選ぶ", "function uploadBox(", "をアップロードして追加", "e.key === 'Escape' && S.newOpen", "rejectedRequests"):
             self.assertIn(needle, self.board)
         for gone in ("function composer(", ".qmain{", "template:", "new:template"):
             self.assertNotIn(gone, self.board)
