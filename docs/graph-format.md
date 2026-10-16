@@ -170,7 +170,7 @@
 | `adopt <plan.json>` | 同じフォルダの `reports/plan-draft.json` を検査（`validate` と同じ検査に加えて、`inputs`・`candidates` の名前が `guild/inputs/` にあるか）し、承認前の `plan.json` にする（`inputs` は依頼主の指定が先頭、`candidates` は選ばなかった候補）。すでにあれば上書きしない（`status` が `replan` のときだけ、完了済みの Todo と、依頼主が直した `inputs` を引き継いで置き換える） |
 | `validate <plan.json>` | `deps` の参照切れ、循環、`kind`・`criteria` の欠け、未知の `state`、`human` の `confirm`、`inputs`・`candidates` の形の誤り（名前・`source`・`reason`・重なり）を検出する |
 | `sync <plan.json>` | 前提の結果に応じて `deps_done`・`dep_failed`・`unblock` を、動かなくなるまで適用する（承認前・中止・見直し中は何もしない） |
-| `next <plan.json>` | 状態を変えず、`ready`・`confirm`・`waiting_user`・`review`・`blocked`・`failed` に分けて返す。`runnable`・`finished`・`status`・`approved`・`awaiting_accept`・`complete` も返す |
+| `next <plan.json>` | 状態を変えず、`ready`・`confirm`・`waiting_user`・`review`・`blocked`・`failed` に分けて返す。`runnable`・`finished`・`status`・`approved`・`awaiting_accept`・`complete` も返す。書庫の記録の進み具合として `archive`（`none`／`proposed`／`done`。壊れた `archive.json` は `proposed`）、`needs_archive`（完了・中止したが書庫の記録がまだ）、`closed`（書庫の確認まで済んで、もう何もしない）も返す |
 | `advance <plan.json> <ID> <event>` | `transitions.json` を引いて状態を1つ進める。定義にない遷移はエラー |
 | `publish <dir>` | 全 Todo が済んだ依頼（`awaiting_accept`）の納品物（`deliverable` の Todo の `.md` と、どの Todo でも `*.prompt.md`）を `guild/deliverables/Q###_…` にコピーする。何度実行しても同じ。`replan` で取り下げられる |
 | `close <root>` | 閉じた依頼（受け取り済みか中止）の、インプットのバックアップ（`.work/backup/Q###`）を消す。進行中の依頼のものは残す |
@@ -192,3 +192,10 @@
 - **入力の契約と書き込み側の方針**: 境界は『`guild/.work/Q###/inbox/*.json` に入力が置かれたら `guild.py ingest` が拾う』に固定する。最初の版の書き込み側は File System Access API とし、書けないときは『JSON をコピー』ボタンに落とす。保存の失敗は理由を画面に出す。ローカルサーバー（`guild.py serve`）は最初の版では作らない。自動で進めたくなったら書き込み側だけを差し替える。
 - **確認の印**: Todo に `confirm: true` を持たせる。分解時に付け、計画の承認で見える。`next` は、`confirm: true` の Todo を『確認待ち』として別に返し、確認が済むまで `running` にしない。
 - **失敗の扱い**: `failed` の Todo に依存する後続は止める（`blocked`）。依存しない系統は進め続ける。ボードで依頼主に『その Todo だけやめて後続は進める（`skip`）／後続もやめる（`drop`）／計画を直す（`replan`）／中止（`abort`）』を選んでもらい、`decision` として戻す。
+
+## 排他ロックと保存の順序
+
+- `sync`・`advance`・`ingest`・`adopt` は、`plan.json` の読みから保存までを `plan.json.lock`（`O_EXCL`）で 1 つずつにする。冒険者を並列に呼んで同時に `advance` しても、更新が消えない。待つのは最大 15 秒で、超えるとエラー。60 秒より古いロックは、落ちたプロセスの残りとして取り上げる。
+- `plan.json` などの保存は、`<ファイル>.<pid>.tmp` に書いてから置き換える。Windows・OneDrive で置き換えが `PermissionError` になったら、短い間隔で数回やり直す。
+- `ingest` は、計画を保存してから `inbox/` の入力を `done/`・`rejected/` へ移す。`adopt`（replan）は、計画を保存してから古い成果物と報告を `prev/` へ移す。途中で落ちても、入力や成果物は元の場所に残る。
+- replan の引き継ぎ（`carry_over`）は、完了済みで、種別・題名・合格基準・`deps` が同じで、依存先もすべて引き継がれる Todo だけ。上流が変わった Todo の下流は引き継がない。

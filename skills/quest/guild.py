@@ -24,6 +24,7 @@ guild.py web-reset ROOT: 「今回だけ」の許可と、許可しなかった�
 入力（inbox の JSON）の type には、due（依頼の開始日・締切、Todo の予定日・締切の設定。Todo の締切だけ解除できる）と、inputs（このクエストのインプットの追加・外す。足す名前は guild/inputs/ にあること）がある。
 エラーは終了コード 1。
 """
+import contextlib
 import datetime
 import json
 import os
@@ -84,10 +85,59 @@ def load_json(path):
         raise GuildError(f"{path} を読めません: {e}")
 
 
+REPLACE_TRIES = 6  # Windows・OneDrive 配下で、置き換え先を他のプロセスが開いていると PermissionError になる。短い間隔で数回やり直す
+
+
 def save_plan(path, plan):
-    tmp = Path(str(path) + ".tmp")
+    """JSON を原子的に書く。tmp 名にプロセス番号を付け、並列で書いても tmp が衝突しない。"""
+    tmp = Path(f"{path}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    try:
+        for n in range(REPLACE_TRIES):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if n == REPLACE_TRIES - 1:
+                    raise
+                time.sleep(0.05 * (n + 1))
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+LOCK_TIMEOUT = 15  # ロックを待つ秒数。超えたらエラー（他人のロックは壊さない）
+LOCK_STALE = 60  # この秒数より古いロックは、落ちたプロセスの残りとみなして取り上げる
+
+
+@contextlib.contextmanager
+def plan_lock(path):
+    """plan.json の読み→書きを 1 つずつにする排他ロック（<path>.lock を O_EXCL で作る）。load から save までを包む。"""
+    lock = Path(str(path) + ".lock")
+    deadline = time.monotonic() + LOCK_TIMEOUT
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > LOCK_STALE:
+                    lock.unlink()  # 古いロックの取り上げ。同時に取り上げても、片方は unlink に失敗して次の周回で O_EXCL を争う
+                    continue
+            except OSError:
+                continue
+            if time.monotonic() > deadline:
+                raise GuildError(f"{lock.name} を他のプロセスが使っています。しばらくしてからもう一度実行してください")
+            time.sleep(0.05)
+        except PermissionError:
+            if time.monotonic() > deadline:
+                raise GuildError(f"{lock.name} を作れません（権限）")
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
 
 
 def load_transitions(path=None):
@@ -216,7 +266,18 @@ def sync(plan, tr):
     return changes
 
 
-def next_view(plan):
+def archive_state(qdir):
+    """書庫の登録候補の確認の状態。none（archive.json がない）/ proposed（依頼主の答え待ち）/ done。壊れていれば proposed（終わらない側）。"""
+    f = Path(qdir) / "archive.json"
+    if not f.exists():
+        return "none"
+    try:
+        return "done" if load_json(f).get("status") == "done" else "proposed"
+    except GuildError:
+        return "proposed"
+
+
+def next_view(plan, qdir=None):
     groups = {"ready": "running", "confirm": "awaiting_confirm", "waiting_user": "waiting_user",
               "review": "review", "blocked": "blocked", "failed": "failed"}
     out = {k: [t["id"] for t in plan["todos"] if t["state"] == s] for k, s in groups.items()}
@@ -228,14 +289,20 @@ def next_view(plan):
     # 全 Todo が済んでも、依頼主が受け取るまでは完了ではない（awaiting_accept は依頼主待ち）
     out["awaiting_accept"] = out["finished"] and out["approved"] and out["status"] == "active" and not out["accepted"]
     out["complete"] = out["finished"] and out["accepted"]
+    # 完了・中止した依頼の、書庫の記録（司書→依頼主の確認）がどこまで進んだか。closed になった依頼は、もう何もしない
+    ended = out["complete"] or out["status"] == "aborted"
+    out["archive"] = archive_state(qdir) if qdir is not None else "none"
+    out["needs_archive"] = ended and out["archive"] == "none"
+    out["closed"] = ended and out["archive"] == "done"
     return out
 
 
-def ingest(plan_path, plan, tr):
+def ingest(plan_path, plan, tr, commit=None):
     inbox = Path(plan_path).parent / "inbox"
     report = {"applied": [], "rejected": [], "warnings": []}
     if not inbox.is_dir():
         return report
+    moves = []  # 入力ファイルの移動は、計画の保存（commit）のあとに行う。保存前に落ちても、入力は inbox に残る
     for f in sorted(inbox.glob("*.json")):
         try:
             data = load_json(f)
@@ -256,9 +323,13 @@ def ingest(plan_path, plan, tr):
             dest, key, item = inbox / "done", "applied", f.name
         except (GuildError, KeyError, TypeError, AttributeError) as e:
             dest, key, item = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}
+        moves.append((f, dest))
+        report[key].append(item)
+    if commit is not None:
+        commit()
+    for f, dest in moves:
         dest.mkdir(exist_ok=True)
         shutil.move(str(f), str(dest / f.name))
-        report[key].append(item)
     return report
 
 
@@ -528,24 +599,43 @@ def adopt(plan_path, tr):
     carried = []
     if old is not None:
         shutil.copy2(plan_path, plan_path.with_name("plan.prev.json"))
+        carried = carry_over(plan, old)
+    save_plan(plan_path, plan)  # 保存してから成果物を動かす。保存に失敗しても、成果物は元の場所に残る
+    if old is not None:
         unpublish_deliverables(plan_path.parent)  # 作り直し。置いた納品物は、また全 Todo が済んだ時に置き直す
-        carried = carry_over(plan, old, plan_path.parent)
-    save_plan(plan_path, plan)
+        archive_outputs(old, carried, plan_path.parent)
     return {"adopted": len(plan["todos"]), "replaced": old is not None, "carried": carried}
 
 
-def carry_over(plan, old, qdir):
-    """計画の作り直し。番号・種別・題名・合格基準が同じで、完了済みの Todo は、状態を引き継ぐ。
-    経緯（history）は旧計画のものに追記する。引き継がない Todo の成果物と報告は、prev/ へ退避する。"""
-    same = lambda a, b: all(a.get(k) == b.get(k) for k in ("kind", "title", "criteria"))
+def carry_over(plan, old):
+    """計画の作り直し。完了済みで、番号・種別・題名・合格基準・依存が同じで、依存先もすべて引き継がれる Todo は、状態を引き継ぐ。
+    上流が変わった（引き継がれなかった）Todo の下流は、古い成果物が前提にずれるので引き継がない。
+    経緯（history）は旧計画のものに追記する。引き継いだ id の一覧を返す（成果物の退避は archive_outputs）。"""
+    same = lambda a, b: all(a.get(k) == b.get(k) for k in ("kind", "title", "criteria"))         and list(a.get("deps", [])) == list(b.get("deps", []))
     new_by = {t["id"]: t for t in plan["todos"]}
+    old_by = {t["id"]: t for t in old.get("todos", [])}
     carried = []
-    for o in old.get("todos", []):
-        n = new_by.get(o["id"])
-        if n is not None and o.get("state") == "done" and same(o, n):
-            n["state"], n["retries"], n["output"] = "done", o.get("retries", 0), o.get("output")
-            carried.append(o["id"])
+    undecided = {o["id"] for o in old.get("todos", [])}  # 依存の順に辿る。上流が先に決まるまで待つ
+    progressed = True
+    while progressed:
+        progressed = False
+        for i in list(undecided):
+            o, n = old_by[i], new_by.get(i)
+            deps = o.get("deps", [])
+            if any(d in undecided for d in deps):
+                continue
+            undecided.discard(i)
+            progressed = True
+            if n is not None and o.get("state") == "done" and same(o, n) and all(d in carried for d in deps):
+                n["state"], n["retries"], n["output"] = "done", o.get("retries", 0), o.get("output")
+                carried.append(i)
+    carried = [o["id"] for o in old.get("todos", []) if o["id"] in carried]
     plan["history"] = list(old.get("history", [])) + [{"t": now(), "event": "replanned", "carried": carried}]
+    return carried
+
+
+def archive_outputs(old, carried, qdir):
+    """引き継がなかった Todo の成果物と報告を、prev/<日時>/ へ退避する（計画を保存したあとに呼ぶ）。"""
     arch = Path(qdir) / "prev" / datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     for o in old.get("todos", []):
         if o["id"] in carried:
@@ -557,7 +647,6 @@ def carry_over(plan, old, qdir):
         for f in sorted((Path(qdir) / "reports").glob(f"{o['id']}-*")):
             (arch / "reports").mkdir(parents=True, exist_ok=True)
             shutil.move(str(f), str(arch / "reports" / f.name))
-    return carried
 
 
 def init_guild(root):
@@ -1255,6 +1344,32 @@ def inputs_list(root, text=""):
     return out
 
 
+def mutate_plan(cmd, path, argv):
+    """sync / advance / ingest：plan.json を読み、変え、保存する（呼び出し側が plan_lock で包む）。"""
+    plan, tr = load_json(path), load_transitions()
+    errs = validate(plan, tr)
+    if errs:
+        raise GuildError("plan.json の検査に失敗しました: " + " / ".join(errs))
+    commit = lambda: save_plan(path, plan)
+    if cmd == "sync":
+        result = sync(plan, tr)
+    elif cmd == "advance":
+        if len(argv) != 5:
+            raise GuildError("advance PLAN ID EVENT の形で指定してください")
+        t = todo_map(plan).get(argv[3])
+        if t is None:
+            raise GuildError(f"todo がありません: {argv[3]}")
+        apply_event(t, argv[4], tr, plan)
+        result = {"id": t["id"], "state": t["state"]}
+    else:
+        result = ingest(path, plan, tr, commit=commit)  # 保存してから入力を done へ移す
+        print(json.dumps(result, ensure_ascii=False))
+        return 1 if result["rejected"] else 0
+    commit()
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
 def main(argv):
     if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear"):
         print(__doc__)
@@ -1309,8 +1424,12 @@ def main(argv):
             print(json.dumps(close_quests(path), ensure_ascii=False))
             return 0
         if cmd == "adopt":
-            print(json.dumps(adopt(path, load_transitions()), ensure_ascii=False))
+            with plan_lock(path):
+                print(json.dumps(adopt(path, load_transitions()), ensure_ascii=False))
             return 0
+        if cmd in ("sync", "advance", "ingest"):
+            with plan_lock(path):  # load から save までを 1 つずつにする（並列の advance で更新が消えない）
+                return mutate_plan(cmd, path, argv)
         plan, tr = load_json(path), load_transitions()
         if cmd == "validate":
             errs = validate(plan, tr)
@@ -1319,24 +1438,8 @@ def main(argv):
         errs = validate(plan, tr)
         if errs:
             raise GuildError("plan.json の検査に失敗しました: " + " / ".join(errs))
-        if cmd == "next":
-            print(json.dumps(next_view(plan), ensure_ascii=False))
-            return 0
-        if cmd == "sync":
-            result = sync(plan, tr)
-        elif cmd == "advance":
-            if len(argv) != 5:
-                raise GuildError("advance PLAN ID EVENT の形で指定してください")
-            t = todo_map(plan).get(argv[3])
-            if t is None:
-                raise GuildError(f"todo がありません: {argv[3]}")
-            apply_event(t, argv[4], tr, plan)
-            result = {"id": t["id"], "state": t["state"]}
-        else:
-            result = ingest(path, plan, tr)
-        save_plan(path, plan)
-        print(json.dumps(result, ensure_ascii=False))
-        return 1 if cmd == "ingest" and result["rejected"] else 0
+        print(json.dumps(next_view(plan, Path(path).parent), ensure_ascii=False))
+        return 0
     except GuildError as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
