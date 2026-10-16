@@ -53,6 +53,10 @@ body{margin:0;background:var(--bg)}
 .letter p{margin:0 0 10px;font-size:14.5px}
 .fine{font-size:13px;color:var(--sub)}
 .warnlist{color:var(--warn)}
+.alive{margin:0 0 10px}
+.alive.on::before{content:'●';color:var(--ok);margin-right:6px}
+.alive.off{color:var(--warn)}
+.alive.off::before{content:'●';color:var(--ng);margin-right:6px}
 .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 .btn{min-height:46px;padding:6px 22px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer;border:2px solid var(--ink);background:var(--paper2);color:var(--ink)}
 .btn.go{background:var(--ok);border-color:var(--ok-edge);color:var(--on)}
@@ -396,7 +400,7 @@ class MemFS {
 
 // 論理パス（画面の中で使う Q001/… requests/… web/… archive/inbox/…）を、guild/ の中の物理パスに写す。
 // 機械用のファイルは guild/.work/ にある（Obsidian に出ない）。archive/ の項目、deliverables/、inputs/ はそのまま。
-const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json']];
+const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json'], [/^heartbeat\.json$/, '.work/heartbeat.json']];
 function physical(p) { for (const [re, to] of PHYS) if (re.test(p)) return p.replace(re, to); return p; }
 class PathMap {
   constructor(fs) { this.fs = fs; }
@@ -538,6 +542,25 @@ function dateIssues(plan, t) {
   return out;
 }
 
+// 流れの注意：止まっている原因（失敗した前提）、やめた前提（結果がないまま進む）、前提の完了待ち。承認前の計画には出さない
+function flowIssues(plan, t) {
+  if (!plan.approved || closed(t.state) || !Array.isArray(plan.todos)) return [];
+  const by = new Map(plan.todos.map((x) => [x.id, x])), out = [];
+  const failedAncestors = (id, seen = new Set()) => {
+    const r = [];
+    for (const d of (by.get(id) || {}).deps || []) {
+      if (seen.has(d)) continue; seen.add(d);
+      const u = by.get(d); if (!u) continue;
+      if (u.state === 'failed') r.push(d); else if (u.state === 'blocked') r.push(...failedAncestors(d, seen));
+    }
+    return r;
+  };
+  if (t.state === 'blocked') { const c = [...new Set(failedAncestors(t.id))]; out.push(c.length ? `止まっている原因：${c.join('、')} ができませんでした。` : '前提の Todo が止まっています。'); }
+  const skipped = (t.deps || []).filter((d) => (by.get(d) || {}).state === 'skipped');
+  if (skipped.length) out.push(`前提 ${skipped.join('、')} はやめたので、その結果がないまま進みます。`);
+  if (t.state === 'pending') { const wait = (t.deps || []).filter((d) => by.get(d) && !closed(by.get(d).state) && by.get(d).state !== 'failed'); if (wait.length) out.push(`${wait.join('、')} の完了を待っています。`); }
+  return out;
+}
 function dependents(plan, id) {
   const set = new Set([id]); let grew = true;
   while (grew) { grew = false; for (const t of plan.todos) if (!set.has(t.id) && (t.deps || []).some((d) => set.has(d))) { set.add(t.id); grew = true; } }
@@ -870,7 +893,7 @@ function reportLine(qd, r) {
     txt === null ? h('p', { class: 'fine', style: 'margin:2px 0 0' }, '読み込み中…') : lines.length ? h('p', { class: 'repx' }, lines.join(' ／ ')) : null);
 }
 function todoRow(qd, t) {
-  const key = `${qd.id}:${t.id}`, open = S.openTodo === key, over = overdue(t, Date.now()), warns = dateIssues(qd.q.plan, t), reps = open ? reportsOf(qd, t.id) : [];
+  const key = `${qd.id}:${t.id}`, open = S.openTodo === key, over = overdue(t, Date.now()), warns = dateIssues(qd.q.plan, t).concat(flowIssues(qd.q.plan, t)), reps = open ? reportsOf(qd, t.id) : [];
   return h('div', { class: 'td' + (open ? ' open' : '') + (over ? ' over' : '') },
     h('button', { type: 'button', class: 'tdrow', 'aria-expanded': String(open), 'aria-controls': `td-${key}`, 'data-key': 'td:' + key, onclick: () => { S.openTodo = open ? null : key; render(); } },
       h('span', { class: 'tid' }, t.id),
@@ -1540,7 +1563,7 @@ function webTab() {
 function boardTab() {
   const m = S.model, out = [];
   if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
-    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text))));
+    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text)), notifyButton()));
   if (m) { const wl = webLetter(m); if (wl) out.push(wl); }
   if (S.newSaved) out.push(h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。一覧の先頭に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`));
   if (m && m.rejectedRequests.length) out.push(h('div', { class: 'card', role: 'status', style: 'margin-bottom:12px' }, h('b', null, '受け付けられなかった依頼（新しい5件まで）'),
@@ -1857,6 +1880,35 @@ function stickyTools() {
     h('button', { type: 'button', class: 'tool', onclick: openNew }, '＋ 新しい依頼'));
 }
 // ---- ギルドを閉める：pause.json を書く。/guild:quest は、新しい役を呼ばず、実行中の役が終わったら止まる（依頼は中止にならない）
+// ---- 稼働の印：guild.py wait / arrivals が書く heartbeat.json から、/guild:quest が動いているかを出す
+function aliveInfo(hb, nowMs) {
+  const t = hb && hb.t ? Date.parse(hb.t) : NaN;
+  if (!hb || Number.isNaN(t)) return { cls: 'off', text: '/guild:quest はまだ動いていません（動かすと、ここに「待機中」と出ます）' };
+  const age = (nowMs - t) / 1000, when = new Date(t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (hb.state === 'waiting' && age < 60) return { cls: 'on', text: '/guild:quest：待機中（ボードの答えを待っています）' };
+  if (hb.state === 'working' && age < 600) return { cls: 'on', text: '/guild:quest：作業中' };
+  return { cls: 'off', text: `/guild:quest：停止中（最後の稼働 ${when}）。ボードで答えても、動かすまで拾われません` };
+}
+function updateAlive() {
+  const el = document.getElementById('alive'); if (!el) return;
+  const a = aliveInfo(S.hb, Date.now());
+  el.className = `fine alive ${a.cls}`; el.textContent = a.text;
+}
+function aliveBox() { return S.model && !S.demo ? h('p', { id: 'alive', class: 'fine alive' }) : null; }
+// ---- 通知：あなたの番が増えたら、タブの題に件数を出し、許可があればデスクトップ通知を出す
+function updateTitle() {
+  const n = S.model ? S.model.needs.length : 0;
+  document.title = (n ? `(${n}) ` : '') + 'guild 依頼掲示板';
+}
+function notifyNew(prev) {
+  const n = S.model ? S.model.needs.length : 0;
+  if (prev == null || n <= prev) return;
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification(`guild：あなたの番が${n}件あります`, { body: S.model.needs[0] ? S.model.needs[0].text : '' }); } catch (e) { /* 通知が使えない環境では、タブの題だけ */ }
+}
+function notifyButton() {
+  if (!('Notification' in window) || Notification.permission !== 'default') return null;
+  return h('button', { type: 'button', class: 'linkbtn', onclick: () => { try { Notification.requestPermission().then(() => render()); } catch (e) { /* 使えない */ } } }, '通知を有効にする');
+}
 function pauseBox() {
   if (!S.model) return null;
   if (S.model.paused) return h('div', { class: 'attn', role: 'status' }, h('b', null, 'ギルドを閉める準備中です'),
@@ -1904,8 +1956,8 @@ function render() {
   const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap wide' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
-    h('div', { class: 'panel' }, connectBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
-  keepToast();
+    h('div', { class: 'panel' }, connectBox(), aliveBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
+  keepToast(); updateAlive(); updateTitle();
   window.scrollTo(0, sy);
   KEEP_SCROLL.forEach((s, i) => { const e = document.querySelector(s); if (e && tops[i]) e.scrollTop = tops[i]; });
   if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus({ preventScroll: true }); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
@@ -2014,11 +2066,14 @@ async function refresh(force) {
   S.busy = true;
   try {
     const raw = await loadAll(); const key = JSON.stringify(raw);
+    try { const hb = await S.fs.readText('heartbeat.json'); S.hb = hb ? JSON.parse(hb) : null; } catch (e) { S.hb = null; }
+    updateAlive();
     // 入力中（変換中を含む）は画面を作り直さない。作り直すと、変換が確定せず、位置も動く。入力が止まった次の更新で反映する
     // 資料を開いている間も作り直さない（読んでいる位置が上に戻ってしまう）。閉じたあとの次の更新で反映する
     if (!force && key !== S.dataKey && (isEditing() || S.reader || S.fallback)) return;
     if (force || key !== S.dataKey) {
-      S.dataKey = key; S.model = buildModel(raw); S.rcache = {};  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
+      const prevNeeds = S.model ? S.model.needs.length : null;
+      S.dataKey = key; S.model = buildModel(raw); S.rcache = {}; notifyNew(prevNeeds);  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
       const ids = S.model.quests.map((x) => x.id);
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
       render();

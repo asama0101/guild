@@ -184,6 +184,7 @@
 | `pause <root>` | 「ギルドを閉める」。`guild/.work/pause.json`（`{"type": "pause", "created": …}`）を書く。ボードの「ギルドを閉める」と `/guild:close` が使う。`guild/` がなければエラー。依頼は中止にならない |
 | `pause-status <root>` | pause.json があるか（`paused`）。中身は見ず、壊れていても「あり」。ギルドマスターが周回の頭で見る。あれば、新しい役を呼ばず、実行中の役が終わるのを待って止まる |
 | `pause-clear <root>` | pause.json を消す（`cleared`）。`/guild:quest` の起動時（ギルドを開ける）。なくても何も起きない |
+| `stats <root>` | 効果の測定。依頼ごとの Todo 数・完了・失敗・やめた数と、不合格（`rejected`）・もう一度やる（`retry`）・計画の直し（`replanned`）の回数を `history` から数え、合計と「Todo あたりの不合格回数」（`rejected_per_todo`）を返す。壊れた `plan.json` は読み飛ばす。計画の質を上げる施策が効いたかを見るための数 |
 
 イベント: `deps_done`（`sync` が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。ほかに `dep_failed`・`unblock`・`confirmed`・`declined`・`reported_failed`・`skip`・`retry`。
 `advance <plan> <id> passed` は、証拠ゲートを通らないと拒否される：鑑定士の報告 `reports/<id>-appraiser.md` があり、空でなく、「## 判定」の次の語が `passed` で、その Todo が鑑定待ち（`review`）になったあとに書かれていること（`needs_scout` の 1 回目の報告では通らない）（古い報告のままの合格を防ぐ。`rejected` には要らない）。
@@ -217,3 +218,7 @@
 - **`brief`**（地図師の自己点検。`plan-draft.json` に書き、整えて `plan.json` に入る）: `goal`（依頼の言い換え）、`non_goals`、`assumptions`（推測で決めた前提）、`risks`、`coverage`（`[{requirement, todos: [id…]}]`）。
 - **`workload`**（`guild.py` が計算して `plan.json` に入る）: `human`（あなたの実行の件数）、`days`（予定日ごとの件数）、`items`、`over_deadline`（依頼の締切を過ぎる予定の Todo）。
 - **`replan_diff`**（replan のときだけ）: `added`・`removed`・`changed`（やり直しになる Todo）・`carried`（引き継がれた Todo）。
+
+## 稼働の印（heartbeat）
+
+`guild.py wait` は待っている間、`arrivals` は呼ばれるたびに、`guild/.work/heartbeat.json`（`{"state": "waiting" か "working", "t": 時刻, "pid"}`）を書く（`wait` は 10 秒ごと）。ボードはこれを読んで、「Claude 待機中」「作業中」「停止中（最後の稼働の時刻）」を出す。ボードで答えても `/guild:quest` が動いていなければ誰にも拾われないので、それに気づくための印。書けなくても、コマンドは止まらない。

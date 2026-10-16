@@ -1124,17 +1124,62 @@ def pause_clear(root):
     return {"paused": False, "cleared": cleared}
 
 
+HEARTBEAT = "heartbeat.json"  # guild/.work/heartbeat.json：ギルドマスターが動いているしるし（ボードが「待機中／作業中／停止中」を出す）
+BEAT_EVERY = 10  # wait 中に印を書き直す間隔（秒）
+
+
+def beat(root, state):
+    """稼働の印を書く。state は waiting（依頼主の答え待ち）か working（進めている）。書けなくても、コマンドは止めない。"""
+    try:
+        gdir = Path(root) / "guild"
+        if gdir.is_dir():
+            save_plan(work_dir(gdir) / HEARTBEAT, {"state": state, "t": now(), "pid": os.getpid()})
+    except OSError:
+        pass
+
+
 def wait_for(root, seconds, interval=1.0):
-    """依頼主の入力（または新しい依頼）が届くまで待つ。すでに届いていれば、すぐ返す。"""
+    """依頼主の入力（または新しい依頼）が届くまで待つ。すでに届いていれば、すぐ返す。待っている間は、稼働の印を書く。"""
     start = time.monotonic()
+    last = None
     while True:
         a = arrivals(root)
         waited = round(time.monotonic() - start, 1)
         if a:
+            beat(root, "working")
             return {"arrived": a, "waited": waited, "timeout": False}
+        if last is None or time.monotonic() - last >= BEAT_EVERY:
+            beat(root, "waiting")
+            last = time.monotonic()
         if waited >= seconds:
             return {"arrived": [], "waited": waited, "timeout": True}
         time.sleep(interval)
+
+
+def stats(root):
+    """効果の測定：依頼ごとの Todo 数・完了・失敗・やめた数・不合格（rejected）の回数・もう一度やる（retry）の回数・計画の直し（replan）の回数を、
+    plan.json の history から数える。壊れた計画は読み飛ばす。"""
+    quests = []
+    tot = {"quests": 0, "todos": 0, "done": 0, "failed": 0, "skipped": 0, "rejected": 0, "retries": 0, "replans": 0, "aborted": 0}
+    wd = work_dir(Path(root) / "guild")
+    for f in sorted(wd.glob("Q*/plan.json")) if wd.is_dir() else []:
+        try:
+            p = load_json(f)
+            todos, hist = p.get("todos", []), p.get("history", [])
+            q = {"id": f.parent.name, "status": p.get("status", "active"), "todos": len(todos),
+                 "done": sum(t.get("state") == "done" for t in todos), "failed": sum(t.get("state") == "failed" for t in todos),
+                 "skipped": sum(t.get("state") == "skipped" for t in todos),
+                 "rejected": sum(h.get("event") == "rejected" for h in hist), "retries": sum(h.get("event") == "retry" for h in hist),
+                 "replans": sum(h.get("event") == "replanned" for h in hist)}
+        except (GuildError, AttributeError, TypeError):
+            continue
+        quests.append(q)
+        tot["quests"] += 1
+        tot["aborted"] += q["status"] == "aborted"
+        for k in ("todos", "done", "failed", "skipped", "rejected", "retries", "replans"):
+            tot[k] += q[k]
+    tot["rejected_per_todo"] = round(tot["rejected"] / tot["todos"], 2) if tot["todos"] else 0
+    return {"quests": quests, "total": tot}
 
 
 def take_answers(qdir):
@@ -1555,7 +1600,7 @@ def mutate_plan(cmd, path, argv):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear", "stats"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
@@ -1586,7 +1631,12 @@ def main(argv):
         if cmd == "publish":
             print(json.dumps(publish_deliverables(path), ensure_ascii=False))
             return 0
+        if cmd == "stats":
+            print(json.dumps(stats(path), ensure_ascii=False))
+            return 0
         if cmd in ("wait", "arrivals", "answers"):
+            if cmd == "arrivals":
+                beat(path, "working")
             if cmd == "wait":
                 result = wait_for(path, float(argv[3]) if len(argv) > 3 else 540)
             elif cmd == "arrivals":
