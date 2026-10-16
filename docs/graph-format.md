@@ -178,6 +178,9 @@
 | `web-ingest <root>` | `.work/web/inbox/` の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を `.work/web/access.json` に反映する。不正な入力は `rejected/` に理由（`<入力>.reason.txt`）つきで移す |
 | `web-pending <root>` | 冒険者がフックに止められて、依頼主の答え待ちのドメイン（`access.json` の `pending`）を一覧する |
 | `web-reset <root>` | 「今回だけ」の許可（`once`）と、許可しなかった記録（`denied`）を空にする（依頼の完了・中止のとき）。出力の `cleared` は消したもの、`allow` は残った許可リスト |
+| `pause <root>` | 「ギルドを閉める」。`guild/.work/pause.json`（`{"type": "pause", "created": …}`）を書く。ボードの「ギルドを閉める」と `/guild:close` が使う。`guild/` がなければエラー。依頼は中止にならない |
+| `pause-status <root>` | pause.json があるか（`paused`）。中身は見ず、壊れていても「あり」。ギルドマスターが周回の頭で見る。あれば、新しい役を呼ばず、実行中の役が終わるのを待って止まる |
+| `pause-clear <root>` | pause.json を消す（`cleared`）。`/guild:quest` の起動時（ギルドを開ける）。なくても何も起きない |
 
 イベント: `deps_done`（`sync` が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。ほかに `dep_failed`・`unblock`・`confirmed`・`declined`・`reported_failed`・`skip`。
 

@@ -467,6 +467,37 @@ class WaitTest(unittest.TestCase):
         self.assertFalse(r["timeout"])
         self.assertEqual(r["arrived"][0]["file"], "b.json")
 
+    def test_pause_writes_the_mark_and_wait_returns_at_once(self):
+        self.assertEqual(guild.pause_status(self.root), {"paused": False})
+        self.assertEqual(guild.pause_guild(self.root), {"paused": True})
+        f = self.root / "guild" / ".work" / guild.PAUSE
+        self.assertEqual(json.loads(f.read_text(encoding="utf-8"))["type"], "pause")
+        self.assertEqual(guild.pause_status(self.root), {"paused": True})
+        self.assertEqual(guild.arrivals(self.root), [{"kind": "pause"}])
+        r = guild.wait_for(self.root, 5, interval=0.1)
+        self.assertFalse(r["timeout"])
+        self.assertEqual(r["arrived"], [{"kind": "pause"}])
+
+    def test_pause_is_idempotent_and_never_aborts_a_quest(self):
+        guild.pause_guild(self.root)
+        first = (self.root / "guild" / ".work" / guild.PAUSE).read_text(encoding="utf-8")
+        guild.pause_guild(self.root)
+        self.assertEqual((self.root / "guild" / ".work" / guild.PAUSE).read_text(encoding="utf-8"), first)
+        self.assertTrue(Path(self.q["dir"]).is_dir())  # 依頼のフォルダには触らない
+
+    def test_broken_pause_mark_still_counts_and_clear_removes_it(self):
+        (self.root / "guild" / ".work" / guild.PAUSE).write_text("{こわれた", encoding="utf-8")
+        self.assertEqual(guild.pause_status(self.root), {"paused": True})
+        self.assertEqual(guild.pause_clear(self.root), {"paused": False, "cleared": True})
+        self.assertEqual(guild.pause_status(self.root), {"paused": False})
+        self.assertEqual(guild.pause_clear(self.root), {"paused": False, "cleared": False})
+
+    def test_pause_without_guild_folder_is_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(guild.GuildError):
+                guild.pause_guild(d)
+            self.assertEqual(guild.pause_status(d), {"paused": False})
+
     def test_take_answers_moves_only_answers(self):
         self.put_inbox("a.json", {"type": "answers", "answers": [{"q": "どれ", "choice": "A", "note": ""}]})
         self.put_inbox("b.json", {"type": "approve"})
@@ -1759,6 +1790,18 @@ class BoardPathsTest(unittest.TestCase):
             self.assertIn(needle, self.board)
         for gone in ("function composer(", ".qmain{", "template:", "new:template"):
             self.assertNotIn(gone, self.board)
+
+    def test_board_closes_the_guild(self):
+        for needle in ("function pauseBox(", "async function closeGuild(", "'pause.json'", "ギルドを閉める", "S.model.paused", "[/^pause\.json$/, '.work/pause.json']"):
+            self.assertIn(needle, self.board)
+
+    def test_close_skill_and_master_use_the_pause_commands(self):
+        close = (ROOT / "skills" / "close" / "SKILL.md").read_text(encoding="utf-8")
+        for needle in ("name: close", "guild.py\" pause <root>", "/guild:quest"):
+            self.assertIn(needle, close)
+        quest = (ROOT / "skills" / "quest" / "SKILL.md").read_text(encoding="utf-8")
+        for needle in ("pause-clear <root>", "pause-status <root>", "`pause`"):
+            self.assertIn(needle, quest)
 
     def test_progress_filter(self):
         for needle in ("function scheduleModel(quests, includeClosed, ids)", "function progCandidates(", "function progEffective(", "function progQuick(",

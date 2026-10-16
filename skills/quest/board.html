@@ -395,7 +395,7 @@ class MemFS {
 
 // 論理パス（画面の中で使う Q001/… requests/… web/… archive/inbox/…）を、guild/ の中の物理パスに写す。
 // 機械用のファイルは guild/.work/ にある（Obsidian に出ない）。archive/ の項目、deliverables/、inputs/ はそのまま。
-const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1']];
+const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json']];
 function physical(p) { for (const [re, to] of PHYS) if (re.test(p)) return p.replace(re, to); return p; }
 class PathMap {
   constructor(fs) { this.fs = fs; }
@@ -514,7 +514,9 @@ async function loadAll() {
   const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), wait: webWait };
   // 共通のインプット（guild/inputs/ の直下だけ。サブフォルダは見ない）。名前の同一判定は、大文字小文字を区別しない（guild.py と同じ）
   const inputs = (await S.fs.list('inputs')).filter((e) => e.kind === 'file').map((e) => ({ name: e.name, mtime: e.mtime || 0 })).sort((a, b) => a.name.localeCompare(b.name));
-  return { requests, rejectedRequests, quests, archive, archiveWait, archiveRejected, web, inputs, root: (cfg && cfg.root) || '' };
+  // 「ギルドを閉める」の印（guild.py pause と同じ pause.json）。中身は見ず、あるかどうかだけ
+  const paused = (await S.fs.readText('pause.json')) != null;
+  return { requests, rejectedRequests, quests, archive, archiveWait, archiveRejected, web, inputs, paused, root: (cfg && cfg.root) || '' };
 }
 
 // ============================================================ 読み解き
@@ -1826,7 +1828,31 @@ function stickyTools() {
   const n = S.model ? S.model.needs.length : 0;
   return h('div', { class: 'tools' },
     n ? h('button', { type: 'button', class: 'tool warn', onclick: goNeed }, `あなたの番 ${n}件`) : null,
+    S.model && !S.model.paused && !S.confirm.pause ? h('button', { type: 'button', class: 'tool', onclick: () => { S.confirm.pause = true; render(); } }, 'ギルドを閉める') : null,
     h('button', { type: 'button', class: 'tool', onclick: openNew }, '＋ 新しい依頼'));
+}
+// ---- ギルドを閉める：pause.json を書く。/guild:quest は、新しい役を呼ばず、実行中の役が終わったら止まる（依頼は中止にならない）
+function pauseBox() {
+  if (!S.model) return null;
+  if (S.model.paused) return h('div', { class: 'attn', role: 'status' }, h('b', null, 'ギルドを閉める準備中です'),
+    '実行中の作業が終わると /guild:quest が止まります。依頼は中止していません。再開は、チャットで /guild:quest です。',
+    h('button', { type: 'button', class: 'linkbtn', onclick: unpause }, '取り消す'));
+  if (!S.confirm.pause) return null;
+  return h('section', { class: 'letter', 'aria-label': 'ギルドを閉める確認', style: 'margin-bottom:12px' }, seal('閉'),
+    h('div', { class: 'kick' }, 'ギルドを閉める'), h('h3', null, '今日の作業を、ここで止めますか'),
+    h('p', null, '新しい作業は始めず、実行中の作業が終わると /guild:quest が止まります。依頼は中止になりません。再開は、チャットで /guild:quest を実行します。'),
+    h('div', { class: 'btns' },
+      h('button', { class: 'btn wax', type: 'button', onclick: closeGuild }, '閉める'),
+      h('button', { class: 'btn', type: 'button', onclick: () => { S.confirm.pause = false; render(); } }, 'やめておく')));
+}
+async function closeGuild() {
+  S.confirm.pause = false;
+  const ok = await writeOrFallback('pause.json', JSON.stringify({ type: 'pause', created: new Date().toISOString() }, null, 2));
+  if (ok) await refresh(true); else render();
+}
+async function unpause() {
+  try { await S.fs.remove('pause.json'); } catch (e) { S.toast = `取り消せませんでした（${e.name || 'エラー'}：${e.message || e}）`; }
+  await refresh(true);
 }
 function goNeed() {
   const n = S.model && S.model.needs[0]; if (!n) return;
@@ -1853,7 +1879,7 @@ function render() {
   const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap wide' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
-    h('div', { class: 'panel' }, connectBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
+    h('div', { class: 'panel' }, connectBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
   keepToast();
   window.scrollTo(0, sy);
   KEEP_SCROLL.forEach((s, i) => { const e = document.querySelector(s); if (e && tops[i]) e.scrollTop = tops[i]; });

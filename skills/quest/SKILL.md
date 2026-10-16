@@ -30,6 +30,7 @@ disable-model-invocation: true
    ```
 
    `guild.py` の出力は JSON。エラー（終了コード 1）は、文をそのまま確認して対処する。
+3. `guild.py pause-clear <root>` を実行する。前回「ギルドを閉める」で止まっていた印（`guild/.work/pause.json`）を消して、続きから進める（ギルドを開ける）。
 
 ## 1. 受付
 
@@ -71,6 +72,8 @@ disable-model-invocation: true
 ## 4. 実行ループ
 
 すべての依頼について、次を繰り返す。
+
+0. **ギルドを閉める印を見る**：周回の頭で `guild.py pause-status <root>` を実行する。`paused` が `true` なら（ボードの「ギルドを閉める」、または `/guild:close`）、**新しい冒険者・斥候・鑑定士を呼ばない**。呼んである役がまだ動いているなら、その結果が返るのを待ち、返った結果は通常どおり `advance`（`submitted` など）で反映する。そのあと、「ギルドを閉めました。依頼は中止していません。再開は `/guild:quest` です」と**1回だけ**書いて、終える（`wait` もしない。pause.json は消さない。次の `/guild:quest` の手順0が消す）。`wait` の出力の `arrived` に `kind` が `pause` のものがあったときも、同じ。
 
 1. **到着を取り込む**：`guild.py arrivals <root>` を見る。
    - 受付待ちの依頼（`kind` が `request`）→ 手順1で受け付け、手順2へ。

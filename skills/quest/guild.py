@@ -10,6 +10,9 @@ guild.py requests ROOT: 受付待ちの依頼を一覧する。
 guild.py inputs-list ROOT [--text 依頼文 | --text-file パス]（同時指定は不可。長い依頼文や記号を含む依頼文はファイルで渡す）:guild/inputs/ のファイル（名前・拡張子・大きさ・更新日・文字のファイルの先頭5行）と、依頼文に出てくる書庫の項目からのヒントを一覧する（地図師に渡す）。
 guild.py close ROOT: 完了・中止した依頼のインプットのバックアップを消す。
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
+guild.py pause ROOT: 「ギルドを閉める」。.work/pause.json を書く。ギルドマスターは、新しい役を呼ばず、実行中の役が終わるのを待って止まる（依頼は中止にならない）。
+guild.py pause-status ROOT: pause.json があるかを返す（paused）。壊れていても「あり」とする。
+guild.py pause-clear ROOT: pause.json を消す（ギルドマスターが起動したとき）。
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
 guild.py publish QDIR: 納品物を guild/deliverables/ へコピーする（全 Todo が済んだとき）。
@@ -35,6 +38,7 @@ sys.path.insert(0, str(HERE))
 import webaccess  # noqa: E402
 
 WORK = webaccess.WORK
+PAUSE = "pause.json"  # guild/.work/pause.json：「ギルドを閉める」の印
 
 
 def work_dir(gdir):
@@ -818,7 +822,35 @@ def arrivals(root):
         if winbox.is_dir():
             for f in sorted(winbox.glob("*.json")):
                 out.append({"kind": "web", "file": f.name})
+        if (wdir / PAUSE).exists():
+            out.append({"kind": "pause"})  # 「ギルドを閉める」。待機を終わらせる
     return out
+
+
+def pause_guild(root):
+    """「ギルドを閉める」の印（.work/pause.json）を書く。すでにあれば、そのまま。"""
+    gdir = Path(root) / "guild"
+    if not gdir.is_dir():
+        raise GuildError("guild/ がありません。先に /guild:init を実行してください")
+    f = work_dir(gdir) / PAUSE
+    if not f.exists():
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps({"type": "pause", "created": datetime.datetime.now().isoformat(timespec="seconds")}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"paused": True}
+
+
+def pause_status(root):
+    """印があれば paused。中身は見ない（壊れていても、止まる側に倒す）。"""
+    return {"paused": (work_dir(Path(root) / "guild") / PAUSE).exists()}
+
+
+def pause_clear(root):
+    """印を消す。なければ何もしない。"""
+    f = work_dir(Path(root) / "guild") / PAUSE
+    cleared = f.exists()
+    if cleared:
+        f.unlink()
+    return {"paused": False, "cleared": cleared}
 
 
 def wait_for(root, seconds, interval=1.0):
@@ -1224,7 +1256,7 @@ def inputs_list(root, text=""):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
@@ -1240,6 +1272,9 @@ def main(argv):
                 except (OSError, UnicodeDecodeError) as e:
                     raise GuildError(f"--text-file を読めません：{rest[1]}（{e}）")
             print(json.dumps(inputs_list(path, text), ensure_ascii=False))
+            return 0
+        if cmd in ("pause", "pause-status", "pause-clear"):
+            print(json.dumps({"pause": pause_guild, "pause-status": pause_status, "pause-clear": pause_clear}[cmd](path), ensure_ascii=False))
             return 0
         if cmd in ("web-ingest", "web-pending", "web-reset"):
             gdir = Path(path) / "guild"
