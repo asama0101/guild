@@ -21,3 +21,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 設計の記録（SPEC・実装プラン）。配布物に含めない
+docs/specs/
+docs/superpowers/
