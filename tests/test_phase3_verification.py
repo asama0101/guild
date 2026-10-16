@@ -82,14 +82,31 @@ class EvidenceGateTest(unittest.TestCase):
         del self.p["history"]
         write(self.path, self.p)
         old = time.time() - 3600
-        self.report.write_text("x", encoding="utf-8")
+        self.report.write_text("## 判定" + chr(10) + "passed", encoding="utf-8")
         os.utime(self.report, (old, old))
         self.assertEqual(run("advance", self.path, "T1", "passed")[0], 0)
+
+    def test_report_verdict_must_be_passed(self):
+        for word in ("rejected", "needs_scout"):
+            self.report.write_text("## 判定" + chr(10) + word + chr(10), encoding="utf-8")
+            code, _, err = run("advance", self.path, "T1", "passed")
+            self.assertEqual(code, 1, word)
+            self.assertIn("passed", err)
+
+    def test_report_without_verdict_heading_is_refused(self):
+        self.report.write_text("できました", encoding="utf-8")
+        self.assertEqual(run("advance", self.path, "T1", "passed")[0], 1)
+
+    def test_state_error_is_reported_before_evidence(self):
+        p = plan(todo("T1", state="running"))
+        write(self.path, p)
+        _, _, err = run("advance", self.path, "T1", "passed")
+        self.assertIn("running", err)
 
     def test_check_evidence_function(self):
         with self.assertRaises(guild.GuildError):
             guild.check_evidence(self.p, "T1", self.dir)
-        self.report.write_text("x", encoding="utf-8")
+        self.report.write_text("## 判定" + chr(10) + "passed", encoding="utf-8")
         guild.check_evidence(self.p, "T1", self.dir)  # 例外にならない
 
 

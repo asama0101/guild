@@ -186,7 +186,7 @@
 | `pause-clear <root>` | pause.json を消す（`cleared`）。`/guild:quest` の起動時（ギルドを開ける）。なくても何も起きない |
 
 イベント: `deps_done`（`sync` が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。ほかに `dep_failed`・`unblock`・`confirmed`・`declined`・`reported_failed`・`skip`・`retry`。
-`advance <plan> <id> passed` は、証拠ゲートを通らないと拒否される：鑑定士の報告 `reports/<id>-appraiser.md` があり、空でなく、その Todo が鑑定待ち（`review`）になったあとに書かれていること（古い報告のままの合格を防ぐ。`rejected` には要らない）。
+`advance <plan> <id> passed` は、証拠ゲートを通らないと拒否される：鑑定士の報告 `reports/<id>-appraiser.md` があり、空でなく、「## 判定」の次の語が `passed` で、その Todo が鑑定待ち（`review`）になったあとに書かれていること（`needs_scout` の 1 回目の報告では通らない）（古い報告のままの合格を防ぐ。`rejected` には要らない）。
 
 ## 決定（未決だった3点）
 

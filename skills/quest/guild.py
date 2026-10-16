@@ -353,6 +353,9 @@ def check_evidence(plan, todo_id, qdir):
     f = Path(qdir) / "reports" / f"{todo_id}-appraiser.md"
     if not f.is_file() or f.stat().st_size == 0:
         raise GuildError(f"{todo_id}: 鑑定士の報告 reports/{todo_id}-appraiser.md がないか空です。鑑定士が報告を書いてから passed を送ってください")
+    verdict = re.search(r"##\s*判定\s*" + chr(10) + r"\s*(\S+)", f.read_text(encoding="utf-8", errors="replace"))
+    if not verdict or not verdict.group(1).lower().startswith("passed"):
+        raise GuildError(f"{todo_id}: 鑑定士の報告の「## 判定」が passed ではありません（{verdict.group(1) if verdict else '見つかりません'}）")
     sent = [h for h in plan.get("history", []) if h.get("id") == todo_id and h.get("to") == "review"]
     if sent:
         try:
@@ -1538,7 +1541,7 @@ def mutate_plan(cmd, path, argv):
         t = todo_map(plan).get(argv[3])
         if t is None:
             raise GuildError(f"todo がありません: {argv[3]}")
-        if argv[4] == "passed":
+        if argv[4] == "passed" and t["state"] == "review":  # 状態が違うときは、apply_event が状態のエラーを返す
             check_evidence(plan, t["id"], Path(path).parent)
         apply_event(t, argv[4], tr, plan)
         result = {"id": t["id"], "state": t["state"]}
