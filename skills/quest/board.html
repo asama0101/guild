@@ -52,6 +52,7 @@ body{margin:0;background:var(--bg)}
 .letter h3{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-size:20px;margin:0 0 6px}
 .letter p{margin:0 0 10px;font-size:14.5px}
 .fine{font-size:13px;color:var(--sub)}
+.warnlist{color:var(--warn)}
 .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 .btn{min-height:46px;padding:6px 22px;border-radius:4px;font:inherit;font-weight:700;cursor:pointer;border:2px solid var(--ink);background:var(--paper2);color:var(--ink)}
 .btn.go{background:var(--ok);border-color:var(--ok-edge);color:var(--on)}
@@ -767,6 +768,7 @@ function letterFor(qd, a) {
     return h('section', { class: 'letter', 'aria-label': '計画の承認' }, seal('印'),
       h('div', { class: 'kick' }, 'お願い：承認'), h('h3', null, 'この計画で進めてよいですか'),
       h('p', null, `地図師が、依頼を ${qd.total} つの Todo に分けました。下の「道のり」タブで Todo と合格基準を確かめて、承認してください。日付は「日付」タブで直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
+      planBriefBlock(qd.q.plan),
       h('span', { class: 'lbl' }, `使うインプット（${qd.inputs.length}件。外す・候補の追加は、承認の前でもできます）`), inputsBlock(qd),
       h('label', { class: 'lbl', for: k + 'fix' }, '直してほしいこと（直す場合だけ）'),
       (() => { const t = textarea(k + ':fix', { id: k + 'fix', placeholder: '例：T2 の前に、資料を共有する Todo を足してほしい' }); return t; })(),
@@ -987,6 +989,27 @@ function datesTab(qd) {
     sentNote(`${k}:sent`)];
 }
 // ---- インプット：このクエストが使うファイル（guild/inputs/）。追加・外すは入力 inputs で送る（plan.json は guild.py が書く）
+// 承認の手紙に載せる、計画の見どころ（地図師の自己点検 brief・計画の警告・あなたの作業量・再計画の差分）。ない古い計画では何も出さない
+function planBriefBlock(p) {
+  if (!p) return null;
+  const list = (title, items, cls) => (Array.isArray(items) && items.length ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, title), h('ul', { class: cls || 'fine', style: 'margin:4px 0 0 18px;padding:0' }, ...items.map((x) => h('li', null, String(x))))) : null);
+  const b = p.brief, warns = (p.check && p.check.warnings) || [], w = p.workload, df = p.replan_diff;
+  const idTitle = (x) => `${x.id}「${x.title || ''}」`;
+  return h('div', { class: 'planbrief' },
+    b && b.goal ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, '依頼の理解（言い換え）'), h('p', { style: 'margin:4px 0 0' }, b.goal)) : null,
+    b ? list('含めないこと', b.non_goals) : null,
+    b ? list('推測で決めた前提（違っていたら「計画を直す」で伝えてください）', b.assumptions) : null,
+    b ? list('うまくいかないかもしれないこと', b.risks) : null,
+    b && Array.isArray(b.coverage) && b.coverage.length ? list('依頼の要件と、それを満たす Todo', b.coverage.map((c) => `${c.requirement} → ${c.todos && c.todos.length ? c.todos.join('、') : '対応する Todo がありません'}`)) : null,
+    warns.length ? list('計画の点検で気づいたこと（警告）', warns, 'fine warnlist') : null,
+    w ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, 'あなたの作業量'),
+      h('p', { style: 'margin:4px 0 0' }, w.human ? `あなたの実行は ${w.human} 件です（${Object.entries(w.days || {}).map(([d, n]) => `${d}：${n}件`).join('、')}）。` : 'あなたの実行はありません。すべて自動で進みます。'),
+      w.items && w.items.length ? h('ul', { class: 'fine', style: 'margin:4px 0 0 18px;padding:0' }, ...w.items.map((i) => h('li', null, `${idTitle(i)}　予定 ${i.scheduled || '—'}`))) : null,
+      w.over_deadline && w.over_deadline.length ? h('p', { class: 'fine warnlist', style: 'margin:4px 0 0' }, `依頼の締切を過ぎる予定があります：${w.over_deadline.join('、')}`) : null) : null,
+    df ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, '前の計画からの変更'),
+      h('p', { class: 'fine', style: 'margin:4px 0 0' }, `引き継いだ（やり直さない）：${df.carried && df.carried.length ? df.carried.join('、') : 'なし'}`),
+      list('足した Todo', (df.added || []).map(idTitle)), list('なくした Todo', (df.removed || []).map(idTitle)), list('変えた Todo（やり直します）', (df.changed || []).map(idTitle))) : null);
+}
 const TEXT_INPUT = /\.(md|txt|csv)$/i;  // 画面で開けるもの（それ以外は、パスをコピーして開く）
 function inputsEditable(qd) { const p = qd.q.plan; return !!p && (p.status === 'active' || p.status === undefined) && !p.accepted; }
 function sendInputs(qd, names, drops, key) { return send(qd.id, { type: 'inputs', add: names, remove: drops }, key); }
@@ -2064,7 +2087,11 @@ function demoTree(scene) {
       { t: at(day + 79), id: 'T3', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 60), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 58), id: 'T3', event: 'passed', from: 'review', to: 'done' }],
     todos: [mk('T1', 'テンプレートを3種類集める', 'auto', [], 'done', t1c), mk('T2', '観点表をつくって比べる', 'auto', ['T1'], 'done', t1c), mk('T3', '比較表にまとめる', 'auto', ['T2'], 'done', t1c)] };
   p1.todos[0].due = '2026-10-01'; p1.todos[1].due = '2026-12-31'; p1.todos[2].deliverable = true; p2.todos[2].deliverable = true;
+  p1.brief = { goal: 'notes.txt の要点を3行にまとめ、上司の了承を得てから公開する', non_goals: ['公開後の反応の集計はしない'], assumptions: ['公開先は publish フォルダ（依頼文に指定がないため推測）'], risks: ['上司の了承が取れないと、公開の Todo は実行されない'],
+    coverage: [{ requirement: '要点を3行にまとめる', todos: ['T1'] }, { requirement: '上司の了承を得る', todos: ['T2'] }, { requirement: '公開する', todos: ['T3'] }] };
+  p1.check = { warnings: ['T2: criteria.check が短すぎます（4 文字）。何をどう確かめるかを具体的に書いてください'] };
   const d0 = (n) => new Date(now + n * 86400000).toISOString().slice(0, 10);
+  p1.workload = { human: 1, days: { [d0(1)]: 1 }, items: [{ id: 'T2', title: p1.todos[1].title, scheduled: d0(1), due: d0(2) }], over_deadline: [] };
   p1.start = d0(-2); p1.due = d0(5); p1.todos.forEach((t, i) => { t.scheduled = d0(i); t.due = t.due || d0(i + 1); });
   p2.start = d0(-10); p2.due = d0(-3); p2.todos.forEach((t, i) => { t.scheduled = d0(-9 + i * 2); t.due = d0(-8 + i * 2); });
   p1.inputs = [{ name: 'notes.txt', source: 'user', reason: '依頼主の指定' }, { name: 'KGI定義.md', source: 'auto', reason: '要点の書き方の参考（書庫の用語『KPI』のヒント）' }];

@@ -60,7 +60,7 @@
 2. 各役の `tools` が上の表のとおりで、鑑定士・地図師に `Edit` がなく、地図師に Web 系のツールがない（鑑定士は WebFetch のみ）。
 3. 役は進め方の判断（順序・遷移・リトライ）をしない。判断は `guild.py` の出力に従う。
 4. 各役の報告が `reports/<Todo ID>-<役>.md` に固定の見出しで残る。
-5. 地図師の出力が、`guild.py validate` を通る `plan-draft.json` になっている。
+5. 地図師の出力が、`guild.py validate` と `adopt` の計画検査（deliverable が 1 件、`human` に instruction）を通る `plan-draft.json` になっている。書き終える前の自己点検の結果は `brief` に書く。
 6. 鑑定士が成果物を書き換えない（指示で禁止し、報告に『成果物を変更していない』と書く）。
 7. `skills/quest/SKILL.md` は 500 行未満で、役の詳細は `agents/*.md` に置く。
 

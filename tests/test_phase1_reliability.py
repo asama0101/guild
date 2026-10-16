@@ -29,6 +29,13 @@ def plan(*todos, approved=True, **kw):
     return {"quest": "Q1", "title": "t", "approved": approved, "status": "active", "todos": list(todos), **kw}
 
 
+def draft_json(d):
+    d = json.loads(json.dumps(d))
+    if d["todos"] and not any(t.get("deliverable") for t in d["todos"]):
+        d["todos"][-1]["deliverable"] = True
+    return json.dumps(d, ensure_ascii=False)
+
+
 def write(path, data):
     Path(path).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
@@ -157,8 +164,8 @@ class AdoptOrderTest(unittest.TestCase):
         (self.dir / "output" / "T1" / "x.md").write_text("x", encoding="utf-8")
         old = plan(todo("T1", state="done"), status="replan")
         write(self.path, old)
-        write(self.dir / "reports" / "plan-draft.json",
-              {"quest": "Q1", "title": "t", "todos": [todo("T1", criteria={**CRIT, "check": "changed"})]})
+        (self.dir / "reports" / "plan-draft.json").write_text(draft_json(
+            {"quest": "Q1", "title": "t", "todos": [todo("T1", criteria={**CRIT, "check": "changed"})]}), encoding="utf-8")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -184,7 +191,7 @@ class CarryOverTest(unittest.TestCase):
             d = Path(d)
             (d / "reports").mkdir()
             write(d / "plan.json", old)
-            write(d / "reports" / "plan-draft.json", {"quest": "Q1", "title": "t", "todos": new_todos})
+            (d / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q1", "title": "t", "todos": new_todos}), encoding="utf-8")
             return guild.adopt(d / "plan.json", TR)["carried"]
 
     def old(self):
@@ -319,7 +326,7 @@ class ReviewFixesTest(unittest.TestCase):
     def test_adopt_archive_failure_becomes_warning(self):
         (self.dir / "reports").mkdir()
         write(self.path, plan(todo("T1", state="done"), status="replan"))
-        write(self.dir / "reports" / "plan-draft.json", {"quest": "Q1", "title": "t", "todos": [todo("T1")]})
+        (self.dir / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q1", "title": "t", "todos": [todo("T1")]}), encoding="utf-8")
         with mock.patch.object(guild, "archive_outputs", side_effect=OSError("held")):
             r = guild.adopt(self.path, TR)
         self.assertEqual(r["adopted"], 1)

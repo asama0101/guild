@@ -25,6 +25,19 @@ def todo(i, kind="auto", deps=(), **kw):
     return t
 
 
+def draft_json(d, **kw):
+    """地図師の下書き（plan-draft.json）の JSON。adopt の計画検査（deliverable 1 件・human の instruction）を満たすよう、足りなければ補う。"""
+    d = copy.deepcopy(d)
+    ts = d.get("todos")
+    if isinstance(ts, list) and ts and all(isinstance(t, dict) for t in ts):
+        if not any(t.get("deliverable") is True for t in ts):
+            ts[-1]["deliverable"] = True
+        for t in ts:
+            if t.get("kind") == "human" and not t.get("instruction"):
+                t["instruction"] = "やってください。"
+    return json.dumps(d, **kw)
+
+
 def plan(*todos, approved=True):
     return {"quest": "Q1", "title": "t", "approved": approved, "status": "active", "todos": list(todos)}
 
@@ -238,7 +251,7 @@ class AdoptTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def draft(self, data):
-        (self.dir / "reports" / "plan-draft.json").write_text(json.dumps(data), encoding="utf-8")
+        (self.dir / "reports" / "plan-draft.json").write_text(draft_json(data), encoding="utf-8")
 
     def good(self):
         # 状態や承認を勝手に書いてきても、取り込み時に初期化される
@@ -331,7 +344,7 @@ class HistoryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "plan.json"
             (Path(d) / "reports").mkdir()
-            (Path(d) / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q1", "title": "t", "todos": [todo("T1")]}), encoding="utf-8")
+            (Path(d) / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q1", "title": "t", "todos": [todo("T1")]}), encoding="utf-8")
             guild.adopt(path, TR)
             self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["history"][0]["event"], "adopted")
 
@@ -597,7 +610,7 @@ class FixesTest(unittest.TestCase):
             (q / "plan.json").write_text(json.dumps(old), encoding="utf-8")
             new_t1 = todo("T1")                       # 題名・合格基準が同じ → 引き継ぐ
             new_t2 = todo("T2", title="別の作業", deps=["T1"])  # 題名が変わった → 引き継がない
-            (q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q1", "title": "t", "todos": [new_t1, new_t2]}), encoding="utf-8")
+            (q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q1", "title": "t", "todos": [new_t1, new_t2]}), encoding="utf-8")
             r = guild.adopt(q / "plan.json", TR)
             self.assertEqual(r["carried"], ["T1"])
             p = json.loads((q / "plan.json").read_text(encoding="utf-8"))
@@ -673,7 +686,7 @@ class MarkdownOnlyTest(unittest.TestCase):
             (q / "reports").mkdir(parents=True)
             draft = {"quest": "Q001", "title": "t", "format": "pptx", "todos": [
                 {"id": "T1", "title": "x", "kind": "auto", "deps": [], "deliverable": True, "criteria": CRIT}]}
-            (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+            (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
         self.assertNotIn("format", saved)
@@ -815,7 +828,7 @@ class AdoptDatesTest(unittest.TestCase):
                 (q / "plan.json").write_text(json.dumps(old), encoding="utf-8")
             draft = {"quest": "Q001", "title": "t", "todos": todos or [
                 {"id": "T1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT}]}
-            (q / "reports" / "plan-draft.json").write_text(json.dumps(draft), encoding="utf-8")
+            (q / "reports" / "plan-draft.json").write_text(draft_json(draft), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             return json.loads((q / "plan.json").read_text(encoding="utf-8"))
 
@@ -851,7 +864,7 @@ class AdoptDatesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             q = Path(d) / "Q001"
             (q / "reports").mkdir(parents=True)
-            (q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q001", "title": "t", "todos": [
+            (q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q001", "title": "t", "todos": [
                 {"id": "T1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT, "due": "2026-10-20"}]}), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             self.assertEqual(guild.load_json(q / "plan.json")["todos"][0]["due"], "2026-10-20")
@@ -1223,7 +1236,7 @@ class ArchiveTest(unittest.TestCase):
         self.assertEqual([a["file"] for a in guild.arrivals(self.root) if a["kind"] == "archive"], ["1.json"])
 
     def test_adopt_keeps_archive_used(self):
-        (self.q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q1", "title": "t", "todos": [todo("T1")], "archive_used": ["WVS2.md"]}), encoding="utf-8")
+        (self.q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q1", "title": "t", "todos": [todo("T1")], "archive_used": ["WVS2.md"]}), encoding="utf-8")
         guild.adopt(self.q / "plan.json", TR)
         self.assertEqual(guild.load_json(self.q / "plan.json")["archive_used"], ["WVS2.md"])
 
@@ -1620,7 +1633,7 @@ class DeliverablesTest(unittest.TestCase):
         old = dict(plan(todo("T1", state="done")), status="replan")
         guild.save_plan(self.q / "plan.json", old)
         guild.publish_deliverables(self.q)
-        (self.q / "reports" / "plan-draft.json").write_text(json.dumps({"quest": "Q001", "title": "t", "todos": [
+        (self.q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q001", "title": "t", "todos": [
             {"id": "T1", "title": "x", "kind": "auto", "deps": [], "criteria": CRIT}]}), encoding="utf-8")
         guild.adopt(self.q / "plan.json", TR)
         self.assertEqual(self.names(), [])
@@ -1953,7 +1966,7 @@ class NoTemplateTest(unittest.TestCase):
             (q / "reports").mkdir(parents=True)
             draft = {"quest": "Q001", "title": "t", "template": "templates/ない.md", "todos": [
                 {"id": "T1", "title": "x", "kind": "auto", "deps": [], "deliverable": True, "criteria": CRIT}]}
-            (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+            (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)  # テンプレートの検査はしない（ないファイルを書いてきても落ちない）
             self.assertNotIn("template", guild.load_json(q / "plan.json"))
 
@@ -2246,7 +2259,7 @@ class InputsSelectTest(unittest.TestCase):
 
     def adopt(self, q, **extra):
         draft = {"quest": "Q001", "title": "t", "todos": [{"id": "T1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT}], **extra}
-        (q / "reports" / "plan-draft.json").write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+        (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
         guild.adopt(q / "plan.json", TR)
         return guild.load_json(q / "plan.json")
 

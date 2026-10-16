@@ -611,6 +611,92 @@ def check_plan_inputs(plan):
     return errs
 
 
+AMBIGUOUS = ("適切", "十分", "適宜", "なるべく", "できるだけ", "速やか", "高品質", "わかりやすく", "分かりやすく", "きちんと", "しっかり", "必要に応じて")
+MAX_TODOS = 12  # これを超えたら、粒度が細かすぎないかの警告
+MIN_CRITERIA_LEN = 6  # これより短い合格基準は、測れる書き方になっていない可能性の警告
+
+
+def _str_list(v):
+    return [str(x).strip() for x in v if str(x).strip()] if isinstance(v, list) else []
+
+
+def normalize_brief(brief, ids):
+    """地図師の自己点検（目的・非目標・前提・リスク・要件と Todo の対応）を整える。返り値は (brief か None, エラー, 警告)。"""
+    if not isinstance(brief, dict):
+        return None, [], ["地図師の自己点検（brief）がありません。要件が Todo で網羅されているかは、確かめられていません"]
+    errs, warns = [], []
+    out = {"goal": str(brief.get("goal") or "").strip(), "non_goals": _str_list(brief.get("non_goals")),
+           "assumptions": _str_list(brief.get("assumptions")), "risks": _str_list(brief.get("risks")), "coverage": []}
+    if not out["goal"]:
+        warns.append("自己点検に、目的の言い換え（goal）がありません")
+    cov = brief.get("coverage")
+    for c in cov if isinstance(cov, list) else []:
+        if not isinstance(c, dict) or not str(c.get("requirement") or "").strip():
+            continue
+        req, todos = str(c["requirement"]).strip(), _str_list(c.get("todos"))
+        for i in todos:
+            if i not in ids:
+                errs.append(f"自己点検の「{req}」が、ない Todo {i} を指しています")
+        if not todos:
+            warns.append(f"要件「{req}」に対応する Todo がありません（網羅漏れの可能性）")
+        out["coverage"].append({"requirement": req, "todos": todos})
+    if not out["coverage"]:
+        warns.append("自己点検に、要件と Todo の対応（coverage）がありません")
+    return out, errs, warns
+
+
+def plan_quality(plan, brief):
+    """計画の質の検査（adopt のときだけ）。エラーは地図師に差し戻し、警告は承認の手紙に出す（承認は止めない）。
+    返り値は (エラー, 警告, 整えた brief)。"""
+    todos = plan["todos"]
+    errs, warns = [], []
+    n = sum(1 for t in todos if t.get("deliverable") is True)
+    if n != 1:
+        errs.append(f"deliverable: true の Todo は、最後のまとめ 1 つだけにしてください（いま {n} 件）")
+    for t in todos:
+        i = t.get("id")
+        if t.get("kind") == "human" and not str(t.get("instruction") or "").strip():
+            errs.append(f"{i}: human の Todo には instruction（依頼主への頼み方）が要ります")
+        for k in CRITERIA_KEYS:
+            v = str((t.get("criteria") or {}).get(k, "")).strip()
+            hit = [w for w in AMBIGUOUS if w in v]
+            if hit:
+                warns.append(f"{i}: criteria.{k} に測れない言葉があります（{'・'.join(hit)}）。数や有無で言える書き方にしてください")
+            elif v and len(v) < MIN_CRITERIA_LEN:
+                warns.append(f"{i}: criteria.{k} が短すぎます（{len(v)} 文字）。何をどう確かめるかを具体的に書いてください")
+    if len(todos) > MAX_TODOS:
+        warns.append(f"Todo が {len(todos)} 件あります（{MAX_TODOS} 件超）。粒度が細かすぎないか確かめてください")
+    ids = {t.get("id") for t in todos}
+    out, b_errs, b_warns = normalize_brief(brief, ids)
+    return errs + b_errs, warns + b_warns, out
+
+
+def workload(plan):
+    """依頼主（あなた）の作業量：human の Todo の件数・予定日ごとの件数・一覧。依頼の締切を超える予定の Todo も返す。"""
+    items = [{"id": t["id"], "title": t.get("title"), "scheduled": t.get("scheduled"), "due": t.get("due")}
+             for t in plan["todos"] if t.get("kind") == "human"]
+    days = {}
+    for i in items:
+        if i["scheduled"]:
+            days[i["scheduled"]] = days.get(i["scheduled"], 0) + 1
+    end = plan.get("due")
+    over = [i["id"] for i in items if end and i["due"] and i["due"] > end]
+    return {"human": len(items), "days": dict(sorted(days.items())), "items": items, "over_deadline": over}
+
+
+def plan_diff(old, plan, carried):
+    """再計画の差分：足された Todo・なくなった Todo・変わった Todo（番号は同じで、種別・題名・合格基準・依存のどれかが違う）・引き継がれた Todo。"""
+    brief = lambda t: {"id": t["id"], "title": t.get("title")}
+    old_by = {t["id"]: t for t in old.get("todos", [])}
+    new_by = {t["id"]: t for t in plan["todos"]}
+    keys = ("kind", "title", "criteria", "deps")
+    return {"added": [brief(t) for t in plan["todos"] if t["id"] not in old_by],
+            "removed": [brief(t) for t in old.get("todos", []) if t["id"] not in new_by],
+            "changed": [brief(t) for t in plan["todos"] if t["id"] in old_by and t["id"] not in carried
+                        and any(old_by[t["id"]].get(k) != t.get(k) for k in keys)],
+            "carried": list(carried)}
+
+
 def adopt(plan_path, tr):
     """reports/plan-draft.json（地図師の分解結果）を検査し、未承認の plan.json にする。"""
     plan_path = Path(plan_path)
@@ -642,10 +728,15 @@ def adopt(plan_path, tr):
     errs = validate(plan, tr)
     if errs:
         raise GuildError("plan-draft.json の検査に失敗しました: " + " / ".join(errs))
+    q_errs, q_warns, brief = plan_quality(plan, draft.get("brief"))
+    if q_errs:
+        raise GuildError("plan-draft.json の計画検査に失敗しました: " + " / ".join(q_errs))
+    plan["brief"], plan["check"], plan["workload"] = brief, {"warnings": q_warns}, workload(plan)
     carried, warnings = [], []
     if old is not None:
         shutil.copy2(plan_path, plan_path.with_name("plan.prev.json"))
         carried = carry_over(plan, old)
+        plan["replan_diff"] = plan_diff(old, plan, carried)
     save_plan(plan_path, plan)  # 保存してから成果物を動かす。保存に失敗しても、成果物は元の場所に残る
     if old is not None:
         unpublish_deliverables(plan_path.parent)  # 作り直し。置いた納品物は、また全 Todo が済んだ時に置き直す

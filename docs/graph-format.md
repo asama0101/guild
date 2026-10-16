@@ -167,7 +167,7 @@
 | `answers <dir>` | 計画がない依頼の、質問への回答を取り出す |
 | `archive-propose <dir>` | 司書の候補（`reports/archive-draft.json`）を検査し、心得は登録、ほかは確認待ち（`archive.json` の `status` が `proposed`）にする。同名・別名の項目は更新の候補にする。候補は12件まで |
 | `archive-ingest <root>` | `.work/archive-inbox/` の入力（`entry`・`promote`・`deprecate`・`retype`）を書庫に反映し、索引（`archive/index.md`）を作り直す |
-| `adopt <plan.json>` | 同じフォルダの `reports/plan-draft.json` を検査（`validate` と同じ検査に加えて、`inputs`・`candidates` の名前が `guild/inputs/` にあるか）し、承認前の `plan.json` にする（`inputs` は依頼主の指定が先頭、`candidates` は選ばなかった候補）。すでにあれば上書きしない（`status` が `replan` のときだけ、完了済みの Todo と、依頼主が直した `inputs` を引き継いで置き換える） |
+| `adopt <plan.json>` | 同じフォルダの `reports/plan-draft.json` を検査（`validate` と同じ検査に加えて、`inputs`・`candidates` の名前が `guild/inputs/` にあるか）し、承認前の `plan.json` にする（`inputs` は依頼主の指定が先頭、`candidates` は選ばなかった候補）。さらに計画の質を検査する（下の「計画の質の検査」）。すでにあれば上書きしない（`status` が `replan` のときだけ、完了済みの Todo と、依頼主が直した `inputs` を引き継いで置き換える） |
 | `validate <plan.json>` | `deps` の参照切れ、循環、`kind`・`criteria` の欠け、未知の `state`、`human` の `confirm`、`inputs`・`candidates` の形の誤り（名前・`source`・`reason`・重なり）を検出する |
 | `sync <plan.json>` | 前提の結果に応じて `deps_done`・`dep_failed`・`unblock` を、動かなくなるまで適用する（承認前・中止・見直し中は何もしない） |
 | `next <plan.json>` | 状態を変えず、`ready`・`confirm`・`waiting_user`・`review`・`blocked`・`failed` に分けて返す。`runnable`・`finished`・`status`・`approved`・`awaiting_accept`・`complete` も返す。書庫の記録の進み具合として `archive`（`none`／`proposed`／`done`。壊れた `archive.json` は `proposed`）、`needs_archive`（完了・中止したが書庫の記録がまだ）、`closed`（書庫の確認まで済んで、もう何もしない）も返す |
@@ -203,3 +203,13 @@
 - `ingest` の入力の移動と `adopt` の成果物の退避が保存のあとに失敗したときは、戻りの `warnings` に出す（計画は保存済みなので、やり直さない）。
 - 制約：ロックは `plan.json` だけを守る。`archive.json` を書く `archive-propose`・`archive-ingest` と、`ingest` の中の書庫の確認（`archive_decide`）は、ロックの外にある。`ingest` が計画の保存前に落ちた場合、書庫の確認の入力だけは、再実行すると「確認待ちがありません」で拒否される（登録は済んでいる）。
 
+
+## 計画の質の検査（adopt）
+
+`adopt` は、`validate` に加えて計画の質を検査する（承認前の計画だけ。進行中の計画には適用しない）。
+
+- **エラー（地図師に差し戻す）**: `deliverable: true` の Todo がちょうど 1 件でない。`human` の Todo に `instruction` がない。`brief.coverage` が、ない Todo を指している。
+- **警告（`plan.json` の `check.warnings` に残り、承認の手紙に出る。承認は止めない）**: `criteria` に測れない言葉（適切・十分・適宜・なるべく・できるだけ・速やか・高品質・わかりやすく・きちんと・しっかり・必要に応じて）がある。`criteria` の値が 6 文字未満。Todo が 12 件を超える。自己点検（`brief`）がない・`goal` や `coverage` が空・要件に対応する Todo がない。
+- **`brief`**（地図師の自己点検。`plan-draft.json` に書き、整えて `plan.json` に入る）: `goal`（依頼の言い換え）、`non_goals`、`assumptions`（推測で決めた前提）、`risks`、`coverage`（`[{requirement, todos: [id…]}]`）。
+- **`workload`**（`guild.py` が計算して `plan.json` に入る）: `human`（あなたの実行の件数）、`days`（予定日ごとの件数）、`items`、`over_deadline`（依頼の締切を過ぎる予定の Todo）。
+- **`replan_diff`**（replan のときだけ）: `added`・`removed`・`changed`（やり直しになる Todo）・`carried`（引き継がれた Todo）。
