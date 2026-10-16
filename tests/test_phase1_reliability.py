@@ -245,5 +245,101 @@ class NextViewArchiveTest(unittest.TestCase):
             self.assertEqual(json.loads(r.stdout)["archive"], "none")
 
 
+class ReviewFixesTest(unittest.TestCase):
+    """Phase 1 のレビューで見つかった穴の回帰テスト。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.path = self.dir / "plan.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_steal_does_not_remove_fresh_lock(self):
+        lock = Path(str(self.path) + ".lock")
+        lock.write_text("1", encoding="utf-8")
+        guild._steal_stale(lock)  # 取り上げ役が古さを確かめ直すので、新しいロックは消さない
+        self.assertTrue(lock.exists())
+        self.assertFalse(Path(str(lock) + ".steal").exists())
+
+    def test_steal_removes_stale_lock(self):
+        lock = Path(str(self.path) + ".lock")
+        lock.write_text("1", encoding="utf-8")
+        old = time.time() - guild.LOCK_STALE - 5
+        os.utime(lock, (old, old))
+        guild._steal_stale(lock)
+        self.assertFalse(lock.exists())
+
+    def test_release_failure_is_swallowed(self):
+        real = Path.unlink
+
+        def flaky(self_, missing_ok=False):
+            if self_.name.endswith(".lock"):
+                raise PermissionError("held")
+            return real(self_, missing_ok=missing_ok)
+
+        with mock.patch.object(guild, "REPLACE_TRIES", 2), mock.patch.object(Path, "unlink", flaky):
+            with guild.plan_lock(self.path):
+                pass  # 解除に失敗しても、例外にならない
+
+    def test_contended_lock_waits_then_proceeds(self):
+        import threading
+        order = []
+        started = threading.Event()
+
+        def holder():
+            with guild.plan_lock(self.path):
+                started.set()
+                time.sleep(0.4)
+                order.append("holder")
+
+        t = threading.Thread(target=holder)
+        t.start()
+        started.wait()
+        t0 = time.monotonic()
+        with guild.plan_lock(self.path):
+            order.append("waiter")
+        t.join()
+        self.assertEqual(order, ["holder", "waiter"])
+        self.assertGreater(time.monotonic() - t0, 0.2)  # 実際に待った
+
+    def test_ingest_move_failure_becomes_warning(self):
+        (self.dir / "inbox").mkdir()
+        p = plan(todo("T1", state="waiting_user", kind="human"))
+        write(self.path, p)
+        write(self.dir / "inbox" / "a.json", {"type": "result", "todo": "T1", "ok": True, "note": "n"})
+        saved = []
+        with mock.patch.object(guild.shutil, "move", side_effect=OSError("held")):
+            r = guild.ingest(self.path, p, TR, commit=lambda: saved.append(True))
+        self.assertEqual(saved, [True])
+        self.assertEqual(r["applied"], ["a.json"])
+        self.assertEqual(len(r["warnings"]), 1)
+
+    def test_adopt_archive_failure_becomes_warning(self):
+        (self.dir / "reports").mkdir()
+        write(self.path, plan(todo("T1", state="done"), status="replan"))
+        write(self.dir / "reports" / "plan-draft.json", {"quest": "Q1", "title": "t", "todos": [todo("T1")]})
+        with mock.patch.object(guild, "archive_outputs", side_effect=OSError("held")):
+            r = guild.adopt(self.path, TR)
+        self.assertEqual(r["adopted"], 1)
+        self.assertEqual(len(r["warnings"]), 1)
+        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["status"], "active")
+
+    def test_save_plan_cleans_tmp_when_write_fails(self):
+        class Boom:
+            pass
+
+        with self.assertRaises(TypeError):
+            guild.save_plan(self.path, {"a": Boom()})  # JSON にできない
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+    def test_carry_over_terminates_on_cycle_and_unknown_dep(self):
+        old = plan(todo("T1", state="done", deps=["T2"]), todo("T2", state="done", deps=["T1"]),
+                   todo("T3", state="done", deps=["T9"]))
+        new = plan(todo("T1", deps=["T2"]), todo("T2", deps=["T1"]), todo("T3", deps=["T9"]))
+        self.assertEqual(guild.carry_over(new, old), [])
+
+
 if __name__ == "__main__":
     unittest.main()

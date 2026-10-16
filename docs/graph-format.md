@@ -199,3 +199,7 @@
 - `plan.json` などの保存は、`<ファイル>.<pid>.tmp` に書いてから置き換える。Windows・OneDrive で置き換えが `PermissionError` になったら、短い間隔で数回やり直す。
 - `ingest` は、計画を保存してから `inbox/` の入力を `done/`・`rejected/` へ移す。`adopt`（replan）は、計画を保存してから古い成果物と報告を `prev/` へ移す。途中で落ちても、入力や成果物は元の場所に残る。
 - replan の引き継ぎ（`carry_over`）は、完了済みで、種別・題名・合格基準・`deps` が同じで、依存先もすべて引き継がれる Todo だけ。上流が変わった Todo の下流は引き継がない。
+- 古いロックの取り上げは `plan.json.lock.steal`（`O_EXCL`）で 1 人に絞り、その中で古さを確かめ直す。ロックの解除に失敗しても（OneDrive・ウイルス対策が掴んでいる）、例外にせず、60 秒で取り上げられる。
+- `ingest` の入力の移動と `adopt` の成果物の退避が保存のあとに失敗したときは、戻りの `warnings` に出す（計画は保存済みなので、やり直さない）。
+- 制約：ロックは `plan.json` だけを守る。`archive.json` を書く `archive-propose`・`archive-ingest` と、`ingest` の中の書庫の確認（`archive_decide`）は、ロックの外にある。`ingest` が計画の保存前に落ちた場合、書庫の確認の入力だけは、再実行すると「確認待ちがありません」で拒否される（登録は済んでいる）。
+
