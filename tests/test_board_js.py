@@ -69,10 +69,12 @@ console.log(JSON.stringify([
   aliveInfo({ state: 'waiting', t: iso(120) }, now).cls,
   aliveInfo({ state: 'working', t: iso(300) }, now).cls,
   aliveInfo({ state: 'working', t: iso(900) }, now).cls,
+  aliveInfo({ state: 'working', t: iso(-3600) }, now).cls,
+  aliveInfo({ state: 'working', t: iso(4000) }, now).cls,
   aliveInfo({ state: 'waiting', t: 'x' }, now).cls,
   aliveInfo({ state: 'waiting', t: iso(30) }, now).text.includes('待機中'),
   aliveInfo({ state: 'waiting', t: iso(120) }, now).text.includes('停止中')]));"""
-        self.assertEqual(node_eval(code), ["off", "on", "off", "on", "off", "off", True, True])
+        self.assertEqual(node_eval(code), ["off", "on", "off", "on", "on", "off", "off", "off", True, True])
 
     def test_flow_issues(self):
         code = "const closed = (s) => s === 'done' || s === 'skipped';\n" + extract("flowIssues") + """
@@ -82,13 +84,14 @@ const plan = { approved: true, todos: [
 const by = (id) => plan.todos.find((t) => t.id === id);
 console.log(JSON.stringify({
   t2: flowIssues(plan, by('T2')), t3: flowIssues(plan, by('T3')), t5: flowIssues(plan, by('T5')),
-  done: flowIssues(plan, { id: 'T9', state: 'done', deps: ['T4'] }), draft: flowIssues({ approved: false, todos: plan.todos }, by('T2')) }));"""
+  done: flowIssues(plan, { id: 'T9', state: 'done', deps: ['T4'] }), aborted: flowIssues({ ...plan, status: 'aborted' }, by('T2')), draft: flowIssues({ approved: false, todos: plan.todos }, by('T2')) }));"""
         r = node_eval(code)
         self.assertEqual(r["t2"], ["止まっている原因：T1 ができませんでした。"])
         self.assertEqual(r["t3"], ["止まっている原因：T1 ができませんでした。"])  # 失敗の根本まで辿る
         self.assertEqual(r["t5"], ["前提 T4 はやめたので、その結果がないまま進みます。", "T6 の完了を待っています。"])
         self.assertEqual(r["done"], [])
         self.assertEqual(r["draft"], [])  # 承認前は出さない
+        self.assertEqual(r["aborted"], [])  # 中止された依頼にも出さない
 
 
 class VisibilityContractTest(unittest.TestCase):

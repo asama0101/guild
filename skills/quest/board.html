@@ -544,7 +544,7 @@ function dateIssues(plan, t) {
 
 // 流れの注意：止まっている原因（失敗した前提）、やめた前提（結果がないまま進む）、前提の完了待ち。承認前の計画には出さない
 function flowIssues(plan, t) {
-  if (!plan.approved || closed(t.state) || !Array.isArray(plan.todos)) return [];
+  if (!plan.approved || plan.status === 'aborted' || closed(t.state) || !Array.isArray(plan.todos)) return [];
   const by = new Map(plan.todos.map((x) => [x.id, x])), out = [];
   const failedAncestors = (id, seen = new Set()) => {
     const r = [];
@@ -1884,9 +1884,10 @@ function stickyTools() {
 function aliveInfo(hb, nowMs) {
   const t = hb && hb.t ? Date.parse(hb.t) : NaN;
   if (!hb || Number.isNaN(t)) return { cls: 'off', text: '/guild:quest はまだ動いていません（動かすと、ここに「待機中」と出ます）' };
-  const age = (nowMs - t) / 1000, when = new Date(t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  if (hb.state === 'waiting' && age < 60) return { cls: 'on', text: '/guild:quest：待機中（ボードの答えを待っています）' };
-  if (hb.state === 'working' && age < 600) return { cls: 'on', text: '/guild:quest：作業中' };
+  const age = (nowMs - t) / 1000, future = age < -30,  // 時計が進んだ PC の印は、動いている証拠にしない
+    when = new Date(t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (!future && hb.state === 'waiting' && age < 60) return { cls: 'on', text: '/guild:quest：待機中（ボードの答えを待っています）' };
+  if (!future && hb.state === 'working' && age < 3600) return { cls: 'on', text: '/guild:quest：作業中' };
   return { cls: 'off', text: `/guild:quest：停止中（最後の稼働 ${when}）。ボードで答えても、動かすまで拾われません` };
 }
 function updateAlive() {
