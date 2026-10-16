@@ -91,8 +91,8 @@ code{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12p
 .tocb .tt{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .stamp.sm{font-size:11px;padding:0 6px;border-width:1px;transform:none;font-weight:700}
 @media (max-width:900px){.bwrap{display:block}.toc{display:none}}
-/* 画面が広いとき（本文1100px＋左右の余白に目次が入る幅）は、目次を本文の外の左の余白に固定する */
-@media (min-width:1540px){.bwrap{display:block}.toc{position:fixed;top:70px;left:calc(50% - 760px);width:190px;max-height:calc(100vh - 90px)}}
+/* 画面が広いとき（本文1400px＋左右の余白に目次が入る幅）は、目次を本文の外の左の余白に固定する */
+@media (min-width:1840px){.bwrap{display:block}.toc{position:fixed;top:70px;left:calc(50% - 920px);width:190px;max-height:calc(100vh - 90px)}}
 .grid2{column-count:2;column-gap:16px}
 .grid2>.card{break-inside:avoid;margin:0 0 16px}
 @media (max-width:900px){.grid2{column-count:1}}
@@ -1828,7 +1828,7 @@ function render() {
   const tops = KEEP_SCROLL.map((s) => { const e = document.querySelector(s); return e ? e.scrollTop : 0; });
   const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
   const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
-  app.replaceChildren(h('div', { class: 'wrap' + (S.tab === 'board' ? ' wide' : '') }, banner(),
+  app.replaceChildren(h('div', { class: 'wrap wide' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
   keepToast();
