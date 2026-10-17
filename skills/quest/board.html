@@ -1417,7 +1417,8 @@ function connectBox() {
 }
 
 // ---- 「＋ 新規」ダイアログ：依頼の内容・開始日（未指定なら今日）・締切（未定なら開始日）・インプット（既存から選ぶ／アップロード）
-const FORMATS = [['md', 'Markdown（既定）'], ['html', 'HTML']];
+const FORMATS = [['md', 'Markdown（既定）'], ['html', 'HTML'], ['prompt', 'プロンプト（Claude Code に貼って、Office などを作る）']];
+const PROMPT_TARGETS = [['pptx', 'PowerPoint'], ['xlsx', 'Excel'], ['docx', 'Word'], ['pdf', 'PDF'], ['image', '画像']];
 function newDialog() {
   if (!S.newOpen) return null;
   const have = new Map(((S.model && S.model.inputs) || []).map((f) => [f.name.toLowerCase(), f.name]));
@@ -1426,12 +1427,14 @@ function newDialog() {
   const start = h('input', { type: 'date', 'aria-label': '開始日' }); start.value = S.form['new:start'] || localToday(); bindKey(start, 'new:start');
   const due = h('input', { type: 'date', 'aria-label': '締切' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
   const picked = S.form['new:inputs'] || [], ups = S.files.new || [], over = ups.filter((f) => have.has(f.name.toLowerCase()));
-  const fmt = h('select', { 'aria-label': '納品物の形式' }, FORMATS.map(([v, l]) => h('option', { value: v }, l))); fmt.value = S.form['new:format'] || 'md'; bindKey(fmt, 'new:format');
+  const fmt = h('select', { 'aria-label': '納品物の形式' }, FORMATS.map(([v, l]) => h('option', { value: v }, l))); fmt.value = S.form['new:format'] || 'md'; bindKey(fmt, 'new:format'); fmt.addEventListener('change', () => { S.form['new:format'] = fmt.value; render(); });
+  const tgs = S.form['new:targets'] || [];
   const box = h('div', { class: 'nbox', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'new-title' },
     h('div', { class: 'rhead' }, h('h2', { class: 'h2', id: 'new-title' }, '新しいクエスト'), h('button', { type: 'button', class: 'btn ghost sm', onclick: closeNew }, '閉じる')),
     h('label', { class: 'lbl', for: 'qreq' }, '依頼の内容'), ta,
     h('div', { class: 'qopts' }, fld('開始日（未指定なら今日）', start), fld('締切（未定なら開始日と同じ日）', due)),
-    h('div', { class: 'qopts' }, fld('納品物の形式', fmt), h('span', { class: 'fine', style: 'align-self:end' }, 'PowerPoint・Excel・Word・PDF・画像は、Claude Code に渡すプロンプト（.prompt.md）になります。')),
+    h('div', { class: 'qopts' }, fld('納品物の形式', fmt), h('span', { class: 'fine', style: 'align-self:end' }, fmt.value === 'prompt' ? '納品物は、Claude Code に貼るプロンプト（.prompt.md）です。貼ると、選んだファイルができます。' : 'PowerPoint・Excel・Word・PDF・画像は、形式で「プロンプト」を選びます。')),
+    fmt.value === 'prompt' ? h('div', { class: 'qopts', role: 'group', 'aria-label': '作るファイル' }, h('span', { class: 'lbl' }, '作るファイル（1 つ以上）'), PROMPT_TARGETS.map(([v, l]) => check('new:targets', v, l, []))) : null,
     h('section', { 'aria-label': 'インプット' },
       h('p', { style: 'margin:14px 0 6px' }, h('b', null, 'インプット（任意）'), h('span', { class: 'fine' }, '　このクエストで使う資料です。納品物の型（見出しの並びなど）も、ここに付けて依頼文で伝えます。', code('guild/inputs/'), ' に1つだけ置かれ、各クエストは名前で参照します。')),
       h('div', { class: 'ncols' },
@@ -2345,11 +2348,13 @@ async function sendRequest() {
   const id = 'R' + stamp14(new Date()).replace(/^(\d{8})/, '$1-'), files = S.files.new || [], names = [];
   const picked = (S.form['new:inputs'] || []).map((n) => have.get(n.toLowerCase()));
   const start = S.form['new:start'] || localToday(), due = S.form['new:due'] || null;
+  const fmtV = FORMATS.some(([v]) => v === S.form['new:format']) ? S.form['new:format'] : 'md', targets = fmtV === 'prompt' ? PROMPT_TARGETS.map(([v]) => v).filter((v) => (S.form['new:targets'] || []).includes(v)) : [];
+  if (fmtV === 'prompt' && !targets.length) { S.newError = '「作るファイル」を、1 つ以上選んでください。'; render(); return; }
   try {
     for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
-    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due, format: FORMATS.some(([v]) => v === S.form['new:format']) ? S.form['new:format'] : 'md', inputs: picked, files: names, created: new Date().toISOString() }, null, 2));
+    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due, format: fmtV, ...(fmtV === 'prompt' ? { targets } : {}), inputs: picked, files: names, created: new Date().toISOString() }, null, 2));
   } catch (e) { S.newError = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); return; }
-  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.form['new:format'] = ''; S.form['new:inputs'] = []; S.form['f:npq'] = ''; S.files.new = []; S.newSaved = id; S.newOpen = false;
+  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.form['new:format'] = ''; S.form['new:targets'] = []; S.form['new:inputs'] = []; S.form['f:npq'] = ''; S.files.new = []; S.newSaved = id; S.newOpen = false;
   await refresh(true);
 }
 async function openFile(full) {

@@ -109,7 +109,7 @@
 - `kind` は `auto` か `human`。分解時に付け、計画の承認で直す。`human` は、役（魔法使い・錬金術師・冒険者）にできない作業（他のシステムの操作、承認、依頼主の判断、冒険者にも読めない情報の入手）だけ。調査・転記・整理・執筆は `auto`。
 - `class`（職業）は、`auto` の目標に必須で、実行する役を決める：`wizard`（魔法使い。調べる・比べる・出典を確かめる）、`alchemist`（錬金術師。すでにある材料から、書く・整理する。まとめの納品物を含む。Web なし）、`adventurer`（冒険者。動的ページをブラウザで読む）のどれか。`human` の目標には付けない（付いている・`auto` なのにない・上の3つ以外はエラー）。受付係が決める。旧 `needs_browser: true` は廃止し、`class: adventurer` に置き換えた。ギルドマスターは、`ready` の目標を `class` に応じて `guild:wizard`・`guild:alchemist`・`guild:adventurer` で呼ぶ（冒険者は、ブラウザが1つなので同時に1人まで）。
 - 計画の `title` は、**依頼 1 件の名前**（検索しやすい「対象＋作業」。24 字を超えると警告、80 字を超えるとエラー。依頼ごとに固有）。`series` は、同じ種類の依頼（定期・突発とも）を**関連づける名前**で、タイトルとは別（共通にしない）。どちらも受付係が `plan-draft.json` に必ず書き、ない・空は `adopt` が差し戻す。依頼主がボードで直した分は `meta_locked`（`["title", "series"]` のうち直したもの）に残り、作り直し（`replan`）でも保たれる。分解前は、依頼文の先頭 24 字が仮のタイトルとしてボードに出る。
-- `format`（納品する目標＝`deliverable: true` だけ）：`md`・`html`。依頼の `format` と同じで、`adopt` が入れる（違う値はエラー）。納品物にするファイルは、`.md` と、この形式の拡張子（`.html`）。納品物（`*.prompt.md` を除く）が 1 つなら、`publish` は、ファイル名を `Q###_<依頼のタイトル>.<拡張子>` にする（2 つ以上なら、元のファイル名）。
+- `format`（納品する目標＝`deliverable: true` だけ）：`md`・`html`・`prompt`。依頼の `format` と同じで、`adopt` が入れる（違う値はエラー）。納品物にするファイルは、`.md` と、この形式の拡張子（`.html`）。納品物（`*.prompt.md` を除く）が 1 つなら、`publish` は、ファイル名を `Q###_<依頼のタイトル>.<拡張子>` にする（2 つ以上なら、元のファイル名）。
 - `effects`（`auto` の目標に必須）：`none`・`external`・`irreversible`。`external`・`irreversible` には `confirm: true` が必須（なければ `adopt` が差し戻す）。`none` なのに題名・合格基準に危険な語（送信・公開・削除・共有・投稿など）があれば警告。承認の手紙に出る。`deliverable_spec`（納品する目標）：`{"headings": [...], "reader": "..."}`。ないと警告、形が違うとエラー。`deliver_to`（計画の一番外。任意）：納品物をコピーする、プロジェクト内の相対パス（`..`・絶対パス・`guild/`・`.git/`、解決後にそれらの中を指すもの、末尾のドット・空白、CON などの予約名、`~1` のような短縮名は不可）。受け取り（`accept`）のあと（`publish` が `accepted` の計画に対して実行されるとき）、`guild/deliverables/` と、ここの両方に、同じ名前で置く（受け取る前は、`guild/deliverables/` だけ）（置いた一覧は `.work/Q###/delivered.json`。取り下げ・作り直しでは、ここから消す）。
 - **総合確認**：全目標が済むと、`next` は `awaiting_overall: true` を返す（受付係が、依頼文・納品物・鑑定士の報告だけを読んで、`reports/overall-receptionist.md` を書く。「## 判定」の 1 行目が「満たしている」か「不足あり」で始まるものだけが有効）。報告ができると `awaiting_accept: true` になり、受け取りの手紙が出る。報告がないと、`accept` は拒否される。不足があっても、計画は自動では直らない（依頼主が選ぶ）。作り直し（`replan`）では、古い報告は `prev/` へ移る。
 - 旧形式（`todos`）の `plan.json` は読めない（`guild.py` は「旧形式の計画です」で止まり、自動の移行はしない）。`arrivals`・`wait` は、その依頼の `inbox` を数えず、ボードは「旧形式の依頼」と表示する。
@@ -140,7 +140,8 @@
 ```
 
 - `text`：依頼文。`start`・`due`：依頼の開始日・締切（`null` は未指定）。
-- `format`：納品物の形式。`md`（既定。省略も同じ）・`html`。ボードの新規依頼で選ぶ。ほかの値は、依頼を拒否する。pptx・xlsx・docx・PDF・画像は、形式として選べない（従来どおり `*.prompt.md`）。
+- `format`：納品物の形式。`md`（既定。省略も同じ）・`html`・`prompt`。ボードの新規依頼で選ぶ。ほかの値は、依頼を拒否する。`prompt` は、納品物が Claude Code に貼るプロンプト（`*.prompt.md`）だけになる形式で、PowerPoint・Excel・Word・PDF・画像を作るときに選ぶ。
+- `targets`：`format` が `prompt` のときだけ。作るファイルの種類の配列（`pptx`・`xlsx`・`docx`・`pdf`・`image` を 1 つ以上、重ならないように）。受付係は、種類ごとに 1 つ、プロンプトを書く目標（`deliverable: true`）を計画に入れる。`prompt` でないのに付いていれば、取り除く。`prompt` で不正・空なら、依頼を拒否する。
 - `inputs`：既存の `guild/inputs/` から選んだ名前。1つでもなければ、依頼を `.work/requests/rejected/` に移して拒否する。
 - `files`：アップロードの名前。取り込むと `guild/inputs/` に置き、`request.json` の `inputs` は「選んだ名前＋アップロードの名前」（重なりを除き、選んだものが先）になる。
 - チャットから出す依頼は、ギルドマスターが `{"type": "request", "text": "<依頼文>", "files": []}` を書く。

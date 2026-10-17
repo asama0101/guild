@@ -56,7 +56,7 @@ class BoardWiringTest(unittest.TestCase):
     def test_wiring(self):
         for needle in ("['log', 'クエストログ']", "log: logTab", "S.clog = cl ? JSON.parse(cl) : null", r"[/^clog\.json$/, '.work/clog.json']",
                        "followupBox(qd)", "鑑定士のおすすめ：", "function metaEditor(", "type: 'meta', title, series", "S.seriesFilter",
-                       r"split('\n')[0].slice(0, 24)", "format: FORMATS.some"):
+                       r"split('\n')[0].slice(0, 24)", "FORMATS.some(([v]) => v === S.form['new:format'])", "targets"):
             self.assertIn(needle, BOARD, needle)
 
 

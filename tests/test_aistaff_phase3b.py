@@ -214,6 +214,39 @@ class FormatTest(Base):
             self.assertEqual(json.loads((q / "request.json").read_text(encoding="utf-8"))["format"], fmt)
 
 
+class PromptFormatTest(Base):
+    def req(self, **kw):
+        write(self.gdir / ".work" / "requests" / "R1.json", dict({"type": "request", "text": "x", "inputs": [], "files": []}, **kw))
+
+    def test_prompt_with_targets_is_accepted(self):
+        self.req(format="prompt", targets=["pptx", "image"])
+        q = Path(guild.new_quest(self.root, "R1")["dir"])
+        r = json.loads((q / "request.json").read_text(encoding="utf-8"))
+        self.assertEqual((r["format"], r["targets"]), ("prompt", ["pptx", "image"]))
+        self.assertEqual(guild.request_format(q), "prompt")
+
+    def test_prompt_without_valid_targets_is_rejected(self):
+        for i, bad in enumerate((None, [], ["pptx", "pptx"], ["gif"], "pptx")):
+            write(self.gdir / ".work" / "requests" / f"B{i}.json", {"type": "request", "text": "x", "format": "prompt", "targets": bad, "inputs": [], "files": []})
+            with self.assertRaises(guild.GuildError, msg=repr(bad)):
+                guild.new_quest(self.root, f"B{i}")
+
+    def test_targets_are_dropped_for_other_formats(self):
+        self.req(format="md", targets=["pptx"])
+        q = Path(guild.new_quest(self.root, "R1")["dir"])
+        self.assertNotIn("targets", json.loads((q / "request.json").read_text(encoding="utf-8")))
+
+    def test_only_prompt_files_are_published_for_prompt_format(self):
+        guild.save_plan(self.q / "plan.json", {"quest": "Q001", "title": "提案", "series": "提案", "approved": True, "status": "active",
+                                               "goals": [dict(g("G1", deliverable=True, format="prompt"), state="done")]})
+        d = self.q / "output" / "G1"
+        d.mkdir(parents=True)
+        (d / "メモ.md").write_text("x", encoding="utf-8")
+        (d / "スライド.prompt.md").write_text("p", encoding="utf-8")
+        guild.publish_deliverables(self.q)
+        self.assertEqual(sorted(p.name for p in (self.gdir / "deliverables").iterdir()), ["Q001_スライド.prompt.md"])
+
+
 class PublishFormatTest(Base):
     def done_plan(self, fmt, extra_goal=False):
         goals = [dict(g("G1", deliverable=True, format=fmt), state="done")]

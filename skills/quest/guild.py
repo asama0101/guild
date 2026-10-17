@@ -57,6 +57,8 @@ PROMPT_SUFFIX = ".prompt.md"  # Markdown 以外（PowerPoint・Excel など）�
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
 CLASSES = ("wizard", "alchemist", "adventurer")  # 目標（auto）を実行する役（職業）
 FORMATS = {"md": ".md", "html": ".html"}  # 納品物の形式（文字の形式だけ。ほかはプロンプト *.prompt.md）
+REQUEST_FORMATS = {**FORMATS, "prompt": PROMPT_SUFFIX}  # 依頼で選べる形式。prompt は、納品物が Claude Code に貼るプロンプト（*.prompt.md）だけ
+PROMPT_TARGETS = {"pptx": "PowerPoint", "xlsx": "Excel", "docx": "Word", "pdf": "PDF", "image": "画像"}  # prompt のとき、作るファイルの種類（request.json の targets）
 DEFAULT_FORMAT = "md"
 TITLE_HINT = 24  # 依頼のタイトルの目安（超えると警告）
 META_MAX = 80  # タイトル・series の上限（超えるとエラー）
@@ -278,8 +280,8 @@ def validate(plan, tr):
             errs.append(f"{i}: kind が不明です: {t.get('kind')}")
         if t.get("state") not in tr["states"]:
             errs.append(f"{i}: state が不明です: {t.get('state')}")
-        if "format" in t and not (isinstance(t["format"], str) and t["format"] in FORMATS):
-            errs.append(f"{i}: format は {'・'.join(FORMATS)} のどれかにしてください: {t['format']!r}")
+        if "format" in t and not (isinstance(t["format"], str) and t["format"] in REQUEST_FORMATS):
+            errs.append(f"{i}: format は {'・'.join(REQUEST_FORMATS)} のどれかにしてください: {t['format']!r}")
         if t.get("kind") == "auto":
             if t.get("class") not in CLASSES:
                 errs.append(f"{i}: class は {'・'.join(CLASSES)} のどれかにしてください: {t.get('class')!r}")
@@ -864,13 +866,24 @@ def check_meta(draft):
     return errs, warns, title, series
 
 
+def check_targets(req):
+    """format が prompt の依頼の targets（作るファイルの種類）を検査する。問題があれば文を、なければ None を返す。prompt 以外では targets を消す。"""
+    if req.get("format") != "prompt":
+        req.pop("targets", None)
+        return None
+    t = req.get("targets")
+    if not isinstance(t, list) or not t or not all(isinstance(x, str) and x in PROMPT_TARGETS for x in t) or len(set(t)) != len(t):
+        return f"format が prompt のときは、targets に、作るファイルの種類（{'・'.join(PROMPT_TARGETS)}）を 1 つ以上、重ならないように入れてください: {t!r}"
+    return None
+
+
 def request_format(qdir):
     """依頼（request.json）の納品形式。ない・不明なら md。"""
     try:
         f = load_json(Path(qdir) / "request.json").get("format") if (Path(qdir) / "request.json").exists() else None
     except (GuildError, AttributeError):
         f = None
-    return f if isinstance(f, str) and f in FORMATS else DEFAULT_FORMAT
+    return f if isinstance(f, str) and f in REQUEST_FORMATS else DEFAULT_FORMAT
 
 
 RESERVED_NAME = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.I)
@@ -1227,7 +1240,7 @@ def deliverable_files(qdir, plan):
         if t.get("state") != "done" or not d.is_dir():
             continue
         f = t.get("format")
-        exts = {FORMATS[f] if isinstance(f, str) and f in FORMATS else ".md"}  # 納品する目標は、指定の形式のファイルだけを納品物にする
+        exts = {REQUEST_FORMATS[f] if isinstance(f, str) and f in REQUEST_FORMATS else ".md"}  # 納品する目標は、指定の形式のファイルだけを納品物にする
         for f in sorted(d.rglob("*")):
             if not f.is_file():
                 continue
@@ -1321,10 +1334,14 @@ def new_quest(root, request_id=None):
         if not src.exists():
             raise GuildError(f"{src} がありません")
         req = load_json(src)
-        if req.get("format") is not None and not (isinstance(req["format"], str) and req["format"] in FORMATS):
-            msg = f"format は {'・'.join(FORMATS)} のどれかにしてください: {req['format']!r}"
+        if req.get("format") is not None and not (isinstance(req["format"], str) and req["format"] in REQUEST_FORMATS):
+            msg = f"format は {'・'.join(REQUEST_FORMATS)} のどれかにしてください: {req['format']!r}"
             reject_request(wdir, request_id, msg)
             raise GuildError(msg)
+        t_errs = check_targets(req)
+        if t_errs:
+            reject_request(wdir, request_id, t_errs)
+            raise GuildError(t_errs)
         files = wdir / "requests" / "files" / request_id
         try:
             picked = picked_inputs(gdir, req, files)
