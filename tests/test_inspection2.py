@@ -100,5 +100,41 @@ class EvidenceDecorationTest(unittest.TestCase):
                 self.check(body)
 
 
+class ResultInputTest(unittest.TestCase):
+    def plan(self):
+        return {"quest": "Q001", "title": "t", "approved": True, "status": "active",
+                "goals": [goal("G1", "waiting_user", kind="human", instruction="聞く")], "history": []}
+
+    def test_bad_files_or_note_are_refused_before_the_state_moves(self):
+        for extra in ({"files": 5}, {"files": ["a", 3]}, {"files": "a.txt"}, {"note": ["x"]}):
+            plan = self.plan()
+            plan["goals"][0].pop("class", None)
+            with self.assertRaises(guild.GuildError, msg=str(extra)):
+                guild.apply_input(plan, {"type": "result", "goal": "G1", "ok": True, **extra}, TR)
+            self.assertEqual(plan["goals"][0]["state"], "waiting_user")
+
+    def test_null_files_mean_none(self):
+        plan = self.plan()
+        guild.apply_input(plan, {"type": "result", "goal": "G1", "ok": True, "files": None}, TR)
+        self.assertEqual(plan["goals"][0]["output"]["files"], [])
+
+    def test_a_failed_report_write_is_a_warning_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            q = Path(guild.new_quest(root)["dir"])
+            plan = self.plan()
+            guild.save_json(q / "plan.json", plan)
+            (q / "inbox").mkdir(exist_ok=True)
+            (q / "inbox" / "r.json").write_text(json.dumps({"type": "result", "goal": "G1", "ok": True, "note": "済"}), encoding="utf-8")
+            p = guild.load_plan(q / "plan.json")
+            from unittest import mock
+            with mock.patch.object(guild, "write_user_report", side_effect=OSError("ロック中")):
+                report = guild.ingest(q / "plan.json", p, TR, commit=lambda: guild.save_json(q / "plan.json", p))
+            self.assertEqual(len(report["applied"]), 1)
+            self.assertTrue(report["warnings"])
+            self.assertEqual(guild.load_plan(q / "plan.json")["goals"][0]["state"], "review")
+
+
 if __name__ == "__main__":
     unittest.main()

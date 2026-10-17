@@ -462,7 +462,10 @@ def ingest(plan_path, plan, tr, commit=None):
                 archive_decide(Path(plan_path).parent, data)  # 書庫の確認は、中止された依頼でも受け付ける
             else:
                 apply_input(plan, data, tr, Path(plan_path).parent, after)
-                write_user_report(Path(plan_path).parent, data)
+                try:
+                    write_user_report(Path(plan_path).parent, data)
+                except OSError as e:  # 入力は適用済み。ここで落とすと、同じバッチの適用済みの入力が保存されない
+                    report["warnings"].append(f"依頼主の結果の報告を書けませんでした（{f.name}：{e}）。reports/ に <目標>-user.md を手で書くか、目標をやり直してください")
                 qdir = Path(plan_path).parent
                 try:
                     if data.get("type") == "accept" or (data.get("type") == "meta" and plan.get("accepted")):
@@ -591,8 +594,14 @@ def apply_input(plan, data, tr, qdir=None, after=None):
     if kind == "confirm":
         apply_event(t, "confirmed" if data["ok"] else "declined", tr, plan)
     elif kind == "result":
+        files, memo = data.get("files"), data.get("note")  # note という名前は、関数 note() を隠すので使わない
+        if files is None:
+            files = []
+        if not isinstance(files, list) or not all(isinstance(x, str) for x in files) or not (memo is None or isinstance(memo, str)):
+            raise GuildError("result の files は文字列の配列、note は文字列にしてください")  # 状態を動かす前に検査する（動かしてから落ちると、状態だけ進んで入力が拒否される）
+        data["files"] = files
         apply_event(t, "submitted" if data["ok"] else "reported_failed", tr, plan)
-        t["output"] = {"note": data.get("note", ""), "files": data.get("files", [])}
+        t["output"] = {"note": memo or "", "files": files}
     elif kind == "decision" and data.get("choice") == "skip":
         apply_event(t, "skip", tr, plan)
     elif kind == "decision" and data.get("choice") == "retry":
