@@ -159,6 +159,7 @@
 | `confirm` | `{"type": "confirm", "goal": "G3", "ok": true}` | 実行前の確認（実行する／しない） |
 | `result` | `{"type": "result", "goal": "G2", "ok": true, "note": "…", "files": ["…"]}` | `human` の結果（できた／できなかった、一言メモ、添付は `inbox/files/`）。`reports/<id>-user.md` に書き写す |
 | `decision` | `{"type": "decision", "goal": "G2", "choice": "skip"}`（`drop` も同じ形）／`{"type": "decision", "choice": "replan", "comment": "…"}`／`{"type": "decision", "choice": "abort"}` | 失敗の判断（その目標だけやめる `skip`、後続もやめる `drop`）、計画の作り直し `replan`、中止 `abort` |
+| `reopen` | `{"type": "reopen", "comment": "直したい内容"}` | 完了（受け取り済み）か中止の依頼を、修正して再実行する（1〜1000 字の `comment` が必須）。`status` が `replan`、`approved` が `false` になり、`accepted` は外れる。受け取り済みの納品物（`deliver_to` のコピーも）を取り下げ、`archive.json`（書庫の確認の状態）を `archive.prev.json` に退避する。受付係が `comment` に関係する目標だけをやり直し、合格済みで変わらない目標は `adopt` が引き継ぐ。計画の承認から、もう一度行う |
 | `due` | `{"type": "due", "start": "…", "due": "…"}`／`{"type": "due", "goal": "G1", "scheduled": "…", "due": "…"}` | 日付の設定。`goal` がなければ依頼の `start`・`due`、あれば目標の `scheduled`・`due`。解除（`null`）できるのは目標の `due` だけ |
 | `inputs` | `{"type": "inputs", "add": [名前…], "remove": [名前…]}` | このクエストのインプットを足す・外す（上の `plan.json` の `inputs` を参照） |
 | `archive` | `{"type": "archive", "decisions": {"C1": "register", "C2": "skip"}, "codex": {"K1": "adopt"}}` | 書庫の登録候補への答え。`codex` は、掟への提案（同じ心得の 2 回目）への答えで、`adopt` のものだけ `guild/.work/codex/project.md` に 1 行で追記される（省略・`skip` は採用しない）。中止した依頼でも受け付ける |

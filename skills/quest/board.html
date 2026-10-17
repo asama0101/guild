@@ -1177,8 +1177,26 @@ function abortBlock(qd) {
     sentNote(key));
 }
 
+// 完了（受け取り済み）・中止した依頼を、直したい内容を書いて再実行する。受付係が、やり直す目標を選び（合格済みで変わらない目標は引き継ぐ）、計画の承認からもう一度行う
+function reopenBlock(qd) {
+  const p = qd.q.plan, key = qd.id + ':reopen', ck = key + ':c';
+  if (!p || !(qd.finished || p.status === 'aborted')) return null;
+  if (qd.q.inbox.some((x) => x.type === 'reopen')) return h('p', { class: 'fine', role: 'status', style: 'margin-top:16px' }, '修正して再実行の依頼を送りました。/guild:quest が読み取ると、計画の見直しが始まります（納品物は、そのとき取り下げます）。');
+  if (!S.confirm[key]) return h('div', { class: 'btns', style: 'margin-top:16px' }, h('button', { type: 'button', class: 'btn', onclick: () => { S.confirm[key] = true; render(); } }, '修正して再実行'));
+  const ta = textarea(ck, { id: ck, rows: '3', placeholder: '例：結論を先に書き、競合の価格を最新にしてほしい' });
+  return h('section', { class: 'letter', 'aria-label': '修正して再実行', style: 'margin-top:16px' }, seal('再'),
+    h('div', { class: 'kick' }, '修正して再実行'), h('h3', null, `${qd.id} を、修正して再実行しますか`),
+    h('p', null, '直したい内容を書いてください。受付係が、やり直す目標を選びます（合格済みで変わらない目標の成果物は引き継ぎます）。送ると、受け取り済みの納品物は取り下げます。計画の承認から、もう一度行います。書庫への登録は、もう一度完了したときに確認します。'),
+    h('label', { class: 'lbl', for: ck }, '直したい内容（必須）'), ta,
+    S.form[ck + ':err'] ? h('p', { class: 'hint err', role: 'alert' }, S.form[ck + ':err']) : null,
+    h('div', { class: 'btns' },
+      h('button', { class: 'btn go', type: 'button', onclick: () => { const c = (S.form[ck] || '').trim(); if (!c) { S.form[ck + ':err'] = '直したい内容を書いてください。'; render(); return; } S.form[ck + ':err'] = ''; S.confirm[key] = false; send(qd.id, { type: 'reopen', comment: c }, key); } }, '送る'),
+      h('button', { class: 'btn', type: 'button', onclick: () => { S.confirm[key] = false; render(); } }, 'やめておく')),
+    sentNote(key));
+}
+
 function questDetail(qd) {
-  return h('div', { class: 'qbody' }, qd.asks.map((a) => letterFor(qd, a)), infoLetter(qd), qd.q.plan ? detailTabs(qd) : null, abortBlock(qd));
+  return h('div', { class: 'qbody' }, qd.asks.map((a) => letterFor(qd, a)), infoLetter(qd), qd.q.plan ? detailTabs(qd) : null, abortBlock(qd), reopenBlock(qd));
 }
 
 // ============================================================ 日付の道具

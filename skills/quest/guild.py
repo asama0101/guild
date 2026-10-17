@@ -356,6 +356,16 @@ def sync(plan, tr):
     return changes
 
 
+REOPEN_MAX = 1000
+
+
+def reset_archive_state(qdir):
+    """再実行のとき、書庫の登録候補の確認の状態（archive.json）を、archive.prev.json に退避する。もう一度完了したときに、新しく確認するため。"""
+    f = Path(qdir) / "archive.json"
+    if f.exists():
+        os.replace(f, Path(qdir) / "archive.prev.json")
+
+
 def archive_state(qdir):
     """書庫の登録候補の確認の状態。none（archive.json がない）/ proposed（依頼主の答え待ち）/ done。壊れていれば proposed（終わらない側）。"""
     f = Path(qdir) / "archive.json"
@@ -462,6 +472,9 @@ def ingest(plan_path, plan, tr, commit=None):
                         publish_deliverables(qdir, plan)  # 受け取ったら、納品物が必ず置かれている（何度でも同じ）
                     elif data.get("type") == "decision" and data.get("choice") in ("abort", "replan"):
                         unpublish_deliverables(qdir)  # 中止なら納品物はない。見直しなら古いものは使えない
+                    elif data.get("type") == "reopen":
+                        unpublish_deliverables(qdir)  # 再実行：受け取り済みの納品物（deliver_to のコピーも）を取り下げる
+                        reset_archive_state(qdir)  # 書庫の確認は、再び完了したときにもう一度行う
                 except (OSError, GuildError) as e:
                     # 入力は適用済み。ここで落とすと同じバッチの適用済みの入力が計画に保存されず失われるので、警告にして続ける
                     report["warnings"].append(f"納品物の置き直しに失敗しました（{f.name}：{e}）。`publish` を再実行してください")
@@ -504,10 +517,21 @@ def apply_input(plan, data, tr, qdir=None, after=None):
     tm = goal_map(plan)
     status = plan.get("status", "active")
     # 中止された依頼は、終わったもの。見直し中は、中止以外の入力を受け付けない
-    if status == "aborted":
-        raise GuildError("中止された依頼には、入力を受け付けません")
+    if status == "aborted" and kind != "reopen":
+        raise GuildError("中止された依頼には、入力を受け付けません（修正して再実行するには reopen を送ります）")
     if status == "replan" and not (kind == "decision" and data.get("choice") == "abort"):
         raise GuildError("計画を直し中です。新しい計画ができるまで、入力を受け付けません")
+    if kind == "reopen":
+        # 完了（受け取り済み）か中止の依頼を、修正して再実行する。計画の見直し（replan）と同じ流れ：合格済みで変わらない目標は引き継ぐ
+        if not (plan.get("accepted") or status == "aborted"):
+            raise GuildError("完了か中止の依頼だけ、修正して再実行できます")
+        comment = str(data.get("comment") or "").strip()
+        if not comment or len(comment) > REOPEN_MAX:
+            raise GuildError(f"comment（直したい内容）を 1〜{REOPEN_MAX} 字で書いてください")
+        plan["status"], plan["approved"] = "replan", False
+        plan.pop("accepted", None)
+        note(plan, event="reopen", comment=comment)
+        return
     if kind == "approve":
         if plan.get("approved"):
             raise GuildError("すでに承認されています")
