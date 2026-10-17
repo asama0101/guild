@@ -1698,7 +1698,7 @@ function webTab() {
 function boardTab() {
   const m = S.model, out = [];
   if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
-    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text)), notifyButton()));
+    m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text))));
   if (m) { const wl = webLetter(m); if (wl) out.push(wl); }
   if (S.newSaved) out.push(h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。一覧の先頭に「受付待ち」で入っています。/guild:quest が待っていれば、すぐ受け付けます。役が作業中のときは、その作業が終わるまで数分かかることがあります。/guild:quest が動いていなければ、チャットで /guild:quest と送ってください。`));
   if (m && m.rejectedRequests.length) out.push(h('div', { class: 'card', role: 'status', style: 'margin-bottom:12px' }, h('b', null, '受け付けられなかった依頼（新しい5件まで）'),
@@ -2200,19 +2200,10 @@ function updateAlive() {
   el.className = `fine alive ${a.cls}`; el.textContent = a.text;
 }
 function aliveBox() { return S.model && !S.demo ? h('p', { id: 'alive', class: 'fine alive' }) : null; }
-// ---- 通知：あなたの番が増えたら、タブの題に件数を出し、許可があればデスクトップ通知を出す
+// ---- あなたの番が増えたら、タブの題に件数を出す
 function updateTitle() {
   const n = S.model ? S.model.needs.length : 0;
   document.title = (n ? `(${n}) ` : '') + 'guild 依頼掲示板';
-}
-function notifyNew(prev) {
-  const n = S.model ? S.model.needs.length : 0;
-  if (prev == null || n <= prev) return;
-  try { if ('Notification' in window && Notification.permission === 'granted') new Notification(`guild：あなたの番が${n}件あります`, { body: S.model.needs[0] ? S.model.needs[0].text : '' }); } catch (e) { /* 通知が使えない環境では、タブの題だけ */ }
-}
-function notifyButton() {
-  if (!('Notification' in window) || Notification.permission !== 'default') return null;
-  return h('button', { type: 'button', class: 'linkbtn', onclick: () => { try { Notification.requestPermission().then(() => render()); } catch (e) { /* 使えない */ } } }, '通知を有効にする');
 }
 function pauseBox() {
   if (!S.model) return null;
@@ -2386,8 +2377,7 @@ async function refresh(force) {
     // 資料を開いている間も作り直さない（読んでいる位置が上に戻ってしまう）。閉じたあとの次の更新で反映する
     if (!force && key !== S.dataKey && (isEditing() || isPressing() || S.reader || S.fallback)) return;
     if (force || key !== S.dataKey) {
-      const prevNeeds = S.model ? S.model.needs.length : null;
-      S.dataKey = key; S.model = buildModel(raw); S.rcache = {}; notifyNew(prevNeeds);  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
+      S.dataKey = key; S.model = buildModel(raw); S.rcache = {};  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
       const ids = S.model.quests.map((x) => x.id);
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
       render();

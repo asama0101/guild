@@ -106,9 +106,11 @@ class VisibilityContractTest(unittest.TestCase):
         self.assertIn(r"[/^heartbeat\.json$/, '.work/heartbeat.json']", BOARD)
         self.assertIn("S.hb = hb ? JSON.parse(hb) : null", BOARD)
 
-    def test_title_and_notification_hooks(self):
-        for needle in ("function updateTitle()", "document.title = (n ?", "new Notification(", "Notification.requestPermission()", "notifyNew(prevNeeds)"):
+    def test_title_count_is_kept_and_desktop_notification_is_gone(self):
+        for needle in ("function updateTitle()", "document.title = (n ?"):
             self.assertIn(needle, BOARD)
+        for gone in ("new Notification(", "Notification.requestPermission()", "notifyNew", "notifyButton"):
+            self.assertNotIn(gone, BOARD)
 
 
 if __name__ == "__main__":
