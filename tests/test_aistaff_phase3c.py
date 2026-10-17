@@ -83,7 +83,7 @@ class FormatDeliverablesTest(Base):
         guild.save_plan(self.q / "plan.json", plan)
         d = self.q / "output" / "G1"
         d.mkdir(parents=True, exist_ok=True)
-        for n in ("memo.md", "report.html", "flow.mmd"):
+        for n in ("memo.md", "report.html"):
             (d / n).write_text("x", encoding="utf-8")
         (d / "スライド.prompt.md").write_text("p", encoding="utf-8")
 
@@ -94,9 +94,6 @@ class FormatDeliverablesTest(Base):
         self.done("html")
         guild.publish_deliverables(self.q)
         self.assertEqual(self.names(), ["Q001_スライド.prompt.md", "Q001_週報.html"])  # .md のメモは混ざらない
-        self.done("mermaid")
-        guild.publish_deliverables(self.q)
-        self.assertEqual(self.names(), ["Q001_スライド.prompt.md", "Q001_週報.mmd"])
         self.done("md")
         guild.publish_deliverables(self.q)
         self.assertEqual(self.names(), ["Q001_スライド.prompt.md", "Q001_週報.md"])

@@ -1,4 +1,4 @@
-"""AI 社員 Phase 3：依頼のタイトルと series、納品形式（md・html・mermaid）。"""
+"""AI 社員 Phase 3：依頼のタイトルと series、納品形式（md・html）。"""
 import json
 import subprocess
 import sys
@@ -184,16 +184,16 @@ class FormatTest(Base):
         self.assertEqual(guild.request_format(self.q), "md")
 
     def test_adopt_sets_the_deliverable_format_from_the_request(self):
-        self.request("mermaid")
+        self.request("html")
         self.draft(goals=[g("G1"), g("G2", deliverable=True, deps=["G1"])])
         self.adopt()
         goals = {t["id"]: t for t in self.plan()["goals"]}
-        self.assertEqual(goals["G2"]["format"], "mermaid")
+        self.assertEqual(goals["G2"]["format"], "html")
         self.assertNotIn("format", goals["G1"])
 
     def test_adopt_rejects_a_conflicting_format(self):
         self.request("html")
-        self.draft(goals=[g("G1", deliverable=True, format="mermaid")])
+        self.draft(goals=[g("G1", deliverable=True, format="md")])
         with self.assertRaises(guild.GuildError):
             self.adopt()
 
@@ -208,7 +208,7 @@ class FormatTest(Base):
         self.assertTrue((self.gdir / ".work" / "requests" / "rejected" / "R1.json").exists())
 
     def test_new_quest_accepts_known_formats(self):
-        for i, fmt in enumerate(("md", "html", "mermaid")):
+        for i, fmt in enumerate(("md", "html")):
             write(self.gdir / ".work" / "requests" / f"R{i}.json", {"type": "request", "text": "x", "format": fmt, "inputs": [], "files": []})
             q = Path(guild.new_quest(self.root, f"R{i}")["dir"])
             self.assertEqual(json.loads((q / "request.json").read_text(encoding="utf-8"))["format"], fmt)
@@ -230,17 +230,12 @@ class PublishFormatTest(Base):
         d = self.gdir / "deliverables"
         return sorted(p.name for p in d.iterdir()) if d.is_dir() else []
 
-    def test_html_and_mermaid_deliverables_are_published_with_the_title(self):
+    def test_html_deliverables_are_published_with_the_title(self):
         self.done_plan("html")
         self.out("G1", "report.html", "<p>x</p>")
         self.out("G1", "memo.txt")
         guild.publish_deliverables(self.q)
         self.assertEqual(self.names(), ["Q001_週報 営業 部.html"])  # 使えない文字は空白にする
-        self.done_plan("mermaid")
-        self.out("G1", "flow.mmd", "graph TD; A-->B")
-        (self.q / "output" / "G1" / "report.html").unlink()
-        guild.publish_deliverables(self.q)
-        self.assertEqual(self.names(), ["Q001_週報 営業 部.mmd"])
 
     def test_md_goal_does_not_publish_html_files(self):
         self.done_plan("md")
@@ -310,7 +305,7 @@ class DocsTest(unittest.TestCase):
     def test_executors_know_the_formats(self):
         for name in ("wizard", "alchemist"):
             s = self.read("agents", f"{name}.md")
-            for needle in (".html", ".mmd", "mermaid"):
+            for needle in (".html",):
                 self.assertIn(needle, s, f"{name}: {needle}")
 
     def test_skill_passes_past_quests_and_format(self):

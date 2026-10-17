@@ -22,7 +22,7 @@ FUNCS = ("mdInline", "renderMarkdown", "docKind", "docView", "canOpen")
 
 def run(body):
     src = "".join(extract(n) + "\n" for n in FUNCS)
-    src += "const TEXT_EXT = ['md', 'txt', 'csv', 'json', 'html', 'mmd', 'yaml', 'yml', 'xml', 'log', 'tsv'];\n"
+    src += "const TEXT_EXT = ['md', 'txt', 'csv', 'json', 'html', 'yaml', 'yml', 'xml', 'log', 'tsv'];\n"
     return node_eval(PRE + src + body)
 
 
@@ -110,7 +110,7 @@ class MarkdownTest(unittest.TestCase):
 class DocViewTest(unittest.TestCase):
     def test_doc_kind_and_can_open(self):
         out = run("console.log(JSON.stringify(['a.md', 'B.HTML', 'c.mmd', 'd.xlsx', 'e', 'f.prompt.md'].map((p) => [docKind(p), canOpen(p)])));")
-        self.assertEqual(out, [["md", True], ["html", True], ["mmd", True], ["xlsx", False], ["", False], ["md", True]])
+        self.assertEqual(out, [["md", True], ["html", True], ["mmd", False], ["xlsx", False], ["", False], ["md", True]])
 
     def test_views_by_kind(self):
         out = run("""
@@ -119,7 +119,7 @@ console.log(JSON.stringify([k('a.md', '# x'), k('a.md', '# x', true), k('a.txt',
         self.assertEqual(out[0], ["div", "h2"])
         self.assertEqual(out[1], ["pre", "text"])
         self.assertEqual(out[2], ["pre", "text"])
-        self.assertEqual(out[3], ["div", "mermaid"])
+        self.assertEqual(out[3], ["pre", "text"])  # .mmd 単体の形式はない
         self.assertEqual(out[4], ["div", "p,iframe"])
 
     def test_html_is_shown_in_a_sandbox_without_permissions(self):
@@ -172,7 +172,7 @@ class FilesModelTest(unittest.TestCase):
 class WiringTest(unittest.TestCase):
     def test_tab_reader_and_deliverable_filter_are_wired(self):
         for needle in ("deliv: delivTab", "FKINDS", "docView(S.reader.path, S.reader.text, S.reader.source)", "ソースで見る",
-                       r"/\.(md|html|mmd)$/i.test(x.name)", "securityLevel: 'strict'", "mermaid@10.9.1", "sandbox: ''", "s.integrity = MERMAID_SRI", "s.crossOrigin = 'anonymous'",
+                       r"/\.(md|html)$/i.test(x.name)", "securityLevel: 'strict'", "mermaid@10.9.1", "sandbox: ''", "s.integrity = MERMAID_SRI", "s.crossOrigin = 'anonymous'",
                        "function cleanSvg(root)", "foreignObject", "const HTML_CSP"):
             self.assertIn(needle, BOARD, needle)
         self.assertNotIn("filesTab", BOARD)

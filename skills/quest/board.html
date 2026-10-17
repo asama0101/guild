@@ -501,7 +501,7 @@ async function loadAll() {
   }
   requests.sort((a, b) => a.id.localeCompare(b.id));
   const quests = [];
-  const delivFiles = (await S.fs.list('deliverables')).filter((x) => x.kind === 'file' && /\.(md|html|mmd)$/i.test(x.name)).map((x) => x.name).sort();
+  const delivFiles = (await S.fs.list('deliverables')).filter((x) => x.kind === 'file' && /\.(md|html)$/i.test(x.name)).map((x) => x.name).sort();
   for (const e of top) {
     if (e.kind !== 'dir' || !/^Q\d+$/.test(e.name)) continue;
     const q = e.name;
@@ -1417,7 +1417,7 @@ function connectBox() {
 }
 
 // ---- 「＋ 新規」ダイアログ：依頼の内容・開始日（未指定なら今日）・締切（未定なら開始日）・インプット（既存から選ぶ／アップロード）
-const FORMATS = [['md', 'Markdown（既定）'], ['html', 'HTML'], ['mermaid', 'Mermaid（図）']];
+const FORMATS = [['md', 'Markdown（既定）'], ['html', 'HTML']];
 function newDialog() {
   if (!S.newOpen) return null;
   const have = new Map(((S.model && S.model.inputs) || []).map((f) => [f.name.toLowerCase(), f.name]));
@@ -2104,16 +2104,15 @@ function mermaidBlock(src) {
     .catch(() => showSource('Mermaid の図を描画できませんでした（通信が使えない、または記法の誤りです）。ソースを表示しています。'));
   return h('div', null, note, box);
 }
-// ファイルの種類に応じた表示。.md は整形、.html は止めた枠、.mmd は図、ほかは文字のまま
+// ファイルの種類に応じた表示。.md は整形、.html は止めた枠、ほかは文字のまま
 function docKind(path) { const e = (/\.([A-Za-z0-9]+)$/.exec(String(path)) || [])[1]; return e ? e.toLowerCase() : ''; }
 function docView(path, text, asSource) {
   const k = docKind(path);
-  if (asSource || !['md', 'html', 'mmd'].includes(k)) return h('pre', null, text);
+  if (asSource || !['md', 'html'].includes(k)) return h('pre', null, text);
   if (k === 'md') return h('div', { class: 'md' }, renderMarkdown(text));
-  if (k === 'mmd') return h('div', { class: 'md' }, mermaidBlock(text));
   return h('div', { class: 'md' }, h('p', { class: 'fine', style: 'margin:0 0 4px' }, 'HTML の納品物です。スクリプトは動かしません。'), h('iframe', { class: 'md-frame', sandbox: '', csp: HTML_CSP, srcdoc: `<meta http-equiv="Content-Security-Policy" content="${HTML_CSP}">` + text, title: 'HTML の納品物' }));
 }
-const TEXT_EXT = ['md', 'txt', 'csv', 'json', 'html', 'mmd', 'yaml', 'yml', 'xml', 'log', 'tsv'];
+const TEXT_EXT = ['md', 'txt', 'csv', 'json', 'html', 'yaml', 'yml', 'xml', 'log', 'tsv'];
 function canOpen(path) { return TEXT_EXT.includes(docKind(path)); }
 // 「納品物」画面の元データ：依頼別／種類別。名前・題名・関連（series）で探す
 function filesModel(m) {
@@ -2177,7 +2176,7 @@ function delivTab() {
 function reader() {
   if (!S.reader) return null;
   return h('div', { class: 'reader', role: 'dialog', 'aria-label': '報告' }, h('div', { class: 'rbox' },
-    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '文章') }, '文章をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyPath(S.reader.path) }, 'パスをコピー'), ['md', 'html', 'mmd'].includes(docKind(S.reader.path)) ? h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => { S.reader.source = !S.reader.source; render(); } }, S.reader.source ? '整形して見る' : 'ソースで見る') : null, h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
+    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '文章') }, '文章をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyPath(S.reader.path) }, 'パスをコピー'), ['md', 'html'].includes(docKind(S.reader.path)) ? h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => { S.reader.source = !S.reader.source; render(); } }, S.reader.source ? '整形して見る' : 'ソースで見る') : null, h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
     S.toast ? h('p', { class: 'saved', role: 'status' }, S.toast) : null,
     docView(S.reader.path, S.reader.text, S.reader.source)));
 }
@@ -2301,7 +2300,7 @@ function obsidianTab() {
           h('li', null, '作業用のファイルは ', code('guild/.work/'), ' にあり、Obsidian には出ません（設定は要りません）。')),
         h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
       sec('ディレクトリ構成', pre(['guild/', '  board.html', '  archive/            書庫（用語名.md。種類は項目の type）', '    index.md          索引（役が最初に読む）',
-        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_題名.md／.html／.mmd と .prompt.md）', '  inputs/             依頼で使う資料（1つだけ置き、各クエストは名前で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、設定（config.json）、掟（codex/）、バックアップ'].join('\n'))),
+        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_題名.md／.html と .prompt.md）', '  inputs/             依頼で使う資料（1つだけ置き、各クエストは名前で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、設定（config.json）、掟（codex/）、バックアップ'].join('\n'))),
       sec('納品物を見る', dl([['場所', h('span', null, code('deliverables/Q###_…'), '。全目標が済んで受け取りの確認の手紙が出た時に置かれます。Markdown 以外が要る部分は ', code('.prompt.md'), '（Claude Code に渡すプロンプト）です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
       sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'inputs: ["KGI定義.md"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[KGI]] のようにリンクします。'].join('\n')),
         dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止'], ['inputs', '関係する guild/inputs/ のファイル名（任意）。依頼文にこの項目の名前が出ると、受付係にそのファイルが勧められます']]),

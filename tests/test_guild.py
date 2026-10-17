@@ -687,7 +687,7 @@ class MarkdownOnlyTest(unittest.TestCase):
     """納品物は Markdown だけ。format の項目はない。"""
 
     def test_formats_are_only_text_formats(self):
-        self.assertEqual(set(guild.FORMATS), {"md", "html", "mermaid"})
+        self.assertEqual(set(guild.FORMATS), {"md", "html"})
         self.assertEqual(guild.validate(plan(goal("G1")), TR), [])
 
     def test_adopt_does_not_carry_format(self):
@@ -1751,7 +1751,7 @@ class BoardPathsTest(unittest.TestCase):
     def test_formats_are_text_formats_and_no_template_machinery(self):
         for gone in ("TEMPLATE_READABLE", "tplReadable", "new:template"):
             self.assertNotIn(gone, self.board)
-        for needle in ("const FORMATS", "new:format", "納品物の形式", "['html', 'HTML']", "['mermaid', 'Mermaid（図）']"):
+        for needle in ("const FORMATS", "new:format", "納品物の形式", "['html', 'HTML']"):
             self.assertIn(needle, self.board)
 
     def test_flat_archive_and_deliverables_are_read(self):
