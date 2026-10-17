@@ -23,6 +23,7 @@ def goal(i, state="pending", kind="auto", deps=(), **kw):
     t = {"id": i, "title": f"{i}をする", "kind": kind, "deps": list(deps), "criteria": dict(CRIT), "state": state, "retries": 0, "output": None}
     if kind == "auto":
         t["class"] = "wizard"
+        t["effects"] = "external" if kw.get("confirm") else "none"
     t.update(kw)
     return t
 
@@ -81,7 +82,7 @@ class AdviceTest(Base):
 
 class DigestTest(Base):
     def test_digest_summarises_progress_workers_needs_and_blockers(self):
-        self.plan(goal("G1", "done"), goal("G2", "running", **{"class": "alchemist"}), goal("G3", "failed"), goal("G4", "blocked", deps=["G3"]),
+        self.plan(goal("G1", "done"), goal("G2", "running", **{"class": "alchemist", "effects": "none"}), goal("G3", "failed"), goal("G4", "blocked", deps=["G3"]),
                   goal("G5", "waiting_user", kind="human", instruction="やる"), goal("G6", "awaiting_confirm", confirm=True))
         self.report("G3-appraiser.md", "## 判定\nrejected\n## 勧める対応\nやめる — 取れない\n")
         d = guild.digest(self.root)
@@ -109,6 +110,9 @@ class DigestTest(Base):
         q = guild.digest(self.root)["quests"][0]
         self.assertEqual((q["label"], q["needs"][0]["kind"]), ("あなたの番", "approve"))
         self.plan(goal("G1", "done"))
+        q = guild.digest(self.root)["quests"][0]
+        self.assertEqual((q["label"], q["needs"]), ("総合確認中", []))  # 受け取りの前に、受付係の総合確認がある
+        self.report("overall-receptionist.md", "## 判定\n満たしている\n")
         q = guild.digest(self.root)["quests"][0]
         self.assertEqual((q["label"], q["needs"][0]["kind"]), ("あなたの番", "accept"))
         self.plan(goal("G1", "done"), accepted=True)

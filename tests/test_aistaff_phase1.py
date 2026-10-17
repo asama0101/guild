@@ -87,15 +87,15 @@ class ClassTest(unittest.TestCase):
 
     def test_human_goal_must_not_have_a_class(self):
         self.assertEqual(self.errs(mk("G1", "human")), [])
-        self.assertTrue(any("class" in e for e in self.errs(mk("G1", "human", **{"class": "wizard"}))))
+        self.assertTrue(any("class" in e for e in self.errs(mk("G1", "human", **{"class": "wizard", "effects": "none"}))))
 
     def test_classes_are_the_three_executors(self):
         self.assertEqual(guild.CLASSES, ("wizard", "alchemist", "adventurer"))
 
     def test_next_groups_ready_goals_by_class(self):
         plan = {"quest": "Q1", "approved": True, "status": "active", "goals": [
-            mk("G1", state="running", **{"class": "wizard"}), mk("G2", state="running", **{"class": "alchemist"}),
-            mk("G3", state="running", **{"class": "wizard"}), mk("G4", state="pending", **{"class": "adventurer"}),
+            mk("G1", state="running", **{"class": "wizard", "effects": "none"}), mk("G2", state="running", **{"class": "alchemist", "effects": "none"}),
+            mk("G3", state="running", **{"class": "wizard", "effects": "none"}), mk("G4", state="pending", **{"class": "adventurer"}),
             mk("G5", "human", state="waiting_user")]}
         v = guild.next_view(plan)
         self.assertEqual(v["ready_by_class"], {"wizard": ["G1", "G3"], "alchemist": ["G2"], "adventurer": []})

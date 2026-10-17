@@ -33,7 +33,7 @@ console.log(JSON.stringify([adviceLine(rep('もう一度 — 直せる')), advic
         clog = {"t": "2026-10-17T10:00:00+09:00", "needs_total": 2,
                 "stats": {"quests": 1, "goals": 3, "done": 1, "failed": 1, "rejected": 2, "retries": 1, "replans": 0},
                 "quests": [{"id": "Q001", "title": "週報の作成", "series": "週報", "label": "あなたの番", "goals": {"total": 3, "done": 1},
-                            "active": [{"id": "G2", "title": "集める", "class": "alchemist", "state": "running"}],
+                            "active": [{"id": "G2", "title": "集める", "class": "alchemist", "effects": "none", "state": "running"}],
                             "needs": [{"kind": "decision", "text": "G3 の失敗の判断", "advice": {"text": "やめる — 取れない"}}],
                             "blockers": [{"goal": "G4", "because": ["G3"]}], "followups": ["来週分も作る"]}]}
         out = self.log_text(clog)

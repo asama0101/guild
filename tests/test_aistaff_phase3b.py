@@ -21,7 +21,7 @@ def write(path, data):
 
 
 def g(i, **kw):
-    t = {"id": i, "title": f"{i}をする", "kind": "auto", "class": "wizard", "deps": [], "criteria": dict(CRIT)}
+    t = {"id": i, "title": f"{i}をする", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": dict(CRIT)}
     t.update(kw)
     return t
 

@@ -364,6 +364,23 @@ def archive_state(qdir):
         return "proposed"
 
 
+OVERALL_REPORT = "overall-receptionist.md"  # 総合確認の報告（受付係が、依頼文と納品物だけを読んで書く）
+
+
+def overall_state(qdir):
+    """総合確認の報告（reports/overall-receptionist.md）の状態。ok（満たしている）／gaps（不足あり）／None（ない・空・判定がない）。"""
+    try:
+        body = section_of((Path(qdir) / "reports" / OVERALL_REPORT).read_text(encoding="utf-8"), "判定")
+    except OSError:
+        return None
+    first = one_line(body.split("\n")[0]) if body else ""
+    if first.startswith("満たしている"):
+        return "ok"
+    if first.startswith("不足あり"):
+        return "gaps"
+    return None
+
+
 def next_view(plan, qdir=None):
     groups = {"ready": "running", "confirm": "awaiting_confirm", "waiting_user": "waiting_user",
               "review": "review", "blocked": "blocked", "failed": "failed"}
@@ -375,8 +392,12 @@ def next_view(plan, qdir=None):
     out["approved"] = bool(plan.get("approved"))
     out["finished"] = all(t["state"] in SATISFIED for t in plan["goals"])
     out["accepted"] = bool(plan.get("accepted"))
-    # 全目標が済んでも、依頼主が受け取るまでは完了ではない（awaiting_accept は依頼主待ち）
-    out["awaiting_accept"] = out["finished"] and out["approved"] and out["status"] == "active" and not out["accepted"]
+    # 全目標が済んだら、受付係が総合確認（依頼文と納品物の照合）をする。済んでから受け取りの確認。受け取るまでは完了ではない（awaiting_accept は依頼主待ち）
+    ov = overall_state(qdir) if qdir is not None else "ok"  # qdir がなければ、総合確認は問わない
+    waiting = out["finished"] and out["approved"] and out["status"] == "active" and not out["accepted"]
+    out["overall"] = ov or "none"
+    out["awaiting_overall"] = waiting and ov is None
+    out["awaiting_accept"] = waiting and ov is not None
     out["complete"] = out["finished"] and out["accepted"]
     # 完了・中止した依頼の、書庫の記録（司書→依頼主の確認）がどこまで進んだか。closed になった依頼は、もう何もしない
     ended = out["complete"] or out["status"] == "aborted"
@@ -493,6 +514,8 @@ def apply_input(plan, data, tr, qdir=None, after=None):
         note(plan, event="meta", **changes)
         return
     if kind == "accept":
+        if qdir is not None and not plan.get("accepted") and overall_state(qdir) is None:
+            raise GuildError("総合確認がまだです（受付係の報告 reports/overall-receptionist.md ができてから、受け取れます）")
         if plan.get("accepted"):
             raise GuildError("すでに受け取り済みです")
         if not plan.get("approved") or not all(t["state"] in SATISFIED for t in plan["goals"]):
@@ -709,6 +732,8 @@ AMBIGUOUS = ("適切", "十分", "適宜", "なるべく", "できるだけ", "�
 _AMBIGUOUS_RE = {w: re.compile(("(?<!不)" if w == "適切" else "(?<![二三四五六七八九〇0-9０-９])" if w == "十分" else "") + re.escape(w)) for w in AMBIGUOUS}
 MAX_GOALS = 12  # これを超えたら、粒度が細かすぎないかの警告
 MIN_CRITERIA_LEN = 6  # これより短い合格基準は、測れる書き方になっていない可能性の警告
+EFFECTS = ("none", "external", "irreversible")  # 目標（auto）の影響：なし（読む・書くだけ）／外部への送信・公開／元に戻せない変更
+DANGER_WORDS = ("送信", "送る", "公開", "削除", "消去", "投稿", "共有", "アップロード", "メールを", "上書き", "発注", "支払", "申請", "配信", "掲載")
 
 
 def _str_list(v):
@@ -750,6 +775,25 @@ def plan_quality(plan, brief):
         errs.append(f"deliverable: true の目標は、最後のまとめ 1 つだけにしてください（いま {n} 件）")
     for t in goals:
         i = t.get("id")
+        if t.get("kind") == "auto":
+            e = t.get("effects")
+            if not (isinstance(e, str) and e in EFFECTS):
+                errs.append(f"{i}: effects は {'・'.join(EFFECTS)} のどれかにしてください: {e!r}")
+            elif e != "none" and not t.get("confirm"):
+                errs.append(f"{i}: effects が {e} の目標には、confirm: true が要ります（実行前に、依頼主の確認を取るため）")
+            elif e == "none":
+                text = " ".join([str(t.get("title") or ""), *[str(v) for v in (t.get("criteria") or {}).values()]])
+                hits = [w for w in DANGER_WORDS if w in text]
+                if hits:
+                    warns.append(f"{i}: effects が none ですが、「{'・'.join(hits)}」とあります。外部への送信・公開・元に戻せない変更を含むなら、effects と confirm を直してください")
+        if t.get("deliverable") is True:
+            spec = t.get("deliverable_spec")
+            if spec is None:
+                warns.append(f"{i}: 納品する目標に deliverable_spec（見出しの並びと読み手）がありません。納品物の構成が決まらないまま作ることになります")
+            elif not (isinstance(spec, dict) and isinstance(spec.get("headings"), list) and spec["headings"]
+                      and all(isinstance(x, str) and x.strip() for x in spec["headings"])
+                      and isinstance(spec.get("reader"), str) and spec["reader"].strip()):
+                errs.append(f"{i}: deliverable_spec は {{\"headings\": [見出し…], \"reader\": 読み手}} の形にしてください")
         if t.get("kind") == "human" and not (isinstance(t.get("instruction"), str) and t["instruction"].strip()):
             errs.append(f"{i}: human の目標には instruction（依頼主への頼み方）が要ります")
         for k in CRITERIA_KEYS:
@@ -816,6 +860,31 @@ def request_format(qdir):
     return f if isinstance(f, str) and f in FORMATS else DEFAULT_FORMAT
 
 
+def check_deliver_to(qdir, value):
+    """deliver_to（納品物をコピーする、プロジェクト内の場所）の検査。プロジェクト外・絶対パス・.. ・guild/・.git/ は不可。正規化した相対パス（/ 区切り）を返す。"""
+    if not isinstance(value, str) or not value.strip():
+        raise GuildError("deliver_to は、プロジェクト内の相対パス（文字列）にしてください")
+    v = value.strip().replace("\\", "/")
+    if v.startswith(("/", "~")) or re.match(r"^[A-Za-z]:", v):
+        raise GuildError(f"deliver_to は、プロジェクト内の相対パスだけです（絶対パスは使えません）: {value}")
+    parts = [p for p in v.split("/") if p not in ("", ".")]
+    if not parts or ".." in parts:
+        raise GuildError(f"deliver_to に、空のパスと .. は使えません: {value}")
+    if parts[0].lower() in ("guild", ".git"):
+        raise GuildError("deliver_to に、guild/ と .git/ は指定できません")
+    if any(c in p for p in parts for c in '<>:"|?*\x00'):
+        raise GuildError(f"deliver_to に、使えない文字があります: {value}")
+    root = gdir_of(qdir).parent.resolve()
+    target = root.joinpath(*parts).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        raise GuildError(f"deliver_to が、プロジェクトの外を指しています: {value}")
+    if target.exists() and not target.is_dir():
+        raise GuildError(f"deliver_to は、フォルダにしてください（ファイルがあります）: {value}")
+    return "/".join(parts)
+
+
 def apply_format(plan, fmt):
     """納品する目標（deliverable）の format を、依頼の形式にそろえる。なければ入れる。食い違いはエラー。"""
     errs = []
@@ -846,7 +915,9 @@ def adopt(plan_path, tr):
     m_errs, m_warns, title, series = check_meta(draft)
     if m_errs:
         raise GuildError("plan-draft.json のタイトルの検査に失敗しました: " + " / ".join(m_errs))
+    deliver_to = check_deliver_to(plan_path.parent, draft["deliver_to"]) if draft.get("deliver_to") is not None else None
     plan = {"quest": draft.get("quest"), "title": title, "series": series, "approved": False, "status": "active",
+            **({"deliver_to": deliver_to} if deliver_to else {}),
             **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}),
             "inputs": inputs, "candidates": candidates,
             "goals": [], "history": [{"t": now(), "event": "adopted"}]}
@@ -875,7 +946,6 @@ def adopt(plan_path, tr):
                 plan[k] = old[k]
         if old.get("meta_locked"):
             plan["meta_locked"] = list(old["meta_locked"])
-        shutil.copy2(plan_path, plan_path.with_name("plan.prev.json"))
         carried = carry_over(plan, old)
         plan["replan_diff"] = plan_diff(old, plan, carried)
     save_plan(plan_path, plan)  # 保存してから成果物を動かす。保存に失敗しても、成果物は元の場所に残る
@@ -928,6 +998,10 @@ def archive_outputs(old, carried, qdir):
         for f in sorted((Path(qdir) / "reports").glob(f"{o['id']}-*")):
             (arch / "reports").mkdir(parents=True, exist_ok=True)
             shutil.move(str(f), str(arch / "reports" / f.name))
+    ov = Path(qdir) / "reports" / OVERALL_REPORT  # 古い計画の総合確認は、作り直したあとには当てはまらない
+    if ov.is_file():
+        (arch / "reports").mkdir(parents=True, exist_ok=True)
+        shutil.move(str(ov), str(arch / "reports" / ov.name))
 
 
 def init_guild(root):
@@ -1099,12 +1173,14 @@ def close_quests(root):
     wdir = work_dir(Path(root) / "guild")
     removed = []
     for q in sorted(wdir.glob("Q[0-9]*")):
-        bak, plan_path = wdir / "backup" / q.name, q / "plan.json"
-        if not bak.is_dir() or not plan_path.exists():
+        bak, prev, plan_path = wdir / "backup" / q.name, q / "prev", q / "plan.json"
+        if not (bak.is_dir() or prev.is_dir()) or not plan_path.exists():
             continue
         plan = load_plan(plan_path)
         if plan.get("accepted") or plan.get("status") == "aborted":
-            shutil.rmtree(bak)
+            for d in (bak, prev):  # 閉じた依頼の、インプットのバックアップと、退避した古い成果物
+                if d.is_dir():
+                    shutil.rmtree(d)
             removed.append(q.name)
     return {"removed": removed}
 
@@ -1131,9 +1207,28 @@ def deliverable_files(qdir, plan):
                 yield t["id"], f
 
 
-def unpublish_deliverables(qdir):
-    """この依頼の納品物（deliverables/Q###_*）を消す。ほかの依頼のものは消さない。"""
+def unpublish_delivered(qdir):
+    """deliver_to にコピーした納品物を消す。delivered.json に残した、この依頼の名前（Q###_ で始まるもの）だけを、その場所から消す。"""
     qdir = Path(qdir)
+    rec = qdir / "delivered.json"
+    if not rec.exists():
+        return
+    try:
+        info = load_json(rec)
+        rel = check_deliver_to(qdir, info.get("dir"))
+        target = gdir_of(qdir).parent / Path(*rel.split("/"))
+        for n in info.get("files", []):
+            if isinstance(n, str) and n.startswith(qdir.name + "_") and "/" not in n and "\\" not in n and (target / n).is_file():
+                (target / n).unlink()
+    except (GuildError, AttributeError, TypeError, OSError):
+        pass  # 記録が壊れていても、納品物の取り下げは止めない
+    rec.unlink(missing_ok=True)
+
+
+def unpublish_deliverables(qdir):
+    """この依頼の納品物（deliverables/Q###_*）を消す。ほかの依頼のものは消さない。deliver_to にコピーしたものも消す。"""
+    qdir = Path(qdir)
+    unpublish_delivered(qdir)
     d = gdir_of(qdir) / DELIV
     removed = []
     if d.is_dir():
@@ -1166,7 +1261,16 @@ def publish_deliverables(qdir, plan=None):
         used.add(name)
         shutil.copy2(f, dest / name)
         names.append(name)
-    return {"published": names}
+    out = {"published": names}
+    if plan.get("deliver_to"):  # 受付係が決めた置き場（プロジェクト内）にも、同じ名前でコピーする。置いた一覧は delivered.json に残す
+        rel = check_deliver_to(qdir, plan["deliver_to"])
+        target = gdir_of(qdir).parent / Path(*rel.split("/"))
+        target.mkdir(parents=True, exist_ok=True)
+        for n in names:
+            shutil.copy2(dest / n, target / n)
+        save_plan(qdir / "delivered.json", {"dir": rel, "files": names})
+        out["delivered_to"] = rel
+    return out
 
 
 def new_quest(root, request_id=None):
@@ -1407,6 +1511,8 @@ def quest_digest(qdir):
         label = "完了"
     elif needs:
         label = "あなたの番"
+    elif view["awaiting_overall"]:
+        label = "総合確認中"
     elif plan.get("status") == "replan":
         label = "計画を直し中"
     else:

@@ -19,12 +19,13 @@ def goal(i, kind="auto", deps=(), **kw):
     t = {"id": i, "title": f"{i}をする", "kind": kind, "deps": list(deps), "criteria": dict(GOOD)}
     if kind == "auto":
         t["class"] = "wizard"
+        t["effects"] = "external" if kw.get("confirm") else "none"
     t.update(kw)
     return t
 
 
 def good_goals():
-    return [goal("G1"), goal("G2", deps=["G1"], deliverable=True)]
+    return [goal("G1"), goal("G2", deps=["G1"], deliverable=True, deliverable_spec={"headings": ["結論", "比較"], "reader": "部長"})]
 
 
 BRIEF = {"intent": "競合の価格を比べて上司に渡す", "non_goals": ["価格交渉はしない"], "assumptions": ["対象は国内3社"],

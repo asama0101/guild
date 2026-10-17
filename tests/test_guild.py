@@ -23,6 +23,7 @@ def goal(i, kind="auto", deps=(), **kw):
          "state": "pending", "retries": 0, "output": None}
     if kind == "auto":
         t["class"] = "wizard"
+        t["effects"] = "external" if kw.get("confirm") else "none"
     t.update(kw)
     return t
 
@@ -39,6 +40,8 @@ def draft_json(d, **kw):
         for t in ts:
             if t.get("kind") == "auto" and "class" not in t:
                 t["class"] = "wizard"
+            if t.get("kind") == "auto" and "effects" not in t:
+                t["effects"] = "external" if t.get("confirm") else "none"
             if t.get("kind") == "human" and not t.get("instruction"):
                 t["instruction"] = "やってください。"
     return json.dumps(d, **kw)
@@ -306,8 +309,7 @@ class AdoptTest(unittest.TestCase):
         self.path.write_text(json.dumps(old), encoding="utf-8")
         r = guild.adopt(self.path, TR)
         self.assertTrue(r["replaced"])
-        prev = json.loads((self.dir / "plan.prev.json").read_text(encoding="utf-8"))
-        self.assertEqual(prev["goals"][0]["state"], "done")
+        self.assertFalse((self.dir / "plan.prev.json").exists())  # 旧計画のコピーは作らない（replan_diff と history が代わり）
         self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["status"], "active")
 
     def test_adopt_cli(self):
@@ -638,6 +640,8 @@ class AcceptTest(unittest.TestCase):
 
     def ingest_one(self, p, data, d):
         (Path(d) / "inbox").mkdir(exist_ok=True)
+        (Path(d) / "reports").mkdir(exist_ok=True)
+        (Path(d) / "reports" / "overall-receptionist.md").write_text("## 判定" + chr(10) + "満たしている" + chr(10), encoding="utf-8")  # 受け取りは、総合確認のあと
         (Path(d) / "inbox" / "20261010120000-accept.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         return guild.ingest(Path(d) / "plan.json", p, TR)
 
@@ -691,7 +695,7 @@ class MarkdownOnlyTest(unittest.TestCase):
             q = Path(d) / "Q001"
             (q / "reports").mkdir(parents=True)
             draft = {"quest": "Q001", "title": "t", "format": "pptx", "goals": [
-                {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "deliverable": True, "criteria": CRIT}]}
+                {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "deliverable": True, "criteria": CRIT}]}
             (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
@@ -833,7 +837,7 @@ class AdoptDatesTest(unittest.TestCase):
             if old is not None:
                 (q / "plan.json").write_text(json.dumps(old), encoding="utf-8")
             draft = {"quest": "Q001", "title": "t", "goals": goals or [
-                {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT}]}
+                {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": CRIT}]}
             (q / "reports" / "plan-draft.json").write_text(draft_json(draft), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             return json.loads((q / "plan.json").read_text(encoding="utf-8"))
@@ -846,7 +850,7 @@ class AdoptDatesTest(unittest.TestCase):
 
     def test_request_dates_are_taken_and_draft_goal_dates_are_kept(self):
         p = self.adopt(request={"start": "2026-10-15", "due": "2026-10-30"}, goals=[
-            {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT, "scheduled": "2026-10-16", "due": "2026-10-18"},
+            {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": CRIT, "scheduled": "2026-10-16", "due": "2026-10-18"},
             {"id": "G2", "title": "b", "kind": "human", "deps": ["G1"], "criteria": CRIT, "instruction": "x"}])
         self.assertEqual((p["start"], p["due"]), ("2026-10-15", "2026-10-30"))
         self.assertEqual((p["goals"][0]["scheduled"], p["goals"][0]["due"]), ("2026-10-16", "2026-10-18"))
@@ -871,7 +875,7 @@ class AdoptDatesTest(unittest.TestCase):
             q = Path(d) / "Q001"
             (q / "reports").mkdir(parents=True)
             (q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q001", "title": "t", "goals": [
-                {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT, "due": "2026-10-20"}]}), encoding="utf-8")
+                {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": CRIT, "due": "2026-10-20"}]}), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             self.assertEqual(guild.load_json(q / "plan.json")["goals"][0]["due"], "2026-10-20")
 
@@ -1642,7 +1646,7 @@ class DeliverablesTest(unittest.TestCase):
         guild.save_plan(self.q / "plan.json", old)
         guild.publish_deliverables(self.q)
         (self.q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q001", "title": "t", "goals": [
-            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT}]}), encoding="utf-8")
+            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": CRIT}]}), encoding="utf-8")
         guild.adopt(self.q / "plan.json", TR)
         self.assertEqual(self.names(), [])
 
@@ -1661,6 +1665,8 @@ class IngestPublishTest(DeliverablesTest):
     def send(self, data):
         inbox = self.q / "inbox"
         inbox.mkdir(exist_ok=True)
+        (self.q / "reports").mkdir(exist_ok=True)
+        (self.q / "reports" / "overall-receptionist.md").write_text("## 判定" + chr(10) + "満たしている" + chr(10), encoding="utf-8")  # 受け取りは、総合確認のあと
         (inbox / "1.json").write_text(json.dumps(data), encoding="utf-8")
         p = guild.load_json(self.q / "plan.json")
         r = guild.ingest(self.q / "plan.json", p, TR)
@@ -1712,6 +1718,8 @@ class IngestPublishTest(DeliverablesTest):
         self.done_plan()
         inbox = self.q / "inbox"
         inbox.mkdir(exist_ok=True)
+        (self.q / "reports").mkdir(exist_ok=True)
+        (self.q / "reports" / "overall-receptionist.md").write_text("## 判定\n満たしている\n", encoding="utf-8")  # 受け取りは、総合確認のあと
         (inbox / "1.json").write_text(json.dumps({"type": "due", "goal": "G1", "due": "2026-12-01"}), encoding="utf-8")
         (inbox / "2.json").write_text(json.dumps({"type": "accept"}), encoding="utf-8")
         p = guild.load_json(self.q / "plan.json")
@@ -1977,7 +1985,7 @@ class NoTemplateTest(unittest.TestCase):
             q = Path(d) / "guild" / ".work" / "Q001"
             (q / "reports").mkdir(parents=True)
             draft = {"quest": "Q001", "title": "t", "template": "templates/ない.md", "goals": [
-                {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "deliverable": True, "criteria": CRIT}]}
+                {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "deliverable": True, "criteria": CRIT}]}
             (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)  # テンプレートの検査はしない（ないファイルを書いてきても落ちない）
             self.assertNotIn("template", guild.load_json(q / "plan.json"))
@@ -2268,7 +2276,7 @@ class InputsSelectTest(unittest.TestCase):
         return q
 
     def adopt(self, q, **extra):
-        draft = {"quest": "Q001", "title": "t", "goals": [{"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT}], **extra}
+        draft = {"quest": "Q001", "title": "t", "goals": [{"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": CRIT}], **extra}
         (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
         guild.adopt(q / "plan.json", TR)
         return guild.load_json(q / "plan.json")

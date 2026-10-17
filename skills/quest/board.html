@@ -570,6 +570,7 @@ function dependents(plan, id) {
 
 // 計画のインプット（inputs: [{name, source, reason}]）と候補（candidates: [{name, reason}]）。ない古い計画・壊れた要素は除く
 const planList = (p, k) => (p && Array.isArray(p[k]) ? p[k].filter((x) => x && typeof x.name === 'string' && x.name) : []);
+const OVERALL_REPORT = 'overall-receptionist.md';  // 総合確認の報告（受付係が、依頼文と納品物だけを読んで書く）
 function derive(q) {
   const p = q.plan;
   const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 24)) || q.id;
@@ -608,11 +609,14 @@ function derive(q) {
       if (t.state === 'failed') d.asks.push({ kind: 'decision', goal: t, key: `${q.id}:${t.id}:decision`, label: `${t.id}（判断）`, sent: inboxHas('decision', t.id) || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
     }
   }
-  if (p.approved && d.allDone && !p.accepted) d.asks.push({ kind: 'accept', key: `${q.id}:accept`, label: '受け取り', sent: inboxHas('accept') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
+  const hasOverall = q.reports.includes(OVERALL_REPORT);
+  d.overallPending = p.approved && d.allDone && !p.accepted && !hasOverall && (p.status === 'active' || p.status === undefined);
+  if (p.approved && d.allDone && !p.accepted && hasOverall) d.asks.push({ kind: 'accept', key: `${q.id}:accept`, label: '受け取り', sent: inboxHas('accept') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
   const waiting = d.asks.filter((a) => !a.sent);
   if (d.finished) { d.label = '完了'; d.cls = 'sd-ok'; }
   else if (waiting.some((a) => a.kind === 'decision')) { d.label = '要判断'; d.cls = 'sd-ng'; }
   else if (!p.approved) { d.label = '承認待ち'; d.cls = 'sd-draft'; }
+  else if (d.overallPending) { d.label = '総合確認中'; d.cls = 'sd-run'; }
   else if (waiting.some((a) => a.kind === 'accept')) { d.label = '受け取り待ち'; d.cls = 'sd-turn'; }
   else if (waiting.length) { d.label = '進行中'; d.cls = 'sd-turn'; }
   else { d.label = '進行中'; d.cls = 'sd-run'; }
@@ -794,6 +798,7 @@ function letterFor(qd, a) {
     return h('section', { class: 'letter', 'aria-label': '受け取りの確認' }, seal('検'),
       h('div', { class: 'kick' }, 'お願い：受け取りの確認'), h('h3', null, '納品物を確かめて、受け取ってください'),
       h('p', null, 'すべての目標が合格基準を満たしました。ただし、依頼主が受け取るまでは、完了になりません。納品物（まとめた資料）を、ファイル名を押して開いて確かめてください。'),
+      overallBlock(qd),
       deliverableBlock(qd),
       h('label', { class: 'lbl', for: ck }, '直してほしいこと（直す場合だけ）'),
       textarea(ck, { id: ck, placeholder: '例：G2 の比較表に、価格の列を足してほしい' }),
@@ -1037,6 +1042,18 @@ function datesTab(qd) {
 }
 // ---- インプット：このクエストが使うファイル（guild/inputs/）。追加・外すは入力 inputs で送る（plan.json は guild.py が書く）
 // 承認の手紙に載せる、計画の見どころ（受付係の自己点検 brief・計画の警告・あなたの作業量・再計画の差分）。ない古い計画では何も出さない
+// 総合確認（受付係が、依頼文と納品物だけを読んで、要件を満たすかを照合した結果）
+function overallBlock(qd) {
+  const txt = reportText(qd.id, OVERALL_REPORT);
+  if (txt === null) return h('p', { class: 'fine' }, '総合確認：読み込み中…');
+  const judge = (excerpt(reportSection(txt, '判定') || '', 1)[0] || ''), gaps = excerpt(reportSection(txt, '不足') || '', 8);
+  const link = h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(qd.id, `reports/${OVERALL_REPORT}`); } }, OVERALL_REPORT);
+  if (judge.startsWith('不足あり')) return h('div', { class: 'apnote', role: 'note', 'aria-label': '総合確認' },
+    h('div', null, h('b', null, '総合確認：依頼文の要件に、不足があります'), '　', link),
+    gaps.length ? h('ul', null, gaps.map((l) => h('li', null, l))) : null,
+    h('p', { class: 'fine', style: 'margin:4px 0 0' }, '不足を確かめて、そのまま受け取るか、「直してほしい」で計画を直すかを選んでください（自動では直しません）。'));
+  return h('p', { class: 'fine', style: 'margin:0 0 8px' }, '総合確認：依頼文の要件を満たしています。', link);
+}
 function planBriefBlock(p) {
   if (!p) return null;
   const list = (title, items, cls) => (Array.isArray(items) && items.length ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, title), h('ul', { class: cls || 'fine', style: 'margin:4px 0 0 18px;padding:0' }, ...items.map((x) => h('li', null, String(x))))) : null);
@@ -1049,6 +1066,9 @@ function planBriefBlock(p) {
     b ? list('うまくいかないかもしれないこと', b.risks) : null,
     b && Array.isArray(b.coverage) && b.coverage.length ? list('依頼の要件と、それを満たす目標', b.coverage.map((c) => `${c.requirement} → ${c.goals && c.goals.length ? c.goals.join('、') : '対応する目標がありません'}`)) : null,
     warns.length ? list('計画の点検で気づいたこと（警告）', warns, 'fine warnlist') : null,
+    list('外部への送信・公開、元に戻せない変更を含む目標（実行の前に、あなたに確認します）', (Array.isArray(p.goals) ? p.goals : []).filter((t) => t.effects === 'external' || t.effects === 'irreversible').map((t) => `${idTitle(t)}　${t.effects === 'external' ? '外部への送信・公開' : '元に戻せない変更'}`)),
+    (Array.isArray(p.goals) ? p.goals : []).filter((t) => t.deliverable && t.deliverable_spec && Array.isArray(t.deliverable_spec.headings)).map((t) => h('div', { class: 'qa' }, h('span', { class: 'lbl' }, '納品物の構成'), h('p', { class: 'fine', style: 'margin:4px 0 0' }, `見出し：${t.deliverable_spec.headings.join(' → ')}　読み手：${t.deliverable_spec.reader || '—'}${t.format && t.format !== 'md' ? `　形式：${t.format}` : ''}`))),
+    p.deliver_to ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, '納品物の置き場（受け取ると、プロジェクトのここにもコピーします）'), h('p', { style: 'margin:4px 0 0' }, code(p.deliver_to))) : null,
     w ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, 'あなたの作業量'),
       h('p', { style: 'margin:4px 0 0' }, w.human ? `あなたの実行は ${w.human} 件です（${Object.entries(w.days || {}).map(([d, n]) => `${d}：${n}件`).join('、')}）。` : 'あなたの実行はありません。すべて自動で進みます。'),
       w.items && w.items.length ? h('ul', { class: 'fine', style: 'margin:4px 0 0 18px;padding:0' }, ...w.items.map((i) => h('li', null, `${idTitle(i)}　予定 ${i.scheduled || '—'}`))) : null,
@@ -2396,6 +2416,7 @@ function demoTree(scene) {
   p1.candidates = [{ name: '古い資料.pdf', reason: '中身は読んでいない。名前からは関係が分からない' }]; p2.inputs = []; p2.candidates = [];
   const rep = {};
   ['G1-wizard.md', 'G1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "goals": [] }' : `## 結果\n${n} の見本です。`); });
+  if (isDone) rep['overall-receptionist.md'] = T('## 判定\n満たしている\n## 要件ごとの確認\n- 要点を 3 行にまとめる：満たしている\n## 不足\nなし\n');
   if (scene === 'failed') { rep['G2-user.md'] = T('# G2 の結果\nできた：上司に口頭で共有した\nメモ：返事は「検討する」だった'); rep['G2-appraiser.md'] = T('---\ngoal: G2\n---\n# G2 の鑑定\n## 判定\n不合格\n## 指摘\n- 合格ラインの「了承する」という返事が、報告にない\n- 返事は「検討する」で、了承ではない\n- やり直しの回数（1回）を超えた\n## 未確認\n- なし'); }
   return {
     'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), inputs: { 'notes.txt': T('- 要点1\n- 要点2\n- 要点3\n- 要点4'), 'KGI定義.md': T('# KGI の定義\n最終目標の達成度を測る指標'), '売上 2026Q3.csv': T('月,売上\n7月,100'), '古い資料.pdf': T('(PDF の見本)') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\ninputs: ["KGI定義.md"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },

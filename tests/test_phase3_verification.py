@@ -22,6 +22,7 @@ def goal(i, kind="auto", deps=(), **kw):
          "state": "pending", "retries": 0, "output": None}
     if kind == "auto":
         t["class"] = "wizard"
+        t["effects"] = "external" if kw.get("confirm") else "none"
     t.update(kw)
     return t
 

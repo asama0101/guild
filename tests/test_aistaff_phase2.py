@@ -281,7 +281,7 @@ class IngestFlowTest(Base):
         write(q2 / "reports" / "archive-draft.json", {"quest": "Q002", "candidates": [dict(r1, codex="数字には、必ず出典を添える")]})
         guild.archive_propose(q2)
         plan = {"quest": "Q002", "title": "t", "approved": True, "status": "active", "accepted": True,
-                "goals": [{"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "state": "done", "retries": 0,
+                "goals": [{"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "state": "done", "retries": 0,
                            "criteria": {"viewpoint": "v", "pass_line": "p", "check": "c"}}]}
         guild.save_plan(q2 / "plan.json", plan)
         self.assertEqual(guild.next_view(plan, q2)["archive"], "proposed")  # 掟の提案だけが残っていても、確認待ち
@@ -295,7 +295,7 @@ class IngestFlowTest(Base):
         self.draft(self.cand("C1", confidence="guess", source=""))
         guild.archive_propose(self.q)
         plan = {"quest": "Q001", "title": "t", "approved": True, "status": "active",
-                "goals": [{"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "state": "done", "retries": 0,
+                "goals": [{"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "state": "done", "retries": 0,
                            "criteria": {"viewpoint": "v", "pass_line": "p", "check": "c"}}]}
         guild.save_plan(self.q / "plan.json", plan)
         write(self.q / "inbox" / "a-archive.json", {"type": "archive", "decisions": {"C1": "register"}, "codex": ["K1"]})

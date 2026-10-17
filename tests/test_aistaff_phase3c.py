@@ -33,7 +33,7 @@ class Base(unittest.TestCase):
 class FormatTypeTest(Base):
     def test_non_string_formats_are_rejected_with_a_message_not_a_crash(self):
         for bad in (["md"], {"a": 1}, 3, True):
-            errs = guild.validate({"goals": [{"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "state": "pending",
+            errs = guild.validate({"goals": [{"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "state": "pending",
                                                "criteria": dict(CRIT), "format": bad}]}, TR)
             self.assertTrue(any("format" in e for e in errs), bad)
 
@@ -51,13 +51,13 @@ class FormatTypeTest(Base):
 
     def test_adopt_rejects_a_list_format_with_guilderror(self):
         write(self.q / "reports" / "plan-draft.json", {"quest": "Q001", "title": "題", "series": "s", "goals": [
-            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "criteria": dict(CRIT), "deliverable": True, "format": ["md"]}]})
+            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": dict(CRIT), "deliverable": True, "format": ["md"]}]})
         with self.assertRaises(guild.GuildError):
             guild.adopt(self.q / "plan.json", TR)
 
     def test_a_bad_goal_format_does_not_break_publishing(self):
         plan = {"quest": "Q001", "title": "t", "series": "s", "approved": True, "status": "active", "goals": [
-            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "criteria": dict(CRIT), "deliverable": True,
+            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": dict(CRIT), "deliverable": True,
              "format": ["md"], "state": "done", "retries": 0, "output": None}]}
         guild.save_plan(self.q / "plan.json", plan)
         (self.q / "output" / "G1").mkdir(parents=True)
@@ -68,7 +68,7 @@ class FormatTypeTest(Base):
 class DigestShapeTest(Base):
     def test_a_non_dict_archive_json_does_not_hide_the_quest(self):
         guild.save_plan(self.q / "plan.json", {"quest": "Q001", "title": "t", "series": "s", "approved": False, "status": "active", "goals": [
-            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "criteria": dict(CRIT), "state": "pending", "retries": 0, "output": None}]})
+            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": dict(CRIT), "state": "pending", "retries": 0, "output": None}]})
         (self.q / "archive.json").write_text("[1]", encoding="utf-8")
         d = guild.digest(self.root)
         self.assertEqual([q["id"] for q in d["quests"]], ["Q001"])
@@ -78,7 +78,7 @@ class DigestShapeTest(Base):
 class FormatDeliverablesTest(Base):
     def done(self, fmt):
         plan = {"quest": "Q001", "title": "週報", "series": "s", "approved": True, "status": "active", "goals": [
-            {"id": "G1", "title": "x", "kind": "auto", "class": "alchemist", "deps": [], "criteria": dict(CRIT), "deliverable": True,
+            {"id": "G1", "title": "x", "kind": "auto", "class": "alchemist", "effects": "none", "deps": [], "criteria": dict(CRIT), "deliverable": True,
              "format": fmt, "state": "done", "retries": 0, "output": None}]}
         guild.save_plan(self.q / "plan.json", plan)
         d = self.q / "output" / "G1"
