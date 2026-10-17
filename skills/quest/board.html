@@ -571,7 +571,7 @@ function dependents(plan, id) {
 const planList = (p, k) => (p && Array.isArray(p[k]) ? p[k].filter((x) => x && typeof x.name === 'string' && x.name) : []);
 function derive(q) {
   const p = q.plan;
-  const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 80)) || q.id;
+  const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 24)) || q.id;
   const d = { id: q.id, title, asks: [], info: null, goals: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q, inputs: planList(p, 'inputs'), candidates: planList(p, 'candidates') };
   const inboxHas = (type, goal, choice) => q.inbox.some((x) => x.type === type && (goal == null || x.goal === goal) && (choice == null || x.choice === choice));
   if (p && !Array.isArray(p.goals)) {  // 旧形式（todos）の依頼。読めないので、描かずに知らせる
@@ -1363,6 +1363,7 @@ function connectBox() {
 }
 
 // ---- 「＋ 新規」ダイアログ：依頼の内容・開始日（未指定なら今日）・締切（未定なら開始日）・インプット（既存から選ぶ／アップロード）
+const FORMATS = [['md', 'Markdown（既定）'], ['html', 'HTML'], ['mermaid', 'Mermaid（図）']];
 function newDialog() {
   if (!S.newOpen) return null;
   const have = new Map(((S.model && S.model.inputs) || []).map((f) => [f.name.toLowerCase(), f.name]));
@@ -1371,10 +1372,12 @@ function newDialog() {
   const start = h('input', { type: 'date', 'aria-label': '開始日' }); start.value = S.form['new:start'] || localToday(); bindKey(start, 'new:start');
   const due = h('input', { type: 'date', 'aria-label': '締切' }); due.value = S.form['new:due'] || ''; bindKey(due, 'new:due');
   const picked = S.form['new:inputs'] || [], ups = S.files.new || [], over = ups.filter((f) => have.has(f.name.toLowerCase()));
+  const fmt = h('select', { 'aria-label': '納品物の形式' }, FORMATS.map(([v, l]) => h('option', { value: v }, l))); fmt.value = S.form['new:format'] || 'md'; bindKey(fmt, 'new:format');
   const box = h('div', { class: 'nbox', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'new-title' },
     h('div', { class: 'rhead' }, h('h2', { class: 'h2', id: 'new-title' }, '新しいクエスト'), h('button', { type: 'button', class: 'btn ghost sm', onclick: closeNew }, '閉じる')),
     h('label', { class: 'lbl', for: 'qreq' }, '依頼の内容'), ta,
     h('div', { class: 'qopts' }, fld('開始日（未指定なら今日）', start), fld('締切（未定なら開始日と同じ日）', due)),
+    h('div', { class: 'qopts' }, fld('納品物の形式', fmt), h('span', { class: 'fine', style: 'align-self:end' }, 'PowerPoint・Excel・Word・PDF・画像は、Claude Code に渡すプロンプト（.prompt.md）になります。')),
     h('section', { 'aria-label': 'インプット' },
       h('p', { style: 'margin:14px 0 6px' }, h('b', null, 'インプット（任意）'), h('span', { class: 'fine' }, '　このクエストで使う資料です。納品物の型（見出しの並びなど）も、ここに付けて依頼文で伝えます。', code('guild/inputs/'), ' に1つだけ置かれ、各クエストは名前で参照します。')),
       h('div', { class: 'ncols' },
@@ -1487,14 +1490,21 @@ function questListPane(m, L) {
   const search = h('input', { type: 'search', class: 'qsearch', placeholder: '番号・題名で探す', 'aria-label': 'クエストを探す' }); search.value = S.form['f:bq'] || ''; bindKey(search, 'f:bq');
   const chips = h('div', { class: 'chipbar', role: 'group', 'aria-label': '状態で絞り込む' }, BOARD_CHIPS.map(([k, l]) =>
     h('button', { type: 'button', 'aria-pressed': String(L.f === k), onclick: () => { S.bfilter = k; render(); } }, l, h('span', { class: 'n' }, L.counts[k]))));
-  const empty = !reqs.length && !L.open.length && !L.closed.length;
+  const seriesList = [...new Set(m.quests.map((x) => x.q.plan && x.q.plan.series).filter(Boolean))].sort();
+  if (S.seriesFilter && !seriesList.includes(S.seriesFilter)) S.seriesFilter = '';
+  const bySeries = (x) => !S.seriesFilter || (x.q.plan && x.q.plan.series === S.seriesFilter);
+  const openRows = L.open.filter(bySeries), closedRows = L.closed.filter(bySeries);
+  const seriesSel = seriesList.length ? h('select', { class: 'qsearch', 'aria-label': '関連（series）で絞る', onchange: (e) => { S.seriesFilter = e.target.value; render(); } },
+    h('option', { value: '' }, '関連：すべて'), seriesList.map((v) => h('option', { value: v }, `関連：${v}（${m.quests.filter((x) => x.q.plan && x.q.plan.series === v).length}）`))) : null;
+  if (seriesSel) seriesSel.value = S.seriesFilter || '';
+  const empty = !reqs.length && !openRows.length && !closedRows.length;
   return h('aside', { class: 'qlist', id: 'quest-list', 'aria-label': 'クエスト一覧' },
     h('div', { class: 'qlhead' }, h('h2', { class: 'h2' }, 'クエスト掲示板'), h('button', { type: 'button', class: 'btn sm newbtn', onclick: openNew }, '＋ 新規')),
-    search, chips,
+    search, seriesSel, chips,
     h('div', { class: 'qrows' },
-      reqs.map(requestRow), L.open.map(questRow),
+      S.seriesFilter ? null : reqs.map(requestRow), openRows.map(questRow),
       L.closed.length ? h('button', { type: 'button', class: 'qfold', 'aria-expanded': String(!!S.showClosed), onclick: () => { S.showClosed = !S.showClosed; render(); } }, S.showClosed ? `完了・中止 ${L.closed.length}件を畳む` : `完了・中止 ${L.closed.length}件を表示`) : null,
-      S.showClosed ? L.closed.map(questRow) : null,
+      S.showClosed ? closedRows.map(questRow) : null,
       empty ? h('p', { class: 'sub', style: 'padding:10px 12px;margin:0' }, m.quests.length || m.requests.length ? '当てはまるクエストはありません。' : 'まだ依頼はありません。「＋ 新規」から出してください。') : null));
 }
 function questPanel(m, L) {
@@ -1511,9 +1521,27 @@ function questPanel(m, L) {
     h('header', { class: 'qhead' },
       h('div', { class: 'qhl' }, h('span', { class: 'tid' }, qd.id), stampEl(qd.label, qd.cls)),
       h('h3', null, qd.title),
+      p && p.series ? h('p', { class: 'fine', style: 'margin:0 0 4px' }, `関連：${p.series}`) : null,
+      metaEditor(qd),
       h('div', { class: 'qmeta' }, h('span', null, p ? `開始 ${p.start || '—'}　締切 ${p.due || '—'}` : '計画はまだありません'),
         qd.total ? [h('span', { class: 'bar', role: 'img', 'aria-label': `${qd.total} 件中 ${qd.done} 件が済み` }, h('span', { style: `width:${pct}%` })), h('span', null, `${qd.done}/${qd.total} 済み`)] : null)),
     questDetail(qd));
+}
+// 題名と関連（series）を直す。直したものは、受付係が作り直しても上書きしない
+function metaEditor(qd) {
+  const p = qd.q.plan;
+  if (!p || p.status === 'aborted' || p.status === 'replan') return null;
+  const open = S.metaOpen === qd.id, k = `meta:${qd.id}`;
+  if (!open) return h('button', { type: 'button', class: 'linkbtn', style: 'margin:0 0 6px', onclick: () => { S.metaOpen = qd.id; render(); } }, '題名・関連を直す');
+  const t = h('input', { type: 'text', 'aria-label': '題名', maxlength: '80' }); t.value = S.form[`${k}:title`] !== undefined ? S.form[`${k}:title`] : (p.title || ''); bindKey(t, `${k}:title`);
+  const sr = h('input', { type: 'text', 'aria-label': '関連（series）', maxlength: '80' }); sr.value = S.form[`${k}:series`] !== undefined ? S.form[`${k}:series`] : (p.series || ''); bindKey(sr, `${k}:series`);
+  const sent = qd.q.inbox.some((x) => x.type === 'meta');
+  return h('div', { class: 'qa', style: 'margin:0 0 8px' },
+    h('div', { class: 'qopts' }, fld('題名（検索しやすい短さに。目安は 24 字）', t), fld('関連（同じ種類の依頼に共通。例：週報）', sr)),
+    h('div', { class: 'btns' },
+      h('button', { type: 'button', class: 'btn go sm', disabled: sent, onclick: () => { const title = t.value.trim(), series = sr.value.trim(); if (!title || !series) { S.toast = '題名と関連の両方を入れてください'; render(); return; } S.metaOpen = null; send(qd.id, { type: 'meta', title, series }, `${k}:send`); } }, '直す'),
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.metaOpen = null; render(); } }, 'やめる'),
+      sent ? h('span', { class: 'fine' }, '送信済み。/guild:quest が読み取ると反映されます。') : null));
 }
 // 一覧を隠したときのツールバー：見出し・前後のクエスト・何件中何件目・探して開く・＋ 新規
 function hiddenBar(m, L, i, go) {
@@ -2079,9 +2107,9 @@ async function sendRequest() {
   const start = S.form['new:start'] || localToday(), due = S.form['new:due'] || null;
   try {
     for (const f of files) { await S.fs.writeBlob(`requests/files/${id}/${f.name}`, f); names.push(f.name); }
-    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due, inputs: picked, files: names, created: new Date().toISOString() }, null, 2));
+    await S.fs.writeText(`requests/${id}.json`, JSON.stringify({ type: 'request', text, start, due, format: FORMATS.some(([v]) => v === S.form['new:format']) ? S.form['new:format'] : 'md', inputs: picked, files: names, created: new Date().toISOString() }, null, 2));
   } catch (e) { S.newError = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); return; }
-  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.form['new:inputs'] = []; S.form['f:npq'] = ''; S.files.new = []; S.newSaved = id; S.newOpen = false;
+  S.form['new:text'] = ''; S.form['new:due'] = ''; S.form['new:start'] = ''; S.form['new:format'] = ''; S.form['new:inputs'] = []; S.form['f:npq'] = ''; S.files.new = []; S.newSaved = id; S.newOpen = false;
   await refresh(true);
 }
 async function openFile(full) {
@@ -2191,7 +2219,7 @@ function demoTree(scene) {
   if (scene === 'confirm' || isDone) h1.push({ t: at(67), id: 'G2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'G2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(59), id: 'G2', event: 'passed', from: 'review', to: 'done' }, { t: at(59), id: 'G3', event: 'deps_done', from: 'pending', to: 'awaiting_confirm' });
   if (isDone) h1.push({ t: at(55), id: 'G3', event: 'confirmed', from: 'awaiting_confirm', to: 'running' }, { t: at(54), id: 'G3', event: 'submitted', from: 'running', to: 'review' }, { t: at(53), id: 'G3', event: 'passed', from: 'review', to: 'done' });
   if (scene === 'failed') h1.push({ t: at(67), id: 'G2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(62), id: 'G2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(60), id: 'G2', event: 'rejected', from: 'review', to: 'failed' }, { t: at(60), id: 'G3', event: 'dep_failed', from: 'pending', to: 'blocked' });
-  const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', approved, status: 'active', accepted: scene === 'done' || scene === 'archive', history: h1,
+  const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', series: '要点のまとめ', approved, status: 'active', accepted: scene === 'done' || scene === 'archive', history: h1,
     goals: [mk('G1', 'notes.txt を読み、要点を3行にまとめた digest.md を作る', 'auto', [], S3[0][0], t1c), mk('G2', '上司に口頭で内容を共有し、了承をもらう', 'human', ['G1'], S3[1][0], t2c), mk('G3', 'digest.md を publish フォルダにコピーして公開する', 'auto', ['G2'], S3[2][0], t3c, { confirm: true })] };
   const day = 24 * 60, p2 = { quest: 'Q002', title: '議事録のテンプレートを3種類比べる', approved: true, status: 'active', accepted: true,
     history: [{ t: at(day + 120), event: 'adopted' }, { t: at(day + 118), event: 'approved' }, { t: at(day + 118), id: 'G1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 100), id: 'G1', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 98), id: 'G1', event: 'passed', from: 'review', to: 'done' },

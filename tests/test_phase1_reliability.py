@@ -33,6 +33,8 @@ def plan(*goals, approved=True, **kw):
 
 def draft_json(d):
     d = json.loads(json.dumps(d))
+    d.setdefault("title", "依頼の題名")
+    d.setdefault("series", "試験")
     if d["goals"] and not any(t.get("deliverable") for t in d["goals"]):
         d["goals"][-1]["deliverable"] = True
     return json.dumps(d, ensure_ascii=False)

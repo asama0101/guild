@@ -145,7 +145,7 @@ class AdoptQualityTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def draft(self, goals, brief=BRIEF):
-        d = {"quest": "Q1", "title": "題", "goals": goals}
+        d = {"quest": "Q1", "title": "題", "series": "試験", "goals": goals}
         if brief is not None:
             d["brief"] = brief
         (self.dir / "reports" / "plan-draft.json").write_text(json.dumps(d), encoding="utf-8")

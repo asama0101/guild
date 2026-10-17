@@ -56,6 +56,10 @@ MAX_RETRIES_LIMIT = 5  # 目標ごとの max_retries の上限
 PROMPT_SUFFIX = ".prompt.md"  # Markdown 以外（PowerPoint・Excel など）が要るときの、Claude Code に渡すプロンプトのファイル名
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
 CLASSES = ("wizard", "alchemist", "adventurer")  # 目標（auto）を実行する役（職業）
+FORMATS = {"md": ".md", "html": ".html", "mermaid": ".mmd"}  # 納品物の形式（文字の形式だけ。ほかはプロンプト *.prompt.md）
+DEFAULT_FORMAT = "md"
+TITLE_HINT = 24  # 依頼のタイトルの目安（超えると警告）
+META_MAX = 80  # タイトル・series の上限（超えるとエラー）
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -274,6 +278,8 @@ def validate(plan, tr):
             errs.append(f"{i}: kind が不明です: {t.get('kind')}")
         if t.get("state") not in tr["states"]:
             errs.append(f"{i}: state が不明です: {t.get('state')}")
+        if "format" in t and t["format"] not in FORMATS:
+            errs.append(f"{i}: format は {'・'.join(FORMATS)} のどれかにしてください: {t['format']!r}")
         if t.get("kind") == "auto":
             if t.get("class") not in CLASSES:
                 errs.append(f"{i}: class は {'・'.join(CLASSES)} のどれかにしてください: {t.get('class')!r}")
@@ -416,7 +422,7 @@ def ingest(plan_path, plan, tr, commit=None):
                 write_user_report(Path(plan_path).parent, data)
                 qdir = Path(plan_path).parent
                 try:
-                    if data.get("type") == "accept":
+                    if data.get("type") == "accept" or (data.get("type") == "meta" and plan.get("accepted")):
                         publish_deliverables(qdir, plan)  # 受け取ったら、納品物が必ず置かれている（何度でも同じ）
                     elif data.get("type") == "decision" and data.get("choice") in ("abort", "replan"):
                         unpublish_deliverables(qdir)  # 中止なら納品物はない。見直しなら古いものは使えない
@@ -471,6 +477,20 @@ def apply_input(plan, data, tr, qdir=None, after=None):
             raise GuildError("すでに承認されています")
         plan["approved"], plan["status"] = True, "active"
         note(plan, event="approved")
+        return
+    if kind == "meta":
+        changes = {}
+        for k in ("title", "series"):
+            if k in data:
+                v = one_line(data[k]) if isinstance(data[k], str) else ""
+                if not v or len(v) > META_MAX:
+                    raise GuildError(f"{k} は 1〜{META_MAX} 字の文字列にしてください")
+                changes[k] = v
+        if not changes:
+            raise GuildError("title か series が必要です")
+        plan.update(changes)
+        plan["meta_locked"] = sorted(set(plan.get("meta_locked", [])) | set(changes))  # 依頼主が直したものは、受付係が上書きしない
+        note(plan, event="meta", **changes)
         return
     if kind == "accept":
         if plan.get("accepted"):
@@ -772,6 +792,41 @@ def plan_diff(old, plan, carried):
             "carried": list(carried)}
 
 
+def check_meta(draft):
+    """受付係が決めた、依頼のタイトルと series（関連の名前）の検査。返り値は (エラー, 警告, タイトル, series)。
+    タイトルは依頼ごとに固有、series は同じ種類の依頼を関連づけるだけ（定期でも突発でも付ける）。"""
+    title, series = one_line(draft.get("title")), one_line(draft.get("series"))
+    errs, warns = [], []
+    for name, v, what in (("title", title, "依頼のタイトル"), ("series", series, "関連の名前")):
+        if not v:
+            errs.append(f"{name}（{what}）がありません")
+        elif len(v) > META_MAX:
+            errs.append(f"{name} は {META_MAX} 字までにしてください（{len(v)} 字）")
+        elif len(v) > TITLE_HINT:
+            warns.append(f"{name}（{what}）が {TITLE_HINT} 字を超えています。検索しやすい短さにしてください（{len(v)} 字）")
+    return errs, warns, title, series
+
+
+def request_format(qdir):
+    """依頼（request.json）の納品形式。ない・不明なら md。"""
+    try:
+        f = load_json(Path(qdir) / "request.json").get("format") if (Path(qdir) / "request.json").exists() else None
+    except (GuildError, AttributeError):
+        f = None
+    return f if f in FORMATS else DEFAULT_FORMAT
+
+
+def apply_format(plan, fmt):
+    """納品する目標（deliverable）の format を、依頼の形式にそろえる。なければ入れる。食い違いはエラー。"""
+    errs = []
+    for t in plan["goals"]:
+        if t.get("deliverable") is True:
+            if t.get("format") not in (None, fmt):
+                errs.append(f"{t['id']}: 納品する目標の format は、依頼の形式（{fmt}）と同じにしてください: {t['format']!r}")
+            t["format"] = fmt
+    return errs
+
+
 def adopt(plan_path, tr):
     """reports/plan-draft.json（受付係の分解結果）を検査し、未承認の plan.json にする。"""
     plan_path = Path(plan_path)
@@ -788,7 +843,10 @@ def adopt(plan_path, tr):
     if not isinstance(goals, list):
         raise GuildError("plan-draft.json に goals がありません")
     inputs, candidates = selected_inputs(plan_path.parent, draft, old)  # 何も書く前に検査する（落ちたら受付係に差し戻す）
-    plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False, "status": "active",
+    m_errs, m_warns, title, series = check_meta(draft)
+    if m_errs:
+        raise GuildError("plan-draft.json のタイトルの検査に失敗しました: " + " / ".join(m_errs))
+    plan = {"quest": draft.get("quest"), "title": title, "series": series, "approved": False, "status": "active",
             **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}),
             "inputs": inputs, "candidates": candidates,
             "goals": [], "history": [{"t": now(), "event": "adopted"}]}
@@ -806,9 +864,17 @@ def adopt(plan_path, tr):
     q_errs, q_warns, brief = plan_quality(plan, draft.get("brief"))
     if q_errs:
         raise GuildError("plan-draft.json の計画検査に失敗しました: " + " / ".join(q_errs))
-    plan["brief"], plan["check"], plan["workload"] = brief, {"warnings": q_warns}, workload(plan)
+    f_errs = apply_format(plan, request_format(plan_path.parent))
+    if f_errs:
+        raise GuildError("plan-draft.json の形式の検査に失敗しました: " + " / ".join(f_errs))
+    plan["brief"], plan["check"], plan["workload"] = brief, {"warnings": m_warns + q_warns}, workload(plan)
     carried, warnings = [], []
     if old is not None:
+        for k in old.get("meta_locked", []):  # 依頼主がボードで直したタイトル・series は、作り直しでも保つ
+            if k in ("title", "series") and old.get(k):
+                plan[k] = old[k]
+        if old.get("meta_locked"):
+            plan["meta_locked"] = list(old["meta_locked"])
         shutil.copy2(plan_path, plan_path.with_name("plan.prev.json"))
         carried = carry_over(plan, old)
         plan["replan_diff"] = plan_diff(old, plan, carried)
@@ -1054,8 +1120,13 @@ def deliverable_files(qdir, plan):
         d = Path(qdir) / "output" / t["id"]
         if t.get("state") != "done" or not d.is_dir():
             continue
-        for f in sorted(d.rglob("*.md")):
-            if f.is_file() and (t["id"] in marked or f.name.lower().endswith(PROMPT_SUFFIX)):
+        exts = {".md", FORMATS.get(t.get("format"), ".md")}  # 納品する目標は、指定の形式（html・mermaid）のファイルも納品物にする
+        for f in sorted(d.rglob("*")):
+            if not f.is_file():
+                continue
+            if f.name.lower().endswith(PROMPT_SUFFIX):
+                yield t["id"], f
+            elif t["id"] in marked and f.suffix.lower() in exts:
                 yield t["id"], f
 
 
@@ -1082,8 +1153,13 @@ def publish_deliverables(qdir, plan=None):
     dest = gdir_of(qdir) / DELIV
     dest.mkdir(exist_ok=True)
     used, names = set(), []
-    for tid, f in deliverable_files(qdir, plan):
+    files = list(deliverable_files(qdir, plan))
+    mains = [x for x in files if not x[1].name.lower().endswith(PROMPT_SUFFIX)]
+    safe = " ".join(re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", one_line(plan.get("title"))).split()).strip(" .")
+    for tid, f in files:
         name = f"{qdir.name}_{f.name}"
+        if safe and len(mains) == 1 and (tid, f) == mains[0]:
+            name = f"{qdir.name}_{safe}{f.suffix}"  # 納品物が 1 つなら、依頼のタイトルをファイル名にする（探しやすいように）
         if name in used:
             name = f"{qdir.name}_{tid}_{f.name}"
         used.add(name)
@@ -1110,6 +1186,10 @@ def new_quest(root, request_id=None):
         if not src.exists():
             raise GuildError(f"{src} がありません")
         req = load_json(src)
+        if req.get("format") is not None and req["format"] not in FORMATS:
+            msg = f"format は {'・'.join(FORMATS)} のどれかにしてください: {req['format']!r}"
+            reject_request(wdir, request_id, msg)
+            raise GuildError(msg)
         files = wdir / "requests" / "files" / request_id
         try:
             picked = picked_inputs(gdir, req, files)
@@ -1346,6 +1426,22 @@ def digest(root):
     out = {"t": now(), "quests": quests, "needs_total": sum(len(q["needs"]) for q in quests), "stats": stats(root)["total"]}
     if wd.is_dir():
         save_plan(wd / CLOG, out)
+    return out
+
+
+def past_quests(root, limit=50):
+    """過去の依頼のタイトルと series の一覧（新しい順に limit 件）。受付係が、同じ種類の依頼に同じ series を使うための材料。"""
+    wd = work_dir(Path(root) / "guild")
+    out = []
+    for q in sorted(wd.glob("Q[0-9]*"), reverse=True) if wd.is_dir() else []:
+        if len(out) >= limit:
+            break
+        try:
+            if (q / "plan.json").exists() and not is_legacy_plan(q / "plan.json"):
+                p = load_json(q / "plan.json")
+                out.append({"id": q.name, "title": p.get("title"), "series": p.get("series")})
+        except (GuildError, AttributeError):
+            continue
     return out
 
 
@@ -1903,7 +1999,7 @@ def mutate_plan(cmd, path, argv):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear", "stats", "digest"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear", "stats", "digest", "past-quests"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
@@ -1936,6 +2032,9 @@ def main(argv):
             return 0
         if cmd == "stats":
             print(json.dumps(stats(path), ensure_ascii=False))
+            return 0
+        if cmd == "past-quests":
+            print(json.dumps(past_quests(path), ensure_ascii=False))
             return 0
         if cmd == "digest":
             print(json.dumps(digest(path), ensure_ascii=False))

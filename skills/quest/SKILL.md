@@ -50,6 +50,8 @@ disable-model-invocation: true
    - 依頼文（`<dir>/request.json`）と、依頼主が指定したインプット（`request.json` の `inputs`）
    - `inputs-list` の出力（JSON）を、そのまま。**ファイルに保存せず、チャットにも書かない**（ファイルの先頭の行に秘密が含まれうるため、受付係にだけ渡す）
    - 依頼の開始日・締切（`request.json` の `start`・`due`）
+   - 依頼の納品形式（`request.json` の `format`。なければ `md`）
+   - 過去の依頼のタイトルと `series`：`<python> "${CLAUDE_SKILL_DIR}/guild.py" past-quests <root>` の出力（JSON）をそのまま
    - 依頼のフォルダ、書庫の場所（`guild/archive/`）、ギルドの掟の場所（`guild/.work/codex/default.md`・`guild/.work/codex/project.md`）
    - 出力先：`<dir>/reports/plan-draft.json`
    - 質問への回答があるとき、またはやり直しのときは、その内容（下の4・5）

@@ -30,6 +30,8 @@ def goal(i, kind="auto", deps=(), **kw):
 def draft_json(d, **kw):
     """地図師の下書き（plan-draft.json）の JSON。adopt の計画検査（deliverable 1 件・human の instruction）を満たすよう、足りなければ補う。"""
     d = copy.deepcopy(d)
+    d.setdefault("title", "依頼の題名")
+    d.setdefault("series", "試験")
     ts = d.get("goals")
     if isinstance(ts, list) and ts and all(isinstance(t, dict) for t in ts):
         if not any(t.get("deliverable") is True for t in ts):
@@ -680,8 +682,8 @@ class AcceptTest(unittest.TestCase):
 class MarkdownOnlyTest(unittest.TestCase):
     """納品物は Markdown だけ。format の項目はない。"""
 
-    def test_no_format_machinery(self):
-        self.assertFalse(hasattr(guild, "FORMATS"))
+    def test_formats_are_only_text_formats(self):
+        self.assertEqual(set(guild.FORMATS), {"md", "html", "mermaid"})
         self.assertEqual(guild.validate(plan(goal("G1")), TR), [])
 
     def test_adopt_does_not_carry_format(self):
@@ -1600,15 +1602,15 @@ class DeliverablesTest(unittest.TestCase):
         self.out("G2", "調査報告.md")
         self.out("G2", "メモ.txt")
         self.save(goal("G1", state="done"), goal("G2", state="done", deliverable=True, deps=["G1"]))
-        self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_スライド.prompt.md", "Q001_調査報告.md"])
-        self.assertEqual(self.names(), ["Q001_スライド.prompt.md", "Q001_調査報告.md"])
-        self.assertEqual((self.g / "deliverables" / "Q001_調査報告.md").read_text(encoding="utf-8"), "x")
+        self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_スライド.prompt.md", "Q001_t.md"])
+        self.assertEqual(self.names(), ["Q001_t.md", "Q001_スライド.prompt.md"])
+        self.assertEqual((self.g / "deliverables" / "Q001_t.md").read_text(encoding="utf-8"), "x")
 
     def test_without_a_deliverable_mark_all_done_markdown_is_published(self):
         self.out("G1", "a.md")
         self.out("G2", "b.md")
         self.save(goal("G1", state="done"), goal("G2", state="skipped"))
-        self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_a.md"])  # やめた目標は含めない
+        self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_t.md"])  # やめた目標は含めない
 
     def test_same_file_name_in_two_goals_gets_the_goal_id(self):
         self.out("G1", "報告.md")
@@ -1623,7 +1625,7 @@ class DeliverablesTest(unittest.TestCase):
         self.save(goal("G1", state="done"))
         guild.publish_deliverables(self.q)
         guild.publish_deliverables(self.q)
-        self.assertEqual(self.names(), ["Q001_a.md", "Q002_他の依頼.md"])
+        self.assertEqual(self.names(), ["Q001_t.md", "Q002_他の依頼.md"])
 
     def test_unpublish_removes_only_this_quest(self):
         (self.g / "deliverables").mkdir(exist_ok=True)
@@ -1631,7 +1633,7 @@ class DeliverablesTest(unittest.TestCase):
         self.out("G1", "a.md")
         self.save(goal("G1", state="done"))
         guild.publish_deliverables(self.q)
-        self.assertEqual(guild.unpublish_deliverables(self.q), ["Q001_a.md"])
+        self.assertEqual(guild.unpublish_deliverables(self.q), ["Q001_t.md"])
         self.assertEqual(self.names(), ["Q0010_別.md"])
 
     def test_replan_adopt_unpublishes(self):
@@ -1650,7 +1652,7 @@ class DeliverablesTest(unittest.TestCase):
         r = subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), "publish", str(self.q)],
                            capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(json.loads(r.stdout)["published"], ["Q001_a.md"])
+        self.assertEqual(json.loads(r.stdout)["published"], ["Q001_t.md"])
 
 
 class IngestPublishTest(DeliverablesTest):
@@ -1672,13 +1674,13 @@ class IngestPublishTest(DeliverablesTest):
     def test_accept_without_prior_publish_publishes(self):
         self.done_plan()
         self.send({"type": "accept"})
-        self.assertEqual(self.names(), ["Q001_a.md"])
+        self.assertEqual(self.names(), ["Q001_t.md"])
 
     def test_accept_after_publish_has_no_duplicates(self):
         self.done_plan()
         guild.publish_deliverables(self.q)
         self.send({"type": "accept"})
-        self.assertEqual(self.names(), ["Q001_a.md"])
+        self.assertEqual(self.names(), ["Q001_t.md"])
 
     def test_publish_with_no_outputs_is_empty(self):
         self.save(goal("G1", state="done"))
@@ -1738,9 +1740,11 @@ class BoardPathsTest(unittest.TestCase):
         for needle in (".work/archive-inbox", "'.work/$1'"):
             self.assertIn(needle, self.board)
 
-    def test_no_format_or_unreadable_template_machinery(self):
-        for gone in ("const FORMATS", "TEMPLATE_READABLE", "tplReadable", "new:format", "納品物の形式"):
+    def test_formats_are_text_formats_and_no_template_machinery(self):
+        for gone in ("TEMPLATE_READABLE", "tplReadable", "new:template"):
             self.assertNotIn(gone, self.board)
+        for needle in ("const FORMATS", "new:format", "納品物の形式", "['html', 'HTML']", "['mermaid', 'Mermaid（図）']"):
+            self.assertIn(needle, self.board)
 
     def test_flat_archive_and_deliverables_are_read(self):
         self.assertNotIn("archive/${dir}", self.board)
@@ -1804,7 +1808,7 @@ class BoardPathsTest(unittest.TestCase):
 
     def test_inputs_tab_and_new_dialog(self):
         for needle in ("type: 'inputs', add:", "function inputsTab(", "function inputsBlock(", "function inputPicker(", "function newDialog(", "function trapTab(",
-                       "'aria-modal': 'true'", "type: 'request', text, start, due, inputs: picked, files: names", "S.fs.list('requests/rejected')",
+                       "'aria-modal': 'true'", "type: 'request', text, start, due, format:", "S.fs.list('requests/rejected')",
                        "同名あり（上書き）", "既存から選ぶ", "function uploadBox(", "をアップロードして追加", "e.key === 'Escape' && S.newOpen", "rejectedRequests"):
             self.assertIn(needle, self.board)
         for gone in ("function composer(", ".qmain{", "template:", "new:template"):

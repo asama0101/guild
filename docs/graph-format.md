@@ -108,6 +108,8 @@
 - 辺は `deps`（前提となる目標の ID）で表す。別に辺の配列は持たない。
 - `kind` は `auto` か `human`。分解時に付け、計画の承認で直す。`human` は、役（魔法使い・錬金術師・冒険者）にできない作業（他のシステムの操作、承認、依頼主の判断、冒険者にも読めない情報の入手）だけ。調査・転記・整理・執筆は `auto`。
 - `class`（職業）は、`auto` の目標に必須で、実行する役を決める：`wizard`（魔法使い。調べる・比べる・出典を確かめる）、`alchemist`（錬金術師。すでにある材料から、書く・整理する。まとめの納品物を含む。Web なし）、`adventurer`（冒険者。動的ページをブラウザで読む）のどれか。`human` の目標には付けない（付いている・`auto` なのにない・上の3つ以外はエラー）。受付係が決める。旧 `needs_browser: true` は廃止し、`class: adventurer` に置き換えた。ギルドマスターは、`ready` の目標を `class` に応じて `guild:wizard`・`guild:alchemist`・`guild:adventurer` で呼ぶ（冒険者は、ブラウザが1つなので同時に1人まで）。
+- 計画の `title` は、**依頼 1 件の名前**（検索しやすい「対象＋作業」。24 字を超えると警告、80 字を超えるとエラー。依頼ごとに固有）。`series` は、同じ種類の依頼（定期・突発とも）を**関連づける名前**で、タイトルとは別（共通にしない）。どちらも受付係が `plan-draft.json` に必ず書き、ない・空は `adopt` が差し戻す。依頼主がボードで直した分は `meta_locked`（`["title", "series"]` のうち直したもの）に残り、作り直し（`replan`）でも保たれる。分解前は、依頼文の先頭 24 字が仮のタイトルとしてボードに出る。
+- `format`（納品する目標＝`deliverable: true` だけ）：`md`・`html`・`mermaid`。依頼の `format` と同じで、`adopt` が入れる（違う値はエラー）。納品物にするファイルは、`.md` と、この形式の拡張子（`.html`・`.mmd`）。納品物（`*.prompt.md` を除く）が 1 つなら、`publish` は、ファイル名を `Q###_<依頼のタイトル>.<拡張子>` にする（2 つ以上なら、元のファイル名）。
 - 旧形式（`todos`）の `plan.json` は読めない（`guild.py` は「旧形式の計画です」で止まり、自動の移行はしない）。`arrivals`・`wait` は、その依頼の `inbox` を数えず、ボードは「旧形式の依頼」と表示する。
 - `deliverable: true` は、依頼主に渡す資料（納品物）を作る目標の印。最後の「まとめの目標」に付ける。ボードの受け取りの確認には、この目標の成果物だけを納品物として出す（ほかは「途中の資料（材料）」）。出力は Markdown だけで、PowerPoint・Excel などが要るときは、Claude Code に渡すプロンプトを `*.prompt.md` で出す（受付係が目標にするか、魔法使い・錬金術師が実行中に足す。足しても目標は増えず、承認は取らない）。
 - `inputs` は、この依頼で使うインプット（`guild/inputs/` のファイル名）。インプットは `guild/inputs/` に1つだけ置き、各依頼は名前で参照する（大文字小文字は区別しない）。アップロードした名前が既にあり内容が違えば上書きし、上書き前の版を `.work/backup/Q###/` に残す（`close` で、閉じた依頼の分を消す）。`source` が `user` は依頼主の指定（「＋ 新規」で選んだ・アップロードした。`request.json` の `inputs`）、`auto` は受付係の選択。`reason` は理由。`user` が先頭。`candidates` は、受付係が迷って選ばなかったもの（理由つき）。名前は `inputs` と `candidates` をまたいで重ならない。魔法使い・錬金術師・冒険者・鑑定士は、`inputs` のファイルを `guild/inputs/<name>` で読む。納品物の型（見出しの並びなど）は、インプットに付けて依頼文で伝える。
@@ -131,11 +133,12 @@
 ボードの「＋ 新規」は、受付待ちの依頼を `.work/requests/R<日時>.json` に書き、アップロードの中身を `.work/requests/files/R<日時>/` に置く。`new <root> R<日時>` が取り込むと、依頼のフォルダの `request.json` になる。
 
 ```json
-{"type": "request", "text": "KGI の達成状況をまとめて", "start": "2026-10-16", "due": null,
+{"type": "request", "text": "KGI の達成状況をまとめて", "start": "2026-10-16", "due": null, "format": "md",
  "inputs": ["KGI定義.md"], "files": ["メモ.txt"], "created": "2026-10-16T10:00:00Z"}
 ```
 
 - `text`：依頼文。`start`・`due`：依頼の開始日・締切（`null` は未指定）。
+- `format`：納品物の形式。`md`（既定。省略も同じ）・`html`・`mermaid`。ボードの新規依頼で選ぶ。ほかの値は、依頼を拒否する。pptx・xlsx・docx・PDF・画像は、形式として選べない（従来どおり `*.prompt.md`）。
 - `inputs`：既存の `guild/inputs/` から選んだ名前。1つでもなければ、依頼を `.work/requests/rejected/` に移して拒否する。
 - `files`：アップロードの名前。取り込むと `guild/inputs/` に置き、`request.json` の `inputs` は「選んだ名前＋アップロードの名前」（重なりを除き、選んだものが先）になる。
 - チャットから出す依頼は、ギルドマスターが `{"type": "request", "text": "<依頼文>", "files": []}` を書く。
@@ -148,6 +151,7 @@
 |---|---|---|
 | `answers` | `{"type": "answers", "answers": [{"q": "質問", "choice": "選んだもの", "note": "補足"}, …]}`（いくつでも選べる質問は `choices` に配列も） | 計画ができる前の質問への回答（`answers` が取り出して受付係に渡す） |
 | `approve` | `{"type": "approve"}` | 計画の承認（承認済みなら拒否） |
+| `meta` | `{"type": "meta", "title": "…", "series": "…"}`（どちらか片方でもよい） | 依頼のタイトル・`series` の変更（1〜80 字）。変えたものは `meta_locked` に残り、受付係の作り直しで上書きされない。受け取り済みなら、納品物の名前も付け替える |
 | `accept` | `{"type": "accept"}` | 全目標が済んだあとの、納品物の受け取り（済んでいない・受け取り済みなら拒否） |
 | `confirm` | `{"type": "confirm", "goal": "G3", "ok": true}` | 実行前の確認（実行する／しない） |
 | `result` | `{"type": "result", "goal": "G2", "ok": true, "note": "…", "files": ["…"]}` | `human` の結果（できた／できなかった、一言メモ、添付は `inbox/files/`）。`reports/<id>-user.md` に書き写す |
@@ -187,6 +191,7 @@
 | `pause <root>` | 「ギルドを閉める」。`guild/.work/pause.json`（`{"type": "pause", "created": …}`）を書く。ボードの「ギルドを閉める」と `/guild:close` が使う。`guild/` がなければエラー。依頼は中止にならない |
 | `pause-status <root>` | pause.json があるか（`paused`）。中身は見ず、壊れていても「あり」。ギルドマスターが周回の頭で見る。あれば、新しい役を呼ばず、実行中の役が終わるのを待って止まる |
 | `pause-clear <root>` | pause.json を消す（`cleared`）。`/guild:quest` の起動時（ギルドを開ける）。なくても何も起きない |
+| `past-quests <root>` | 過去の依頼（新しい順に 50 件）のタイトルと `series`。受付係が、同じ種類の依頼に同じ `series` を使うための材料 |
 | `digest <root>` | クエストログ（`guild/.work/clog.json`）を作る。依頼ごとの進み・あなたの番・担当の職業（実行中の目標の `class`）・止まっている理由・次の提案と、`stats` の集計を、`plan.json` などの状態だけから機械で作る（LLM は使わない）。`wait` は、待機に入る直前に自動で実行する。失敗の判断には、鑑定士の「勧める対応」（`reports/<id>-appraiser.md` の「## 勧める対応」の 1 行目が もう一度／計画を直す／やめる）を添える |
 | `stats <root>` | 効果の測定。依頼ごとの目標数・完了・失敗・やめた数と、不合格（`rejected`）・もう一度やる（`retry`）・計画の直し（`replanned`）の回数を `history` から数え、合計と「目標あたりの不合格回数」（`rejected_per_goal`）を返す。壊れた `plan.json` は読み飛ばす。計画の質を上げる施策が効いたかを見るための数 |
 
