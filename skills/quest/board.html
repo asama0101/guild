@@ -1804,39 +1804,19 @@ function knowTab() {
     h('ul', { style: 'margin:6px 0 0' }, m.archiveRejected.map((r) => h('li', { class: 'fine' }, code(r.file), '：', r.reason)))));
   out.push(archiveForm());
   const cmp = (a, b) => String(a.name).localeCompare(String(b.name));
-  const groups = ARCH_TYPES.map(([type, title]) => ({ type, title,
-    list: all.filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases, ...e.inputs)).sort(cmp) }));
-  for (const { type, title, list } of groups) {
-    const head = type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title;
-    if (!list.length) { out.push(h('p', { class: 'sub kn-h', id: 'kn-' + type, style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
-    out.push(h('h3', { class: 'sec kn-h', id: 'kn-' + type }, head, `　${list.length}件`));
+  const kind = ARCH_TYPES.some(([t]) => t === S.fkn) ? S.fkn : 'all';
+  const matches = (type) => all.filter((e) => e.type === type).filter((e) => hit(q, e.name, e.summary, e.body, ...e.aliases, ...e.inputs)).sort(cmp);
+  const shown = ARCH_TYPES.filter(([type]) => kind === 'all' || type === kind);
+  for (const [type, title] of shown) {
+    const list = matches(type), head = type === 'lesson' ? '心得（guild の改善材料。役は読みません）' : title;
+    if (!list.length) { out.push(h('p', { class: 'sub', style: 'margin:14px 0 4px' }, h('b', null, head), `　0件（${q ? '見つかりませんでした' : 'まだありません'}）`)); continue; }
+    out.push(h('h3', { class: 'sec' }, head, `　${list.length}件`));
     for (const e of list) out.push(archiveCard(e));
   }
-  const toc = h('aside', { class: 'toc', 'aria-label': '書庫の目次' }, h('div', { class: 'toch' }, '書庫の目次'),
-    groups.map((g) => h('button', { type: 'button', class: 'tocb' + (kn.cur === g.type ? ' on' : ''), 'data-kn': g.type, onclick: () => jumpKn(g.type) },
-      h('span', { class: 'id' }, g.title), h('span', { class: 'tt' }, `${g.list.length}件`))));
-  out.push(h('div', { 'aria-hidden': 'true', style: 'min-height:calc(100vh - 80px)' }));  // 最後の種類の見出しも、目次から押したときに先頭へ来られるように、余白を足す
-  return [h('div', { class: 'bwrap' }, toc, h('div', { class: 'bmain' }, out))];
+  const navBtn = (k, label, n) => h('button', { type: 'button', 'aria-pressed': String(kind === k), onclick: () => { S.fkn = k; render(); } }, h('span', null, label), h('span', { class: 'n' }, String(n)));
+  const nav = h('div', { class: 'dnav', role: 'group', 'aria-label': '種類' }, ARCH_TYPES.map(([type, title]) => navBtn(type, title, all.filter((e) => e.type === type).length)), h('div', { class: 'sep' }), navBtn('all', 'すべて', all.length));
+  return [out[0], out[1], h('div', { class: 'dside' }, nav, h('div', null, out.slice(2)))];
 }
-// 書庫の目次：押した種類の見出しへ、固定のタブの下に出るように移動する
-function jumpKn(type) {
-  S.kn.cur = type;
-  document.querySelectorAll('.tocb[data-kn]').forEach((b) => b.classList.toggle('on', b.dataset.kn === type));
-  const el = document.getElementById('kn-' + type); if (!el) return;
-  const bar = document.querySelector('.tabs'), top = bar ? bar.offsetHeight : 0;  // 固定されたときのタブの高さ（スクロール前の位置ではなく）
-  window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - top - 8);
-}
-function spyKn() {
-  if (S.tab !== 'know') return;
-  const bar = document.querySelector('.tabs'), top = (bar ? bar.getBoundingClientRect().bottom : 0) + 40;
-  const hs = [...document.querySelectorAll('.kn-h')]; if (!hs.length) return;
-  let cur = hs[0].id.slice(3); hs.forEach((el) => { if (el.getBoundingClientRect().top <= top) cur = el.id.slice(3); });
-  // ページの一番下まで来ていて、押した種類の見出しがまだ下にあるときは、押した種類のままにする（それ以上スクロールできないため）
-  const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4, mine = S.kn.cur && document.getElementById('kn-' + S.kn.cur);
-  if (atEnd && mine && mine.getBoundingClientRect().top > top) return;
-  if (cur && cur !== S.kn.cur) { S.kn.cur = cur; document.querySelectorAll('.tocb[data-kn]').forEach((b) => b.classList.toggle('on', b.dataset.kn === cur)); }
-}
-
 // ---- ヘルプの上半分（処理フローの図と役の説明）
 const ACTOR = { me: ['あなた（ボード）', '--banner', '--banner-ink'], gm: ['ギルドマスター', '--brass', '--on'], cart: ['受付係', '--ok', '--on'], adv: ['魔法使い・錬金術師・冒険者', '--warn', '--on'], app: ['鑑定士', '--stop', '--on'], lib: ['司書', '--mute', '--on'], sys: ['', '--surface2', '--ink'] };
 function flowSvg() {
@@ -2500,7 +2480,6 @@ async function start() {
   try { history.scrollRestoration = 'manual'; } catch (e) { /* 使えなくても続ける */ }
   const params = new URLSearchParams(location.search);
   for (const ev of ['dragover', 'drop']) document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest('.dz')) e.preventDefault(); });
-  window.addEventListener('scroll', spyKn, { passive: true });
   S.listOpen = lsGet(LS_LIST, true) !== false;  // 前回の「一覧を隠す」。読めない・使えないときは、表示で開く
   S.prog.sel = progLoad();  // 前回の「表示するクエスト」。読めない・壊れているときは null（進行中のすべて）
   // ポップオーバーは、外側をクリックすると閉じる。押した部品が描き直しで外れた（isConnected が false）ときは、中の操作なので閉じない
