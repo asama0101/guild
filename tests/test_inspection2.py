@@ -53,5 +53,20 @@ class ReplanAcceptedTest(unittest.TestCase):
         self.assertEqual((plan["status"], plan["approved"]), ("replan", False))
 
 
+class AdvanceStateTest(unittest.TestCase):
+    def run_advance(self, plan, goal_id, event):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "plan.json"
+            guild.save_json(path, plan)
+            with self.assertRaises(guild.GuildError) as cm:
+                guild.mutate_plan("advance", path, ["guild.py", "advance", str(path), goal_id, event])
+            return str(cm.exception)
+
+    def test_advance_is_refused_for_aborted_replan_and_unapproved_plans(self):
+        for kw in ({"approved": True, "status": "aborted"}, {"approved": True, "status": "replan"}, {"approved": False, "status": "active"}):
+            plan = {"quest": "Q001", "title": "t", **kw, "goals": [goal("G1", "running")], "history": []}
+            self.assertIn("進められません", self.run_advance(plan, "G1", "submitted"), kw)
+
+
 if __name__ == "__main__":
     unittest.main()

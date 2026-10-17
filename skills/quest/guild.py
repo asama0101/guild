@@ -2178,6 +2178,8 @@ def mutate_plan(cmd, path, argv):
     elif cmd == "advance":
         if len(argv) != 5:
             raise GuildError("advance PLAN ID EVENT の形で指定してください")
+        if not runnable(plan):
+            raise GuildError("未承認・見直し中・中止の依頼の目標は進められません（承認済みで進行中の依頼だけです）")
         t = goal_map(plan).get(argv[3])
         if t is None:
             raise GuildError(f"goal がありません: {argv[3]}")
