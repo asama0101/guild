@@ -1010,7 +1010,7 @@ def carry_over(plan, old):
     return carried
 
 
-def archive_outputs(old, carried, qdir):
+def archive_outputs(old, carried, qdir, reports=True):
     """引き継がなかった目標の成果物と報告を、prev/<日時>/ へ退避する（計画を保存したあとに呼ぶ）。"""
     arch = Path(qdir) / "prev" / datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     for o in old.get("goals", []):
@@ -1020,9 +1020,11 @@ def archive_outputs(old, carried, qdir):
         if out.is_dir():
             (arch / "output").mkdir(parents=True, exist_ok=True)
             shutil.move(str(out), str(arch / "output" / o["id"]))
-        for f in sorted((Path(qdir) / "reports").glob(f"{o['id']}-*")):
+        for f in (sorted((Path(qdir) / "reports").glob(f"{o['id']}-*")) if reports else []):
             (arch / "reports").mkdir(parents=True, exist_ok=True)
             shutil.move(str(f), str(arch / "reports" / f.name))
+    if not reports:
+        return  # 目標のやり直し：報告（鑑定士の指摘）と総合確認は、そのまま残す
     ov = Path(qdir) / "reports" / OVERALL_REPORT  # 古い計画の総合確認は、作り直したあとには当てはまらない
     if ov.is_file():
         try:
@@ -2114,6 +2116,7 @@ def mutate_plan(cmd, path, argv):
     if errs:
         raise GuildError("plan.json の検査に失敗しました: " + " / ".join(errs))
     commit = lambda: save_plan(path, plan)
+    redo_goal = None
     if cmd == "sync":
         result = sync(plan, tr)
     elif cmd == "advance":
@@ -2124,13 +2127,21 @@ def mutate_plan(cmd, path, argv):
             raise GuildError(f"goal がありません: {argv[3]}")
         if argv[4] == "passed" and t["state"] == "review":  # 状態が違うときは、apply_event が状態のエラーを返す
             check_evidence(plan, t["id"], Path(path).parent)
+        was = t["state"]
         apply_event(t, argv[4], tr, plan)
         result = {"id": t["id"], "state": t["state"]}
+        if argv[4] == "rejected" and was == "review" and t["state"] != "failed":
+            redo_goal = t  # 不合格でやり直す目標：古い版の成果物は、保存のあとに prev/ へ退避する（報告は残す。鑑定士の指摘を読むため）
     else:
         result = ingest(path, plan, tr, commit=commit)  # 保存してから入力を done へ移す
         print(json.dumps(result, ensure_ascii=False))
         return 1 if result["rejected"] else 0
     commit()
+    if redo_goal is not None:
+        try:
+            archive_outputs({"goals": [redo_goal]}, [], Path(path).parent, reports=False)
+        except OSError as e:
+            result["warning"] = f"古い成果物の退避に失敗しました（{e}）。output/{redo_goal['id']}/ の古いファイルを、手で prev/ へ移してください"
     print(json.dumps(result, ensure_ascii=False))
     return 0
 

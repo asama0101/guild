@@ -272,3 +272,20 @@ console.log(JSON.stringify([overallJudge(r('満たしている')), overallJudge(
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RejectedRedoArchiveTest(Base):
+    """鑑定士の不合格で目標をやり直すとき、古い成果物は prev/ へ退避し、報告（鑑定士の指摘）は残す。"""
+
+    def test_rejected_moves_output_but_keeps_reports(self):
+        plan = {"start": "2026-01-01", "due": "2026-01-31", "approved": True, "goals": [g("G1", state="review", retries=0)], "history": []}
+        write(self.q / "plan.json", plan)
+        (self.q / "output" / "G1").mkdir(parents=True)
+        (self.q / "output" / "G1" / "old.md").write_text("古い版", encoding="utf-8")
+        (self.q / "reports").mkdir(exist_ok=True)
+        (self.q / "reports" / "G1-appraiser.md").write_text("## 判定\nrejected\n", encoding="utf-8")
+        r = subprocess.run([sys.executable, GUILD_PY, "advance", str(self.q / "plan.json"), "G1", "rejected"], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse((self.q / "output" / "G1").exists())
+        self.assertEqual(len(list((self.q / "prev").glob("*/output/G1/old.md"))), 1)
+        self.assertTrue((self.q / "reports" / "G1-appraiser.md").is_file())
