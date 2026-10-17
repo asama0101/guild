@@ -34,9 +34,9 @@ console.log(JSON.stringify([adviceLine(rep('もう一度 — 直せる')), advic
                 "needs": [{"kind": "result", "text": "G2「部長に聞く」"}], "blockers": [], "followups": []}]}
         model = {"quests": [{"id": "Q001", "asks": [{"kind": "result", "sent": False, "goal": {"id": "G2", "title": "部長に聞く", "criteria": {"pass_line": "返事が 1 つある"}}}]}]}
         out = self.log_text(clog, model)
-        for needle in ("内容をコピー", "できた", "できなかった"):
+        for needle in ("コピー", "できた", "できなかった"):
             self.assertIn(needle, out, needle)
-        self.assertNotIn("内容をコピー", self.log_text(clog, {"quests": [{"id": "Q001", "asks": [{"kind": "approve", "sent": False}]}]}))
+        self.assertNotIn("コピー", self.log_text(clog, {"quests": [{"id": "Q001", "asks": [{"kind": "approve", "sent": False}]}]}))
 
 
     def test_log_tab_shows_needs_workers_blockers_followups_and_stats(self):

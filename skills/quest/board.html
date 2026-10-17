@@ -1738,7 +1738,7 @@ function turnRow(q) {
   const asks = resultAsks(q.id);
   const btns = asks.map((a) => {
     const t = a.goal, key = `${q.id}:${t.id}:result`, ask = S.form['log:ask'];
-    const body = `【${t.id}】${t.title}\n${t.instruction ? 'お願いしたいこと：' + t.instruction + '\n' : ''}${t.instruction ? 'できたと言える状態：' : '合格ライン：'}${(t.criteria && t.criteria.pass_line) || ''}`;
+    const body = t.title;  // コピーするのは、タスク名（目標の題名）だけ
     const go = (ok) => () => { S.form['log:ask'] = `${key}:${ok ? 'yes' : 'no'}`; render(); };
     if (ask && ask.startsWith(key + ':')) {
       const ok = ask.endsWith(':yes');
@@ -1747,7 +1747,7 @@ function turnRow(q) {
         h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.form['log:ask'] = ''; render(); } }, 'やめる'));
     }
     return h('span', { class: 'ta' }, asks.length > 1 ? h('span', { class: 'fine' }, t.id) : null,
-      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyText(body, '内容') }, '内容をコピー'),
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyText(body, 'タスク名') }, 'コピー'),
       h('button', { type: 'button', class: 'btn sm go', onclick: go(true) }, 'できた'), h('button', { type: 'button', class: 'btn sm', onclick: go(false) }, 'できなかった'));
   });
   return h('div', { class: 'tn' }, text, ...btns);
