@@ -295,6 +295,9 @@ def validate(plan, tr):
                 check_date(t.get(k), k)
             except GuildError as e:
                 errs.append(f"{i}: {e}")
+        if not isinstance(t.get("deps", []), list):
+            errs.append(f"{i}: deps は目標の id の配列にしてください: {t.get('deps')!r}")
+            continue
         for d in t.get("deps", []):
             if d not in ids:
                 errs.append(f"{i}: deps の {d} がありません")
@@ -391,7 +394,7 @@ def overall_skip(qdir):
 def overall_state(qdir):
     """総合確認の報告（reports/overall-receptionist.md）の状態。ok（満たしている）／gaps（不足あり）／None（ない・空・判定がない）。"""
     try:
-        body = section_of((Path(qdir) / "reports" / OVERALL_REPORT).read_text(encoding="utf-8-sig"), "判定")
+        body = section_of((Path(qdir) / "reports" / OVERALL_REPORT).read_text(encoding="utf-8-sig", errors="replace"), "判定")
     except OSError:
         return None
     first = re.sub(r"^[\s>*`_-]+", "", one_line(body.split("\n")[0])) if body else ""  # **不足あり**・- 満たしている のような飾りは取る
@@ -1008,6 +1011,8 @@ def adopt(plan_path, tr):
     for t in goals:
         if not isinstance(t, dict):
             raise GuildError("goals の要素が不正です")
+        if not isinstance(t.get("deps", []), list):
+            raise GuildError(f"{t.get('id')}: deps は目標の id の配列にしてください: {t.get('deps')!r}")
         item = dict(t, deps=list(t.get("deps", [])), state=tr["initial"], retries=0, output=None)
         item["scheduled"] = item.get("scheduled") or plan["start"]
         item["due"] = item.get("due") or plan["due"]
@@ -1133,7 +1138,7 @@ def list_requests(root):
     rdir = work_dir(Path(root) / "guild") / "requests"
     out = []
     if rdir.is_dir():
-        for f in sorted(rdir.glob("R*.json")):
+        for f in sorted(p for p in rdir.glob("R*.json") if REQUEST_ID.match(p.stem)):
             try:
                 d = load_json(f)
             except GuildError:
@@ -1264,7 +1269,10 @@ def close_quests(root):
         bak, prev, plan_path = wdir / "backup" / q.name, q / "prev", q / "plan.json"
         if not (bak.is_dir() or prev.is_dir()) or not plan_path.exists():
             continue
-        plan = load_plan(plan_path)
+        try:
+            plan = load_plan(plan_path)
+        except GuildError:
+            continue  # 旧形式や壊れた依頼が 1 件あっても、ほかの依頼は閉じる
         if plan.get("accepted") or plan.get("status") == "aborted":
             for d in (bak, prev):  # 閉じた依頼の、インプットのバックアップと、退避した古い成果物
                 if d.is_dir():
@@ -1424,7 +1432,7 @@ def arrivals(root):
             out.extend({"kind": "inbox", "quest": q.name, "file": f.name} for f in files)
         req = wdir / "requests"
         if req.is_dir():
-            for f in sorted(req.glob("R*.json")):
+            for f in sorted(p for p in req.glob("R*.json") if REQUEST_ID.match(p.stem)):  # new が受け付ける ID の形だけ。Readme.json などは数えない（数えると wait が即返し続ける）
                 try:
                     load_json(f)
                 except GuildError:
@@ -1525,7 +1533,7 @@ def advice_of(qdir, goal_id):
     返り値は {"action": retry|replan|drop, "text": 1 行} か None。"""
     f = Path(qdir) / "reports" / f"{goal_id}-appraiser.md"
     try:
-        body = section_of(f.read_text(encoding="utf-8"), "勧める対応")
+        body = section_of(f.read_text(encoding="utf-8", errors="replace"), "勧める対応")
     except OSError:
         return None
     first = one_line(body.split("\n")[0]) if body else ""
@@ -2278,7 +2286,11 @@ def main(argv):
                     digest(path)  # 待機に入る直前に、クエストログを更新する（失敗しても、待機は止めない）
                 except (GuildError, OSError):
                     pass
-                result = wait_for(path, float(argv[3]) if len(argv) > 3 else 540)
+                try:
+                    seconds = float(argv[3]) if len(argv) > 3 else 540
+                except ValueError:
+                    raise GuildError(f"wait の秒数は数字にしてください: {argv[3]}")
+                result = wait_for(path, seconds)
             elif cmd == "arrivals":
                 result = arrivals(path)
             else:

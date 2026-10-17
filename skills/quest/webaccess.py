@@ -143,6 +143,9 @@ def gate(gdir, url, prompt=""):
     elif len(data["pending"]) < MAX_PENDING:
         data["pending"].append({"domain": domain, "urls": [url], "purposes": [purpose] if purpose else [], "at": now()})
         save(gdir, data)
+    else:
+        return "deny", (f"{domain} は、依頼主の許可がないため開けません。許可待ちの手紙がいっぱい（{MAX_PENDING} 件）で、この確認は積めませんでした。"
+                        f"今は開かずに進め、報告の「未確認」に「許可なし：{url}」と書いてください。")
     return "deny", (f"{domain} は、依頼主の許可がないため開けません。依頼主へは、ボードの手紙で確認を出します。"
                     f"今は開かずに、ほかの出典で進められる範囲で進めてください。報告の「未確認」に「許可待ち：{url}」と書いてください。")
 

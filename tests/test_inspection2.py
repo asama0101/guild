@@ -203,5 +203,55 @@ console.log(JSON.stringify([
         self.assertIn("m.quests.filter((x) => x.label === '受け取り待ち')", BOARD_SRC)
 
 
+class SmallFixesTest(unittest.TestCase):
+    def test_null_deps_are_a_validation_error_not_a_crash(self):
+        plan = {"goals": [goal("G1", deps=None)]}
+        self.assertTrue(any("deps" in e for e in guild.validate(plan, TR)))
+
+    def test_only_real_request_files_count_as_requests(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            rdir = root / "guild" / ".work" / "requests"
+            (rdir / "R20261010-1.json").write_text(json.dumps({"text": "x"}), encoding="utf-8")
+            (rdir / "Readme.json").write_text(json.dumps({"text": "y"}), encoding="utf-8")
+            self.assertEqual([x["id"] for x in guild.list_requests(root)], ["R20261010-1"])
+            self.assertEqual([x["id"] for x in guild.arrivals(root) if x["kind"] == "request"], ["R20261010-1"])
+
+    def test_wait_with_a_bad_number_is_a_guild_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(guild.main(["guild.py", "wait", d, "abc"]), 1)
+
+    def test_reports_with_broken_bytes_do_not_crash(self):
+        with tempfile.TemporaryDirectory() as d:
+            q = Path(d)
+            (q / "reports").mkdir()
+            (q / "reports" / guild.OVERALL_REPORT).write_bytes("## 判定\n満たしている\n".encode("utf-8") + b"\xff\xfe")
+            (q / "reports" / "G1-appraiser.md").write_bytes("## 勧める対応\nもう一度 — 直せる\n".encode("utf-8") + b"\xff")
+            self.assertEqual(guild.overall_state(q), "ok")
+            self.assertEqual(guild.advice_of(q, "G1")["action"], "retry")
+
+    def test_one_broken_quest_does_not_stop_close(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            wdir = root / "guild" / ".work"
+            for n, body in (("Q001", "{broken"), ("Q002", json.dumps({"accepted": True, "goals": []}))):
+                (wdir / n).mkdir()
+                (wdir / n / "plan.json").write_text(body, encoding="utf-8")
+                (wdir / n / "prev").mkdir()
+            self.assertEqual(guild.close_quests(root)["removed"], ["Q002"])
+
+    def test_full_pending_list_is_told_honestly(self):
+        with tempfile.TemporaryDirectory() as d:
+            gdir = Path(d) / "guild"
+            data = webaccess.load(gdir)
+            data["pending"] = [{"domain": f"s{i}.example.com", "urls": [], "purposes": [], "at": "x"} for i in range(webaccess.MAX_PENDING)]
+            webaccess.save(gdir, data)
+            _, why = webaccess.gate(gdir, "https://new.example.org/", "p")
+            self.assertNotIn("手紙で確認を出します", why)
+            self.assertIn("いっぱい", why)
+
+
 if __name__ == "__main__":
     unittest.main()
