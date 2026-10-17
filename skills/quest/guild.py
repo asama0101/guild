@@ -367,13 +367,25 @@ def archive_state(qdir):
 OVERALL_REPORT = "overall-receptionist.md"  # 総合確認の報告（受付係が、依頼文と納品物だけを読んで書く）
 
 
+def overall_skip(qdir):
+    """総合確認が得られないときの、最後の手段。「不足あり（総合確認ができなかった）」の報告を書き、依頼主が自分で確かめて受け取れるようにする。
+    受付係の判定を作り上げるのではなく、できなかったことを、そのまま依頼主に知らせる。"""
+    qdir = Path(qdir)
+    if overall_state(qdir) is not None:
+        raise GuildError("総合確認は済んでいます")
+    (qdir / "reports").mkdir(exist_ok=True)
+    write_text_atomic(qdir / "reports" / OVERALL_REPORT, "## 判定\n不足あり\n## 要件ごとの確認\n（総合確認ができませんでした）\n## 不足\n"
+                      "総合確認ができませんでした（受付係の報告が得られなかったため）。納品物を、依頼文と見比べて、ご自身で確かめてください。\n")
+    return {"written": str(qdir / "reports" / OVERALL_REPORT)}
+
+
 def overall_state(qdir):
     """総合確認の報告（reports/overall-receptionist.md）の状態。ok（満たしている）／gaps（不足あり）／None（ない・空・判定がない）。"""
     try:
-        body = section_of((Path(qdir) / "reports" / OVERALL_REPORT).read_text(encoding="utf-8"), "判定")
+        body = section_of((Path(qdir) / "reports" / OVERALL_REPORT).read_text(encoding="utf-8-sig"), "判定")
     except OSError:
         return None
-    first = one_line(body.split("\n")[0]) if body else ""
+    first = re.sub(r"^[\s>*`_-]+", "", one_line(body.split("\n")[0])) if body else ""  # **不足あり**・- 満たしている のような飾りは取る
     if first.startswith("満たしている"):
         return "ok"
     if first.startswith("不足あり"):
@@ -447,7 +459,7 @@ def ingest(plan_path, plan, tr, commit=None):
                         publish_deliverables(qdir, plan)  # 受け取ったら、納品物が必ず置かれている（何度でも同じ）
                     elif data.get("type") == "decision" and data.get("choice") in ("abort", "replan"):
                         unpublish_deliverables(qdir)  # 中止なら納品物はない。見直しなら古いものは使えない
-                except OSError as e:
+                except (OSError, GuildError) as e:
                     # 入力は適用済み。ここで落とすと同じバッチの適用済みの入力が計画に保存されず失われるので、警告にして続ける
                     report["warnings"].append(f"納品物の置き直しに失敗しました（{f.name}：{e}）。`publish` を再実行してください")
             dest, key, item = inbox / "done", "applied", f.name
@@ -733,7 +745,8 @@ _AMBIGUOUS_RE = {w: re.compile(("(?<!不)" if w == "適切" else "(?<![二三四
 MAX_GOALS = 12  # これを超えたら、粒度が細かすぎないかの警告
 MIN_CRITERIA_LEN = 6  # これより短い合格基準は、測れる書き方になっていない可能性の警告
 EFFECTS = ("none", "external", "irreversible")  # 目標（auto）の影響：なし（読む・書くだけ）／外部への送信・公開／元に戻せない変更
-DANGER_WORDS = ("送信", "送る", "公開", "削除", "消去", "投稿", "共有", "アップロード", "メールを", "上書き", "発注", "支払", "申請", "配信", "掲載")
+DANGER_WORDS = ("送信", "送る", "公開する", "公開し", "削除", "消去", "投稿", "共有する", "共有し", "アップロード", "メールを", "上書き", "発注", "支払", "申請する", "申請し",
+                "配信", "掲載する", "掲載し", "通知", "書き込", "デプロイ", "リリース", "ツイート", "push", "send", "post ", "upload", "delete", "publish")  # 名詞の「公開情報」などは拾わない
 
 
 def _str_list(v):
@@ -783,7 +796,7 @@ def plan_quality(plan, brief):
                 errs.append(f"{i}: effects が {e} の目標には、confirm: true が要ります（実行前に、依頼主の確認を取るため）")
             elif e == "none":
                 text = " ".join([str(t.get("title") or ""), *[str(v) for v in (t.get("criteria") or {}).values()]])
-                hits = [w for w in DANGER_WORDS if w in text]
+                hits = [w for w in DANGER_WORDS if w in text.lower()]
                 if hits:
                     warns.append(f"{i}: effects が none ですが、「{'・'.join(hits)}」とあります。外部への送信・公開・元に戻せない変更を含むなら、effects と confirm を直してください")
         if t.get("deliverable") is True:
@@ -860,6 +873,9 @@ def request_format(qdir):
     return f if isinstance(f, str) and f in FORMATS else DEFAULT_FORMAT
 
 
+RESERVED_NAME = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.I)
+
+
 def check_deliver_to(qdir, value):
     """deliver_to（納品物をコピーする、プロジェクト内の場所）の検査。プロジェクト外・絶対パス・.. ・guild/・.git/ は不可。正規化した相対パス（/ 区切り）を返す。"""
     if not isinstance(value, str) or not value.strip():
@@ -872,6 +888,9 @@ def check_deliver_to(qdir, value):
         raise GuildError(f"deliver_to に、空のパスと .. は使えません: {value}")
     if parts[0].lower() in ("guild", ".git"):
         raise GuildError("deliver_to に、guild/ と .git/ は指定できません")
+    for p in parts:  # Windows が名前を変えてしまうもの（末尾のドット・空白、予約名、8.3 短縮名）
+        if p != p.rstrip(" .") or RESERVED_NAME.match(p) or re.search(r"~\d", p):
+            raise GuildError(f"deliver_to に、使えない名前があります（末尾のドット・空白、CON などの予約名、~1 のような短縮名）: {p}")
     if any(c in p for p in parts for c in '<>:"|?*\x00'):
         raise GuildError(f"deliver_to に、使えない文字があります: {value}")
     root = gdir_of(qdir).parent.resolve()
@@ -880,6 +899,12 @@ def check_deliver_to(qdir, value):
         target.relative_to(root)
     except ValueError:
         raise GuildError(f"deliver_to が、プロジェクトの外を指しています: {value}")
+    for protected in ((root / "guild").resolve(), (root / ".git").resolve()):  # シンボリックリンク・ジャンクションを含め、解決後が guild/・.git/ の中なら不可
+        try:
+            target.relative_to(protected)
+        except ValueError:
+            continue
+        raise GuildError(f"deliver_to が、guild/ か .git/ の中を指しています: {value}")
     if target.exists() and not target.is_dir():
         raise GuildError(f"deliver_to は、フォルダにしてください（ファイルがあります）: {value}")
     return "/".join(parts)
@@ -962,7 +987,7 @@ def carry_over(plan, old):
     """計画の作り直し。完了済みで、番号・種別・職業・題名・合格基準・依存が同じで、依存先もすべて引き継がれる目標は、状態を引き継ぐ。
     上流が変わった（引き継がれなかった）目標の下流は、古い成果物が前提にずれるので引き継がない。
     経緯（history）は旧計画のものに追記する。引き継いだ id の一覧を返す（成果物の退避は archive_outputs）。"""
-    same = lambda a, b: all(a.get(k) == b.get(k) for k in ("kind", "class", "title", "criteria"))         and list(a.get("deps", [])) == list(b.get("deps", []))
+    same = lambda a, b: all(a.get(k) == b.get(k) for k in ("kind", "class", "title", "criteria", "effects", "confirm", "deliverable_spec", "format"))         and list(a.get("deps", [])) == list(b.get("deps", []))
     new_by = {t["id"]: t for t in plan["goals"]}
     old_by = {t["id"]: t for t in old.get("goals", [])}
     carried = []
@@ -1000,8 +1025,11 @@ def archive_outputs(old, carried, qdir):
             shutil.move(str(f), str(arch / "reports" / f.name))
     ov = Path(qdir) / "reports" / OVERALL_REPORT  # 古い計画の総合確認は、作り直したあとには当てはまらない
     if ov.is_file():
-        (arch / "reports").mkdir(parents=True, exist_ok=True)
-        shutil.move(str(ov), str(arch / "reports" / ov.name))
+        try:
+            (arch / "reports").mkdir(parents=True, exist_ok=True)
+            shutil.move(str(ov), str(arch / "reports" / ov.name))
+        except OSError:
+            ov.unlink()  # 退避できなくても、古い報告を残さない（残ると、新しい計画の受け取りが、古い判定で進む）
 
 
 def init_guild(root):
@@ -1262,13 +1290,13 @@ def publish_deliverables(qdir, plan=None):
         shutil.copy2(f, dest / name)
         names.append(name)
     out = {"published": names}
-    if plan.get("deliver_to"):  # 受付係が決めた置き場（プロジェクト内）にも、同じ名前でコピーする。置いた一覧は delivered.json に残す
+    if plan.get("deliver_to") and plan.get("accepted"):  # 依頼主が受け取ったら、受付係が決めた置き場（プロジェクト内）にも、同じ名前でコピーする
         rel = check_deliver_to(qdir, plan["deliver_to"])
         target = gdir_of(qdir).parent / Path(*rel.split("/"))
         target.mkdir(parents=True, exist_ok=True)
+        save_plan(qdir / "delivered.json", {"dir": rel, "files": names})  # コピーの前に、置く予定の一覧を残す（途中で失敗しても、取り下げで消せる）
         for n in names:
             shutil.copy2(dest / n, target / n)
-        save_plan(qdir / "delivered.json", {"dir": rel, "files": names})
         out["delivered_to"] = rel
     return out
 
@@ -2108,7 +2136,7 @@ def mutate_plan(cmd, path, argv):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear", "stats", "digest", "past-quests"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear", "stats", "digest", "past-quests", "overall-skip"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
@@ -2141,6 +2169,9 @@ def main(argv):
             return 0
         if cmd == "stats":
             print(json.dumps(stats(path), ensure_ascii=False))
+            return 0
+        if cmd == "overall-skip":
+            print(json.dumps(overall_skip(path), ensure_ascii=False))
             return 0
         if cmd == "past-quests":
             print(json.dumps(past_quests(path), ensure_ascii=False))

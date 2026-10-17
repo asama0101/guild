@@ -69,7 +69,7 @@ class EffectsTest(unittest.TestCase):
         errs, warns = quality(g("G1", title="結果を部長に送信する", deliverable=True, deliverable_spec=SPEC))
         self.assertEqual(errs, [])
         self.assertTrue(any("effects が none" in w and "送信" in w for w in warns))
-        errs, warns = quality(g("G1", deliverable=True, deliverable_spec=SPEC, criteria={"viewpoint": "v", "pass_line": "公開できる形", "check": "c"}))
+        errs, warns = quality(g("G1", deliverable=True, deliverable_spec=SPEC, criteria={"viewpoint": "v", "pass_line": "成果物を公開して確認する", "check": "c"}))
         self.assertTrue(any("公開" in w for w in warns))
 
     def test_none_without_dangerous_words_is_clean(self):

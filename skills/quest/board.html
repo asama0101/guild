@@ -492,7 +492,8 @@ async function loadAll() {
       if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', goal: null, choice: null, qs: j.answers.map((a) => a.q) }); }
     }
     const archive = await readJSON(`${q}/archive.json`);
-    quests.push({ id: q, plan, request, draft, reports, output, inbox, archive, published: delivFiles.filter((n) => n.startsWith(q + '_')) });
+    const overall = reports.includes(OVERALL_REPORT) ? ((await S.fs.readText(`${q}/reports/${OVERALL_REPORT}`)) || '').replace(/^\uFEFF/, '') : null;
+    quests.push({ id: q, plan, request, draft, reports, output, overall, inbox, archive, published: delivFiles.filter((n) => n.startsWith(q + '_')) });
   }
   quests.sort((a, b) => b.id.localeCompare(a.id));
   const archive = [];
@@ -571,6 +572,12 @@ function dependents(plan, id) {
 // 計画のインプット（inputs: [{name, source, reason}]）と候補（candidates: [{name, reason}]）。ない古い計画・壊れた要素は除く
 const planList = (p, k) => (p && Array.isArray(p[k]) ? p[k].filter((x) => x && typeof x.name === 'string' && x.name) : []);
 const OVERALL_REPORT = 'overall-receptionist.md';  // 総合確認の報告（受付係が、依頼文と納品物だけを読んで書く）
+// 総合確認の判定（guild.py の overall_state と同じ：「## 判定」の 1 行目が 満たしている／不足あり で始まるものだけ有効。飾りの * - ` > は取る）
+function overallJudge(txt) {
+  if (txt == null) return null;
+  const first = (excerpt(reportSection(txt, '判定') || '', 1)[0] || '').replace(/^[\s>*`_-]+/, '');
+  return first.startsWith('満たしている') ? 'ok' : first.startsWith('不足あり') ? 'gaps' : null;
+}
 function derive(q) {
   const p = q.plan;
   const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 24)) || q.id;
@@ -609,7 +616,7 @@ function derive(q) {
       if (t.state === 'failed') d.asks.push({ kind: 'decision', goal: t, key: `${q.id}:${t.id}:decision`, label: `${t.id}（判断）`, sent: inboxHas('decision', t.id) || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
     }
   }
-  const hasOverall = q.reports.includes(OVERALL_REPORT);
+  const hasOverall = overallJudge(q.overall) !== null;
   d.overallPending = p.approved && d.allDone && !p.accepted && !hasOverall && (p.status === 'active' || p.status === undefined);
   if (p.approved && d.allDone && !p.accepted && hasOverall) d.asks.push({ kind: 'accept', key: `${q.id}:accept`, label: '受け取り', sent: inboxHas('accept') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
   const waiting = d.asks.filter((a) => !a.sent);
@@ -898,7 +905,7 @@ function reportText(qid, name) { return fileText(`${qid}/reports/${name}`); }
 function fileText(path) {
   if (!(path in S.rcache)) {
     S.rcache[path] = null;
-    Promise.resolve(S.fs.readText(path)).then((t) => { S.rcache[path] = t == null ? '' : t; }, () => { S.rcache[path] = ''; }).then(() => { if (!S.composing) render(); });
+    Promise.resolve(S.fs.readText(path)).then((t) => { S.rcache[path] = t == null ? '' : t.replace(/^\uFEFF/, ''); }, () => { S.rcache[path] = ''; }).then(() => { if (!S.composing) render(); });
   }
   return S.rcache[path];
 }
@@ -1046,13 +1053,13 @@ function datesTab(qd) {
 function overallBlock(qd) {
   const txt = reportText(qd.id, OVERALL_REPORT);
   if (txt === null) return h('p', { class: 'fine' }, '総合確認：読み込み中…');
-  const judge = (excerpt(reportSection(txt, '判定') || '', 1)[0] || ''), gaps = excerpt(reportSection(txt, '不足') || '', 8);
+  const judge = overallJudge(txt), gaps = excerpt(reportSection(txt, '不足') || '', 8);
   const link = h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(qd.id, `reports/${OVERALL_REPORT}`); } }, OVERALL_REPORT);
-  if (judge.startsWith('不足あり')) return h('div', { class: 'apnote', role: 'note', 'aria-label': '総合確認' },
+  if (judge === 'gaps') return h('div', { class: 'apnote', role: 'note', 'aria-label': '総合確認' },
     h('div', null, h('b', null, '総合確認：依頼文の要件に、不足があります'), '　', link),
     gaps.length ? h('ul', null, gaps.map((l) => h('li', null, l))) : null,
     h('p', { class: 'fine', style: 'margin:4px 0 0' }, '不足を確かめて、そのまま受け取るか、「直してほしい」で計画を直すかを選んでください（自動では直しません）。'));
-  return h('p', { class: 'fine', style: 'margin:0 0 8px' }, '総合確認：依頼文の要件を満たしています。', link);
+  return h('p', { class: 'fine', style: 'margin:0 0 8px' }, judge === 'ok' ? '総合確認：依頼文の要件を満たしています。' : '総合確認：判定を読み取れませんでした。', link);
 }
 function planBriefBlock(p) {
   if (!p) return null;

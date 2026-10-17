@@ -201,7 +201,7 @@ class CarryOverTest(unittest.TestCase):
 
     def old(self):
         return plan(goal("G1", state="done"), goal("G2", state="done", deps=["G1"]),
-                    goal("G3", state="done", deps=["G2"]), status="replan")
+                    goal("G3", state="done", deps=["G2"], format="md"), status="replan")  # 納品する最後の目標は、adopt が format を入れる
 
     def test_unchanged_chain_is_carried(self):
         new = [goal("G1"), goal("G2", deps=["G1"]), goal("G3", deps=["G2"])]
