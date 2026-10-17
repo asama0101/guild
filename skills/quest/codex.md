@@ -19,7 +19,7 @@ guild の全役（受付係・魔法使い・錬金術師・冒険者・鑑定�
 
 ## 成果物の置き場所
 - 成果物は、`guild/.work/Q###/output/<id>/` に書く。依頼文にファイル名や置き場の指定があっても、実行中はいつもここに書く（納品物を依頼主の見える場所に置くのは `guild.py` の仕事）。
-- 成果物は Markdown だけ。PowerPoint・Excel などが要るときは、Claude Code に渡すプロンプトを `*.prompt.md` で書く。
+- 成果物は Markdown が既定（納品する目標は、依頼の `format` が `html` なら単一の `.html`）。PowerPoint・Excel などが要るときは、Claude Code に渡すプロンプトを `*.prompt.md` で書く。
 - `plan.json` は書き換えない。変えられるのは `guild.py` だけ。
 
 ## 秘密情報

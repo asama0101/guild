@@ -479,7 +479,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', open目標: null, rcache: {}, qcache: {}, kn: { cur: null },
+  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', rcache: {}, qcache: {}, kn: { cur: null },
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -685,7 +685,7 @@ function buildModel(raw) {
 function askText(x, a) {
   if (a.kind === 'approve') return '計画の承認';
   if (a.kind === 'accept') return '納品物の受け取り確認';
-  if (a.kind === 'questions') return '依頼についての質問';
+  if (a.kind === 'questions') return '依頼についての質問への答え';
   if (a.kind === 'archive') return '書庫に登録する候補の確認';
   if (a.kind === 'confirm') return `${a.goal.id}「${a.goal.title}」の実行前の確認`;
   if (a.kind === 'result') return `${a.goal.id}「${a.goal.title}」`;
@@ -1347,7 +1347,7 @@ function lsSet(key, value) {
   try { window.localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
 }
 const LS_LIST = 'guild.board.listOpen';
-const BOARD_CHIPS = [['all', 'すべて'], ['turn', 'あなたの番'], ['run', '進行中'], ['wait', '受け取り待ち'], ['done', '完了']];
+const BOARD_CHIPS = [['all', 'すべて'], ['turn', 'あなたの番'], ['run', '進行中'], ['wait', '受け取り待ち'], ['done', '完了・中止']];
 // 一覧の区分（1つの依頼は1つの区分）。受け取り待ち → あなたの番（答えていない手紙がある）→ 完了・中止 → 進行中 の順に決める
 function boardBucket(qd) {
   if (qd.label === '受け取り待ち') return 'wait';
@@ -1860,7 +1860,7 @@ function logTab() {
       (q.active || []).length ? [h('br'), (q.active || []).map((a) => `${CLASS_NAMES[a.class] || a.class || '—'}：${a.id} ${a.title || ''}`).join('、')] : null))) : empty('進行中の依頼はありません。')),
     sec('止まっている理由', c.quests.some((q) => (q.blockers || []).length) ? h('ul', null, c.quests.flatMap((q) => (q.blockers || []).map((b) => h('li', null, `${q.id} ${b.goal} は、${(b.because || []).length ? b.because.join('、') + ' ができなかったため' : '前提が止まっているため'}、止まっています。`)))) : empty('止まっている目標はありません。')),
     sec('次の提案', ...followupList(c)),
-    sec('これまでの集計', h('p', { class: 'fine', style: 'margin:0' }, `依頼 ${st.quests || 0} 件、目標 ${st.todos || st.goals || 0} 件、完了 ${st.done || 0}、失敗 ${st.failed || 0}、不合格 ${st.rejected || 0} 回、もう一度 ${st.retries || 0} 回、計画の直し ${st.replans || 0} 回`)),
+    sec('これまでの集計', h('p', { class: 'fine', style: 'margin:0' }, `依頼 ${st.quests || 0} 件、目標 ${st.goals || 0} 件、完了 ${st.done || 0}、失敗 ${st.failed || 0}、不合格 ${st.rejected || 0} 回、もう一度 ${st.retries || 0} 回、計画の直し ${st.replans || 0} 回`)),
   ];
 }
 function helpTab() { return [...flowCards(), helpGrid()]; }
@@ -1876,13 +1876,13 @@ function helpGrid() {
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「クエスト掲示板」の詳細に手紙が出ます。'),
       h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。'))),
     sec('クエスト掲示板の使い方', dl([
-      ['一覧', '左にクエストの一覧があります。番号・題名で探せ、状態（すべて／あなたの番／進行中／受け取り待ち／完了）で絞れます。完了・中止は、ふだんは畳んであります。'],
+      ['一覧', '左にクエストの一覧があります。番号・題名で探せ、状態（すべて／あなたの番／進行中／受け取り待ち／完了・中止）で絞れます。完了・中止は、ふだんは畳んであります。'],
       ['詳細', '行を押すと、右に詳細が出ます。上に「あなたの番」の手紙、下にタブ「道のり」「日付」「インプット」があります。'],
       ['一覧を隠す', '詳細を横幅いっぱいにします。上のツールバーの「‹ ›」で前後のクエストへ移り、検索で番号・題名から開けます。隠したことは、このブラウザが覚えます。狭い画面では、一覧と詳細を切り替えます（「‹ 一覧へ戻る」）。'],
       ['道のり', '目標の一覧です。行を開くと、合格基準と報告（魔法使い・錬金術師・冒険者・鑑定士・あなた）が読めます。失敗の判断の手紙には、鑑定士の指摘が出ます。'],
       ['日付', '依頼の開始日・締切、目標の予定日・締切の表です。直して「変更を送る」を押します。順序の矛盾は注意だけで、ほかの日付は自動では動きません。'],
       ['インプット', 'このクエストが使うファイルです。「外す」「追加」「既存から選ぶ」で直せます（承認の前でも後でも）。']])),
-    sec('スキルの使い方（チャットで使う）', dl([['/guild:init', 'プロジェクトのフォルダで、最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。何度実行しても、依頼や書庫の項目は消えません。プラグインを更新したあとにもう一度実行すると、この画面が最新になります。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。質問・承認・確認は、チャットではなく、この画面の「手紙」で聞きます。動いている間は、この画面での答えを待ち続け、届くとすぐ取り込みます。'], ['止まったとき', 'しばらく動きがなければ、チャットで /guild:quest と送ってください。保存済みの答えや依頼を読み取って、続きから進めます。']])),
+    sec('スキルの使い方（チャットで使う）', dl([['/guild:init', 'プロジェクトのフォルダで、最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。何度実行しても、依頼や書庫の項目は消えません。プラグインを更新したあとにもう一度実行すると、この画面が最新になります。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。質問・承認・確認は、チャットではなく、この画面の「手紙」で聞きます。動いている間は、この画面での答えを待ち続け、届くとすぐ取り込みます。'], ['/guild:close', 'ギルドを閉めます。動いている /guild:quest は、新しい作業を始めず、動いている役が返ったら止まります。依頼は中止になりません。再開は /guild:quest です（この画面の「ギルドを閉める」と同じ）。'], ['止まったとき', 'しばらく動きがなければ、チャットで /guild:quest と送ってください。保存済みの答えや依頼を読み取って、続きから進めます。']])),
     sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（クエスト掲示板の一覧で使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', '目標ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全目標が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
       h('p', { class: 'fine', style: 'margin:0 0 6px' }, '「↻ 再実行 N」の赤い枠の印は、やり直した回数です。目標では、不合格やもう一度の判断でやり直した回数。依頼では、完了・中止から「修正して再実行」した回数です。状態の印（合格など）は、やり直しても変わらないので、別に出します。'), h('p', { class: 'fine', style: 'margin:0 0 6px' }, '目標の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の目標が終わるのを待っています。'], ['作業中', 'sd-run', '魔法使い・錬金術師・冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう目標です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の目標ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
     sec('言葉の説明', dl([['目標', '依頼を分けた、ひとつひとつの作業。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['インプット', '依頼で使う資料（guild/inputs/ に1つだけ置き、各クエストは名前で参照）。あなたが「＋ 新規」で選んだものが「指定」、受付係が依頼文と書庫をもとに理由つきで選んだものが「自動」です。受付係が迷ったものは「候補」になります。'], ['書庫の紐づけ', '書庫の項目に「インプット」を書いておくと、依頼文にその項目の名前・別名が出てきたとき、受付係にそのファイルが勧められます（確認済み・出典ありの項目の、3文字以上の語だけ）。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
@@ -2096,7 +2096,7 @@ function stickyTools() {
   return h('div', { class: 'tools' },
     n ? h('button', { type: 'button', class: 'tool warn', onclick: goNeed }, `あなたの番 ${n}件`) : null,
     S.model && !S.model.paused && !S.confirm.pause ? h('button', { type: 'button', class: 'tool', onclick: () => { S.confirm.pause = true; render(); } }, 'ギルドを閉める') : null,
-    h('button', { type: 'button', class: 'tool', onclick: openNew }, '＋ 新しい依頼'));
+    h('button', { type: 'button', class: 'tool', onclick: openNew }, '＋ 新規'));
 }
 // ---- ギルドを閉める：pause.json を書く。/guild:quest は、新しい役を呼ばず、実行中の役が終わったら止まる（依頼は中止にならない）
 // ---- 稼働の印：guild.py wait / arrivals が書く heartbeat.json から、/guild:quest が動いているかを出す

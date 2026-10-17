@@ -5,10 +5,12 @@ plan.json を書けるのはこのファイルだけ。遷移は transitions.jso
 使い方: guild.py {adopt|validate|sync|next|ingest} PLAN / guild.py advance PLAN ID EVENT
 adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を作る（承認前の状態で）。inputs・candidates の名前が guild/inputs/ になければエラー。
 guild.py init ROOT: ROOT/guild/ と guild/.work/config.json（この Python のパス）、掟（guild/.work/codex/）を作る。
-guild.py new ROOT [R…]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む（選んだインプットが guild/inputs/ になければ、依頼を .work/requests/rejected/ へ移して拒否する）。
+guild.py new ROOT [R]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む（選んだインプットが guild/inputs/ になければ、依頼を .work/requests/rejected/ へ移して拒否する）。
 guild.py requests ROOT: 受付待ちの依頼を一覧する。
 guild.py inputs-list ROOT [--text 依頼文 | --text-file パス]（同時指定は不可。長い依頼文や記号を含む依頼文はファイルで渡す）:guild/inputs/ のファイル（名前・拡張子・大きさ・更新日・文字のファイルの先頭5行）と、依頼文に出てくる書庫の項目からのヒントを一覧する（受付係に渡す）。
-guild.py close ROOT: 完了・中止した依頼のインプットのバックアップを消す。
+guild.py close ROOT: 完了・中止した依頼のインプットのバックアップと、退避した古い成果物（prev/）を消す。
+guild.py stats ROOT / digest ROOT / past-quests ROOT: 依頼の集計・クエストログ（clog.json）・過去の依頼のタイトルの一覧を JSON で返す。
+guild.py overall-skip QDIR: 総合確認が得られないときの最後の手段（「総合確認ができませんでした」の報告を書く）。
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
 guild.py pause ROOT: 「ギルドを閉める」。.work/pause.json を書く。ギルドマスターは、新しい役を呼ばず、実行中の役が終わるのを待って止まる（依頼は中止にならない）。
 guild.py pause-status ROOT: pause.json があるかを返す（paused）。壊れていても「あり」とする。

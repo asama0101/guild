@@ -1,7 +1,6 @@
 {
   "states": ["pending", "blocked", "awaiting_confirm", "running", "waiting_user", "review", "done", "failed", "skipped"],
   "initial": "pending",
-  "terminal": ["done", "skipped"],
   "max_retries": 2,
   "transitions": [
     {"from": "pending", "event": "deps_done", "to": "awaiting_confirm", "guard": "confirm"},

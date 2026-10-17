@@ -152,7 +152,7 @@ guild/
 
 構成:
 
-- `skills/` — `init`、`quest`（`guild.py`、`webaccess.py`、`board.html`、`transitions.json`、`codex.md`（既定のギルドの掟））
+- `skills/` — `init`、`close`、`quest`（`guild.py`、`webaccess.py`、`board.html`、`transitions.json`、`codex.md`（既定のギルドの掟））
 - `agents/` — 各役の指示書
 - `hooks/` — 魔法使いの WebFetch を許可リストで判定するフック
 - `docs/` — 設計の文書

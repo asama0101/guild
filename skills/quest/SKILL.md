@@ -50,7 +50,7 @@ disable-model-invocation: true
    - 依頼文（`<dir>/request.json`）と、依頼主が指定したインプット（`request.json` の `inputs`）
    - `inputs-list` の出力（JSON）を、そのまま。**ファイルに保存せず、チャットにも書かない**（ファイルの先頭の行に秘密が含まれうるため、受付係にだけ渡す）
    - 依頼の開始日・締切（`request.json` の `start`・`due`）
-   - 依頼の納品形式（`request.json` の `format`。なければ `md`）
+   - 依頼の納品形式（`request.json` の `format`。なければ `md`）。`format` が `prompt` のときは、`request.json` の `targets`（作るファイルの種類）も
    - 過去の依頼のタイトルと `series`：`<python> "${CLAUDE_SKILL_DIR}/guild.py" past-quests <root>` の出力（JSON）をそのまま
    - 依頼のフォルダ、書庫の場所（`guild/archive/`）、ギルドの掟の場所（`guild/.work/codex/default.md`・`guild/.work/codex/project.md`）
    - 出力先：`<dir>/reports/plan-draft.json`
@@ -62,7 +62,7 @@ disable-model-invocation: true
 4. 質問への回答が届いたら（`guild.py answers <dir>` で取り出す）、その内容を添えて受付係をもう一度呼ぶ（手順1へ。回答を足して `inputs-list` からやり直す）。計画を直し中（`replan`）の依頼なら、下の5の指示（完了済みの目標を変えずに残す）も、あわせて渡す。
 5. 「計画を直す」が届いたら（計画の `status` が `replan`）、受付係を呼び直す（手順1へ）。
    - 渡すもの：これまでの計画と、`plan.json` の `history` の最後の `decision`（`choice` が `replan`）か `reopen`（完了・中止した依頼を、依頼主が「修正して再実行」したもの）の `comment`。`reopen` のときは、「コメントの直したい内容に関係する目標だけをやり直し、関係しない合格済みの目標は変えずに残す」と、メッセージに足す。納品物の取り下げと書庫の状態の初期化は `ingest` が済ませている。
-   - メッセージに必ず書くこと：「完了済み（`done`）の目標は、`id`・種別・職業（`class`）・題名・合格基準を変えずにそのまま残す。直すのは、できなかった部分と、足す部分だけ」。
+   - メッセージに必ず書くこと：「完了済み（`done`）の目標は、`id`・種別・職業（`class`）・題名・合格基準・`deps`・`effects`・`confirm`・`deliverable_spec`・`format` を変えずにそのまま残す。直すのは、できなかった部分と、足す部分だけ」。
    - 見直しに入ると、古い下書きは `reports/plan-draft.prev.json` に退避される（`ingest` が行う）。受付係が新しい `plan-draft.json` を書くまで、`adopt` は「がありません」で止まる。
    - `adopt` は `replan` のときだけ上書きできる。完了済みの目標と経緯（`history`）は引き継がれ、引き継がなかった目標の古い成果物と報告は `<dir>/prev/` へ退避される。
    - 計画の `inputs` は、依頼主の追加・外すを含めて引き継がれる（`adopt` が決める。依頼主が外したものは、受付係が選び直しても戻らない）。
@@ -92,11 +92,12 @@ disable-model-invocation: true
    | `ready` | 目標の `class`（`plan.json`）に応じて、役を呼ぶ（`next` の `ready_by_class` に、職業ごとの一覧がある）：`wizard` なら魔法使い（`guild:wizard`）、`alchemist` なら錬金術師（`guild:alchemist`）、`adventurer` なら冒険者（`guild:adventurer`）。互いに独立な目標は、同時に呼んでよい（**一度に 3 つまで**。残りは、役が返ってから、次の周回で呼ぶ。役を呼んでいる間は、新しい依頼や依頼主の答えを取り込めないので、呼ぶ数を絞って、手順1に戻る間隔を短くする）。**冒険者は、ブラウザが1つなので、同時に1人まで**（複数あれば1人ずつ）。メッセージに、依頼のフォルダ、目標の `id`、`criteria`、やり直しなら鑑定士の指摘の場所を書く。返ってきたら、魔法使いのときは、下の「外部アクセスの確認」を済ませてから `guild.py advance <plan> <id> submitted`（錬金術師・冒険者は、そのまま `submitted`） |
    | `review` | 鑑定士を呼ぶ（`guild:appraiser`）。メッセージに、依頼のフォルダ、`id`、`criteria`、報告と成果物の場所を書く。報告は、自動の目標なら、実行した役の `reports/<id>-<class>.md`（`<id>-wizard.md`・`<id>-alchemist.md`・`<id>-adventurer.md`）、「あなたの実行」の目標なら依頼主の `reports/<id>-user.md`（結果を取り込んだときに `guild.py` が書く。成果物の `output/<id>/` は、ないことがある）。`passed` なら `advance <plan> <id> passed`（鑑定士の報告 `reports/<id>-appraiser.md` がない・空・古いと `guild.py` が拒否する。拒否されたら、鑑定士を呼び直して報告を書かせる。呼び直しは 2 回まで。2 回呼んでも拒否されるときは、拒否の理由を依頼主に短く報告して、その目標の処理を止める。自分で報告を作らない）、`rejected` なら `advance <plan> <id> rejected`（鑑定士が「判定できない」としたときも `rejected` で返ってくる）。`needs_adventurer`（開けない出典の確認待ち。冒険者が確認する）のときは `advance` を送らず、下の「出典の確認」を行う |
    | `awaiting_overall` | 全目標が合格した。**総合確認**として受付係を呼ぶ（`guild:receptionist`。`model: sonnet` を指定する）。メッセージに、依頼のフォルダ、依頼文（`request.json`）、納品する目標の成果物の場所（`output/<id>/`）、鑑定士の報告の場所、出力先（`<dir>/reports/overall-receptionist.md`）、ギルドの掟の場所を書く。**`plan.json` と `plan-draft.json` は渡さない・読ませない**と書く。返ってきたら、何もしない（次の周回で `awaiting_accept` になる。報告に「判定」がなければ、`overall` が `none` のままなので、1 回だけ呼び直す。直らなければ、`<python> "${CLAUDE_SKILL_DIR}/guild.py" overall-skip <dir>` を実行する（「総合確認ができませんでした」という報告を書き、受け取りの手紙で、依頼主が自分で確かめられるようにする。自分で判定を作らない）。依頼主に短くチャットで伝える） |
-   | `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える（`awaiting_accept` の納品物の置き方は、下の「納品物を置く」） |
+   | 計画を直し中（`status` が `replan`） | 上の手順2の5へ（受付係を呼び直す。`approved` が `false` でも、未承認の計画として放置しない） |
+| `confirm` / `waiting_user` / `blocked` / `failed`、未承認の計画、`awaiting_accept` | **あなたは何もしない**。ボードの手紙で、依頼主が答える（`awaiting_accept` の納品物の置き方は、下の「納品物を置く」） |
 
    魔法使い・錬金術師・冒険者・鑑定士へのメッセージには、`plan.json` の `inputs` のファイルを `guild/inputs/<name>` の形で並べて書く（`source` と `reason` も添える）。各役は、その目標に関係するものだけ読む。
 
-   **納品物を置く**：`next` の出力で `awaiting_accept` が `true` になった依頼は、`"${CLAUDE_SKILL_DIR}/guild.py" publish <dir>` を実行する（`<python>` を前に付ける。何度実行しても同じ。依頼主の「受け取る」を `ingest` が取り込んだときも、`ingest` が同じ納品物を置く。`complete` になったのに `guild/deliverables/Q###_…` がなければ、`publish <dir>` をもう一度実行してよい。納品物と `*.prompt.md` が `guild/deliverables/Q###_…` に置かれ、ボードの「受け取りの確認」の手紙と Obsidian の両方で読める）。「直してほしい」（`replan`）になると、`adopt` が置いたものを取り下げるので、また全目標が済んだ時に実行する。
+   **納品物を置く**：`next` の出力で `awaiting_accept` が `true` になった依頼は、`"${CLAUDE_SKILL_DIR}/guild.py" publish <dir>` を実行する（`<python>` を前に付ける。何度実行しても同じ。依頼主の「受け取る」を `ingest` が取り込んだときも、`ingest` が同じ納品物を置く。`complete` になったのに `guild/deliverables/Q###_…` がなければ、`publish <dir>` をもう一度実行してよい。納品物と `*.prompt.md` が `guild/deliverables/Q###_…` に置かれ、ボードの「受け取りの確認」の手紙と Obsidian の両方で読める）。「直してほしい」（`replan`）になると、`publish` が置いたものを、`ingest` と `adopt` が取り下げるので、また全目標が済んだ時に実行する。
 
    **出典の確認**（鑑定士が `needs_adventurer` を返したとき）：冒険者（`guild:adventurer`）を**確認モード**で1人呼ぶ（ブラウザは1つなので、ほかの冒険者と同時にしない）。メッセージに、依頼のフォルダ、`id`、鑑定士の報告（`reports/<id>-appraiser.md`。「冒険者に確認してほしいこと」）の場所、「確認モード」と書く。返ってきたら、鑑定士をもう一度呼ぶ（メッセージに、冒険者の報告 `reports/<id>-verify-adventurer.md` の場所と「再鑑定」を足す）。再鑑定は `needs_adventurer` を返さないので、確認は1回で終わる。その結果（`passed` か `rejected`）で `advance` を送る。
 
@@ -114,7 +115,7 @@ disable-model-invocation: true
    魔法使い・錬金術師・冒険者が「できなかった」と返したり、報告ファイルがなかったりしても、`submitted` を送って鑑定に進める（鑑定士が `rejected` にして、やり直しになる）。ギルドマスターが成否を判断して分岐しない。
 3. **何か進めたら**、手順1に戻る。
 4. **何も進められないとき**：
-   - `next` の出力の `needs_archive` が `true`（`complete` か `aborted` になったが、書庫の記録がまだ）の依頼は、`guild.py web-reset <root>` と `guild.py close <root>`（閉じた依頼のインプットのバックアップを消す）の両方を実行してから、手順5・6を行う（進めたことになるので、手順1に戻る）。
+   - `next` の出力の `needs_archive` が `true`（`complete` か `aborted` になったが、書庫の記録がまだ）の依頼は、`guild.py web-reset <root>` と `guild.py close <root>`（閉じた依頼のインプットのバックアップと、退避した古い成果物 `prev/` を消す）の両方を実行してから、手順5・6を行う（進めたことになるので、手順1に戻る）。
    - すべての依頼で `next` の出力の `closed` が `true`（`complete` か `aborted` で、書庫の登録候補の確認まで済んでいる）なら、終える。`archive` が `proposed` のもの（依頼主が登録候補に答えていない）は、終わりにしない。**`awaiting_accept`（全目標は済んだが、依頼主が受け取っていない）は、終わりにしない。** ボードの「受け取りの確認」の手紙に依頼主が答えるのを待つ。ギルドマスターが勝手に完了にしない。`replan` のものは、手順2の5で受付係を呼んでいる最中なので、終わりにしない。
    - そうでなければ（依頼主の答えを待っている）、`guild.py wait <root> 43200`（12時間。待機に入る直前に、クエストログ `guild.py digest` を自動で更新する）を、**バックグラウンドで実行する**（Bash の `run_in_background: true`）。待っている間は、会話は止まり、トークンを使わない。答えが届くと `wait` が1秒ほどで終わり、終了の通知が来る。通知が来たら、出力（`arrived`）を読み、手順1へ。
      - 実行したら、チャットに「ボードで答えを待っています」と**1回だけ**書いて、手を止める。ほかの命令を重ねて出さない。通知が来る前に、結果を推測して進めない。
@@ -146,7 +147,7 @@ disable-model-invocation: true
 書庫は、次の依頼で全役が `index.md` から読む。心得（`type: lesson` の項目）は、役は読まず、依頼主が guild の改善に使う。依頼主の好みや確かめていない推測は、事実として書かない（司書の指示書に書いてある）。
 
 ## 守ること
-- 出力は Markdown だけ。PowerPoint・Excel などが要るときは、Claude Code に渡すプロンプトを `*.prompt.md` で出す（魔法使い・錬金術師が実行中に足してもよい。目標は増やさず、承認は取らない）。
+- 出力は Markdown が既定（納品する目標は、依頼の `format` が `html` なら単一の `.html`）。PowerPoint・Excel などが要るときは、Claude Code に渡すプロンプトを `*.prompt.md` で出す（魔法使い・錬金術師が実行中に足してもよい。目標は増やさず、承認は取らない）。
 - `plan.json` を直接書かない。変えるのは `guild.py` だけ。
 - 役に判断させない。役の返り値（場所と一語）を `guild.py` に渡すだけにする。
 - 秘密情報（トークン、キー）を報告や書庫に書かない。
