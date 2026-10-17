@@ -206,6 +206,7 @@ textarea.need{border:2px solid var(--banner);background:#F6E4E1}
 .tn .ta .who{font-size:12px}
 .tn .ta input.logmemo{width:300px;flex:0 1 300px;min-width:0;min-height:34px;padding:4px 8px;font-size:13px}
 .tn .ta{flex-wrap:nowrap}
+.reqnote{font-size:10px;font-weight:700;color:var(--banner);margin:0 6px 0 -2px;white-space:nowrap;align-self:flex-end;padding-bottom:2px}
 .tn .tt{flex:1 1 200px}
 @media (max-width:760px){.tn .ta{flex-wrap:wrap}}
 
@@ -1792,7 +1793,7 @@ function turnRow(q) {
     }
     return h('span', { class: 'ta' }, asks.length > 1 ? h('span', { class: 'fine' }, t.id) : null,
       h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyText(body, 'クエストのタイトル') }, 'コピー'),
-      h('button', { type: 'button', class: 'btn sm go', onclick: go(true) }, 'できた'), h('button', { type: 'button', class: 'btn sm', onclick: go(false) }, 'できなかった'));
+      h('button', { type: 'button', class: 'btn sm go', onclick: go(true) }, 'できた'), h('span', { class: 'reqnote' }, 'メモ必須'), h('button', { type: 'button', class: 'btn sm', onclick: go(false) }, 'できなかった'));
   });
   return h('div', { class: 'tn' }, text, ...btns);
 }
