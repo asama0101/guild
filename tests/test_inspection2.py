@@ -328,5 +328,34 @@ console.log(JSON.stringify([a, S.seriesFilter]));"""
             self.assertIn(needle, BOARD_SRC, needle)
 
 
+class RejectedReasonTest(unittest.TestCase):
+    def test_a_rejected_input_leaves_its_reason_next_to_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            q = Path(guild.new_quest(root)["dir"])
+            plan = {"quest": "Q001", "title": "t", "approved": True, "status": "active", "goals": [goal("G1", "pending")], "history": []}
+            guild.save_json(q / "plan.json", plan)
+            (q / "inbox" / "x-result.json").write_text(json.dumps({"type": "result", "goal": "G1", "ok": True}), encoding="utf-8")
+            p = guild.load_plan(q / "plan.json")
+            report = guild.ingest(q / "plan.json", p, TR, commit=lambda: guild.save_json(q / "plan.json", p))
+            self.assertEqual(len(report["rejected"]), 1)
+            reason = (q / "inbox" / "rejected" / "x-result.json.reason.txt").read_text(encoding="utf-8")
+            self.assertEqual(reason, report["rejected"][0]["reason"])
+            self.assertTrue((q / "inbox" / "rejected" / "x-result.json").exists())
+
+    def test_applied_inputs_leave_no_reason_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            q = Path(guild.new_quest(root)["dir"])
+            plan = {"quest": "Q001", "title": "t", "approved": False, "status": "active", "goals": [goal("G1")], "history": []}
+            guild.save_json(q / "plan.json", plan)
+            (q / "inbox" / "a-approve.json").write_text(json.dumps({"type": "approve"}), encoding="utf-8")
+            p = guild.load_plan(q / "plan.json")
+            guild.ingest(q / "plan.json", p, TR, commit=lambda: guild.save_json(q / "plan.json", p))
+            self.assertEqual(list((q / "inbox" / "done").glob("*.reason.txt")), [])
+
+
 if __name__ == "__main__":
     unittest.main()

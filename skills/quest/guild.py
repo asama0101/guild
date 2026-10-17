@@ -423,7 +423,7 @@ def ingest(plan_path, plan, tr, commit=None):
             dest, key, item = inbox / "done", "applied", f.name
         except (GuildError, KeyError, TypeError, AttributeError) as e:
             dest, key, item = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}
-        moves.append((f, dest))
+        moves.append((f, dest, item["reason"] if key == "rejected" else None))
         report[key].append(item)
     if commit is not None:
         commit()
@@ -432,10 +432,12 @@ def ingest(plan_path, plan, tr, commit=None):
             job()
         except OSError as e:
             report["warnings"].append(f"古い成果物の退避に失敗しました（{e}）。output/ と reports/ に残った古いファイルを、手で prev/ へ移してください")
-    for f, dest in moves:
+    for f, dest, reason in moves:
         try:
             dest.mkdir(exist_ok=True)
             shutil.move(str(f), str(dest / f.name))
+            if reason:  # ボードが「受け付けられなかった理由」を見せられるように、そばに残す（書庫・外部サイトと同じ）
+                (dest / f"{f.name}.reason.txt").write_text(reason, encoding="utf-8")
         except OSError as e:
             # 計画は保存済み。ここで落とすと報告が失われ、残った入力が次回また適用される。警告にして続ける
             report["warnings"].append(f"入力の移動に失敗しました（{f.name}：{e}）。inbox から手で done/ へ移してください")
