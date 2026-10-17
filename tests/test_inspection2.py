@@ -68,5 +68,19 @@ class AdvanceStateTest(unittest.TestCase):
             self.assertIn("進められません", self.run_advance(plan, "G1", "submitted"), kw)
 
 
+class ArchivePrefixTest(unittest.TestCase):
+    def test_a_goal_does_not_take_another_goals_reports(self):
+        tr = guild.load_transitions()
+        self.assertTrue(guild.validate({"goals": [goal("A-B")]}, tr))  # id に - は使えない（reports/<id>-… の前方一致で、別の目標のものまで動くため）
+        with tempfile.TemporaryDirectory() as d:
+            q = Path(d)
+            (q / "reports").mkdir()
+            (q / "reports" / "G1-appraiser.md").write_text("x", encoding="utf-8")
+            (q / "reports" / "G12-appraiser.md").write_text("y", encoding="utf-8")
+            guild.archive_outputs({"goals": [goal("G1")]}, [], q)
+            self.assertTrue((q / "reports" / "G12-appraiser.md").exists())
+            self.assertFalse((q / "reports" / "G1-appraiser.md").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

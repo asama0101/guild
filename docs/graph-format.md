@@ -117,7 +117,7 @@
 - `inputs` は、この依頼で使うインプット（`guild/inputs/` のファイル名）。インプットは `guild/inputs/` に1つだけ置き、各依頼は名前で参照する（大文字小文字は区別しない）。アップロードした名前が既にあり内容が違えば上書きし、上書き前の版を `.work/backup/Q###/` に残す（`close` で、閉じた依頼の分を消す）。`source` が `user` は依頼主の指定（「＋ 新規」で選んだ・アップロードした。`request.json` の `inputs`）、`auto` は受付係の選択。`reason` は理由。`user` が先頭。`candidates` は、受付係が迷って選ばなかったもの（理由つき）。名前は `inputs` と `candidates` をまたいで重ならない。魔法使い・錬金術師・冒険者・鑑定士は、`inputs` のファイルを `guild/inputs/<name>` で読む。納品物の型（見出しの並びなど）は、インプットに付けて依頼文で伝える。
   - `adopt` は、受付係が書いた名前（`plan-draft.json` の `inputs`・`candidates`。各要素は `name` と `reason`）が `guild/inputs/` にあるかを検査する。`replan` のときは、旧計画の `inputs`（依頼主の追加・外すを反映済み）を引き継ぎ、依頼主が外したままの名前は足さない。
   - ボードの `inputs` の入力で、足す・外すができる（承認前でも、進行中でも可。中止・見直し中・受け取り後は拒否）。足す名前は `guild/inputs/` にあること、外す名前は `inputs` にあること。足したものは `source` が `user`、`reason` が「依頼主が追加」になり、`candidates` から除かれる。履歴には `{event: "inputs", add, remove}` を残す（`id` は付けない）。
-- 目標の `id` は、ファイルのパス（`output/<id>/`・`reports/<id>-…`）に使うため、英数字・`_`・`-` の 20 字までに限る（`validate` が検査する）。
+- 目標の `id` は、ファイルのパス（`output/<id>/`・`reports/<id>-…`）に使うため、英数字・`_` の 20 字までに限る（`-` は、`reports/<id>-…` の前方一致で別の目標に当たるため使えない）（`validate` が検査する）。
 - 報告のファイル名は、`reports/<id>-<class>.md`（`<id>-wizard.md`・`<id>-alchemist.md`・`<id>-adventurer.md`）。鑑定士の出典の確認（冒険者の確認モード）は `reports/<id>-verify-adventurer.md`。`<id>-user.md`（`human` の結果）・`<id>-appraiser.md` は変わらない。成果物は、どの職業でも `output/<id>/`。
 - `human` の目標には `instruction`（依頼主が読んでそのまま動ける、何を・どこで・何を使って・終わったら何を教えるか）を付ける。ボードの「あなたの番」の手紙に出る。
 - `criteria` は合格基準（観点・合格ライン・確かめ方）。空の目標は検証で弾く。
