@@ -528,9 +528,13 @@ async function loadAll() {
     if (!plan || plan.status === 'replan') for (const f of await S.fs.list(`${q}/inbox/done`)) {  // 取り出し済みの答え（質問の文言の一致で、今の質問への答えかを見分ける）
       if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', goal: null, choice: null, qs: j.answers.map((a) => a.q) }); }
     }
+    const rejected = [];  // 受け付けられなかった入力と理由（guild.py が inbox/rejected/ に残す）。新しい 3 件
+    for (const f of (await S.fs.list(`${q}/inbox/rejected`)).filter((x) => x.kind === 'file' && x.name.endsWith('.reason.txt')).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 3)) {
+      rejected.push({ file: f.name.replace(/\.reason\.txt$/, ''), reason: (await S.fs.readText(`${q}/inbox/rejected/${f.name}`)) || '' });
+    }
     const archive = await readJSON(`${q}/archive.json`);
     const overall = reports.includes(OVERALL_REPORT) ? ((await S.fs.readText(`${q}/reports/${OVERALL_REPORT}`)) || '').replace(/^\uFEFF/, '') : null;
-    const entry = { id: q, plan, request, draft, reports, output, overall, inbox, archive, published: delivFiles.filter((n) => n.startsWith(q + '_')) };
+    const entry = { id: q, plan, request, draft, reports, output, overall, inbox, rejected, archive, published: delivFiles.filter((n) => n.startsWith(q + '_')) };
     quests.push(entry);
     if (plan && (plan.accepted || plan.status === 'aborted') && archive && archive.status === 'done') S.qcache[q] = { key: ckey, entry }; else delete S.qcache[q];
   }
@@ -558,7 +562,11 @@ async function loadAll() {
   const webList = (k) => (Array.isArray(wa[k]) ? wa[k] : []);
   let webWait = 0;  // 許可待ちへの答え（decisions）だけ数える。許可リストの追加・外す（add・remove）は、手紙を「送信済み」にしない
   for (const x of await S.fs.list('web/inbox')) if (x.kind === 'file' && x.name.endsWith('.json')) { const j = await readJSON(`web/inbox/${x.name}`); if (!j || (j.decisions && Object.keys(j.decisions).length)) webWait++; }
-  const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), notes: wa.notes && typeof wa.notes === 'object' ? wa.notes : {}, wait: webWait };
+  const webRejected = [];  // 反映されなかった許可の答えと理由（guild.py web-ingest が web/inbox/rejected/ に残す）。新しい 3 件
+  for (const f of (await S.fs.list('web/inbox/rejected')).filter((x) => x.kind === 'file' && x.name.endsWith('.reason.txt')).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 3)) {
+    webRejected.push({ file: f.name.replace(/\.reason\.txt$/, ''), reason: (await S.fs.readText(`web/inbox/rejected/${f.name}`)) || '' });
+  }
+  const web = { rejected: webRejected, allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), notes: wa.notes && typeof wa.notes === 'object' ? wa.notes : {}, wait: webWait };
   // 共通のインプット（guild/inputs/ の直下だけ。サブフォルダは見ない）。名前の同一判定は、大文字小文字を区別しない（guild.py と同じ）
   const inputs = (await S.fs.list('inputs')).filter((e) => e.kind === 'file').map((e) => ({ name: e.name, mtime: e.mtime || 0 })).sort((a, b) => a.name.localeCompare(b.name));
   // 「ギルドを閉める」の印（guild.py pause と同じ pause.json）。中身は見ず、あるかどうかだけ
@@ -1445,6 +1453,7 @@ function questPanel(m, L) {
       metaEditor(qd),
       h('div', { class: 'qmeta' }, h('span', null, p ? `開始 ${p.start || '—'}　締切 ${p.due || '—'}` : '計画はまだありません'),
         qd.total ? [h('span', { class: 'bar', role: 'img', 'aria-label': `${qd.total} 件中 ${qd.done} 件が済み` }, h('span', { style: `width:${pct}%` })), h('span', null, `${qd.done}/${qd.total} 済み`)] : null)),
+    rejectedBox(qd.q.rejected, qd.id),
     questDetail(qd));
 }
 // 題名と関連（series）を直す。直したものは、受付係が作り直しても上書きしない
@@ -1561,6 +1570,7 @@ function webTab() {
   return [h('h2', { class: 'h2' }, '外部サイト'),
     h('p', { class: 'sub', style: 'margin:0 0 12px' }, '魔法使いが、依頼を進めるなかで読めるウェブサイトを決めます。リストにないサイトを開こうとしたときは、「クエスト掲示板」の手紙でお聞きします。'),
     w.pending.length && !w.wait ? h('div', { class: 'attn', role: 'status' }, h('b', null, `許可待ちが${w.pending.length}件あります`), w.pending.map((x) => code(x.domain)), h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.tab = 'board'; render(); } }, 'クエスト掲示板の手紙で答える')) : null,
+    rejectedBox(w.rejected, 'web'),
     webCard(m)];
 }
 
@@ -1830,6 +1840,16 @@ function turnRow(q) {
   return h('div', { class: 'tn' }, text, ...btns);
 }
 // 次の提案（司書が挙げた、関連してやるとよいこと）：「依頼にする」で新規依頼の下書きにする／「見送る」で隠す。見送りは、このブラウザが覚える
+// 受け付けられなかった入力の理由の枠：「閉じる」で隠す。隠したものは、このブラウザが覚える
+const LS_REJ = 'guild.rejected.hidden';
+function rejectedHidden() { const v = lsGet(LS_REJ, []); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []); }
+function rejectedBox(items, scope) {
+  const hidden = rejectedHidden(), shown = (items || []).filter((r) => !hidden.has(`${scope}/${r.file}`));
+  if (!shown.length) return null;
+  const close = (r) => { const s2 = rejectedHidden(); s2.add(`${scope}/${r.file}`); lsSet(LS_REJ, [...s2].slice(-200)); render(); };
+  return h('div', { class: 'card', role: 'status', style: 'margin:8px 0;border-left:4px solid var(--warn)' }, h('b', null, '送った入力が、受け付けられませんでした'),
+    h('ul', { style: 'margin:6px 0 0' }, shown.map((r) => h('li', { class: 'fine' }, code(r.file), '：', r.reason, '　', h('button', { type: 'button', class: 'linkbtn', onclick: () => close(r) }, '閉じる')))));
+}
 const LS_FOLLOW = 'guild.followups.hidden';
 function followKey(q, f) { return `${q.id}:${f}`; }
 function followHidden() { const v = lsGet(LS_FOLLOW, []); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []); }

@@ -16,6 +16,8 @@ import webaccess  # noqa: E402
 from test_board_js import extract, node_eval  # noqa: E402
 from test_audit_fixes import LOAD_JS  # noqa: E402
 
+FAKE_H = ("const h = (t, a, ...c) => ({ t, c: c.flat(Infinity) });\n"
+          "const text = (n) => (n == null ? '' : typeof n === 'string' ? n : Array.isArray(n) ? n.map(text).join('|') : text(n.c));\n")
 BOARD_SRC = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
 
 TR = guild.load_transitions()
@@ -355,6 +357,35 @@ class RejectedReasonTest(unittest.TestCase):
             p = guild.load_plan(q / "plan.json")
             guild.ingest(q / "plan.json", p, TR, commit=lambda: guild.save_json(q / "plan.json", p))
             self.assertEqual(list((q / "inbox" / "done").glob("*.reason.txt")), [])
+
+
+@unittest.skipUnless(shutil.which("node"), "node がありません")
+class BoardRejectedTest(unittest.TestCase):
+    def load(self, files):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "t.js"
+            f.write_text(LOAD_JS.replace("await loadAll();\n  const first", "const m = await loadAll(); console.log(JSON.stringify({ q: m.quests.map((x) => x.rejected), web: m.web.rejected })); return;\n  const first", 1), encoding="utf-8")
+            r = subprocess.run(["node", str(f), json.dumps(files)], capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            return json.loads(r.stdout)
+
+    def test_loader_reads_the_newest_rejections_of_quests_and_web(self):
+        files = {"config.json": "{}", "Q001/plan.json": "{}", "Q001/request.json": "{}"}
+        for i in range(1, 6):
+            files[f"Q001/inbox/rejected/2026101{i}-result.json.reason.txt"] = f"理由{i}"
+        files["web/inbox/rejected/1.json.reason.txt"] = "ドメインの形が不正です"
+        got = self.load(files)
+        self.assertEqual([r["reason"] for r in got["q"][0]], ["理由5", "理由4", "理由3"])
+        self.assertEqual(got["q"][0][0]["file"], "20261015-result.json")
+        self.assertEqual(got["web"], [{"file": "1.json", "reason": "ドメインの形が不正です"}])
+
+    def test_box_shows_unhidden_rejections_only(self):
+        code = FAKE_H + extract("rejectedHidden") + "\n" + extract("rejectedBox") + r"""
+const LS_REJ = 'x', lsGet = () => ['Q001/a.json'], lsSet = () => {}, render = () => {}, code = (t) => t;
+const out = rejectedBox([{ file: 'a.json', reason: 'r1' }, { file: 'b.json', reason: 'r2' }], 'Q001');
+const none = rejectedBox([{ file: 'a.json', reason: 'r1' }], 'Q001');
+console.log(JSON.stringify([text(out).includes('b.json'), text(out).includes('a.json'), none]));"""
+        self.assertEqual(node_eval(code), [True, False, None])
 
 
 if __name__ == "__main__":

@@ -188,7 +188,7 @@
 | `advance <plan.json> <ID> <event>` | `transitions.json` を引いて状態を1つ進める。定義にない遷移はエラー |
 | `publish <dir>` | 全目標が済んだ依頼（`awaiting_accept`）の納品物（`deliverable` の目標の、依頼の形式のファイル〈`md` なら `.md`、`html` なら `.html`〉と、どの目標でも `*.prompt.md`）を `guild/deliverables/Q###_…` にコピーする。何度実行しても同じ。`replan` で取り下げられる |
 | `close <root>` | 閉じた依頼（受け取り済みか中止）の、インプットのバックアップ（`.work/backup/Q###`）と、退避した古い成果物（`prev/`）を消す。進行中の依頼のものは残す |
-| `ingest <plan.json>` | `inbox/*.json`（下の「入力」）を検査して反映し、処理済みを `inbox/done/` に移す。不正な入力は `inbox/rejected/` に移して理由を出す。`accept` を取り込むと納品物を置き（`publish` と同じ）、`decision` の `abort`・`replan` では取り下げる |
+| `ingest <plan.json>` | `inbox/*.json`（下の「入力」）を検査して反映し、処理済みを `inbox/done/` に移す。不正な入力は `inbox/rejected/` に移して理由を出す（理由は `<名前>.reason.txt` にも残り、ボードが見せる）。`accept` を取り込むと納品物を置き（`publish` と同じ）、`decision` の `abort`・`replan` では取り下げる |
 | `web-ingest <root>` | `.work/web/inbox/` の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を `.work/web/access.json` に反映する。不正な入力は `rejected/` に理由（`<入力>.reason.txt`）つきで移す |
 | `web-pending <root>` | 魔法使いがフックに止められて、依頼主の答え待ちのドメイン（`access.json` の `pending`。`purposes` は WebFetch の `prompt`＝取りたい内容で、フックが記録する事実）を一覧する |
 | `web-describe <root> <file>` | `<file>`（`{"descriptions": {ドメイン: 一言の説明}}`）の説明を、許可待ち・許可リスト・今回だけ許可のドメインの `access.json` の `notes` に書く。80 字以内。どれにもないドメインは飛ばす。説明は AI の推測で、ボードには「AI の推測」として出る |
