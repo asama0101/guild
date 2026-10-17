@@ -24,10 +24,20 @@ console.log(JSON.stringify([adviceLine(rep('もう一度 — 直せる')), advic
   adviceLine(rep('なし')), adviceLine(rep('好きにして')), adviceLine('## 判定\npassed')]));"""
         self.assertEqual(node_eval(code), ["もう一度 — 直せる", "計画を直す — 分け方", "やめる — 取れない", "", "", ""])
 
-    def log_text(self, clog):
-        src = "const CLASS_NAMES = { wizard: '魔法使い', alchemist: '錬金術師', adventurer: '冒険者' };\n" + extract("logTab")
+    def log_text(self, clog, model=None):
+        src = "const CLASS_NAMES = { wizard: '魔法使い', alchemist: '錬金術師', adventurer: '冒険者' };\n" + "".join(extract(n) + "\n" for n in ("resultAsks", "turnRow", "logTab"))
         data = json.dumps(clog, ensure_ascii=False)
-        return node_eval(FAKE + src + "\nconst S = { clog: " + data + " };\nconsole.log(JSON.stringify(text(logTab())));")
+        return node_eval(FAKE + src + "\nconst S = { form: {}, model: " + json.dumps(model) + ", clog: " + data + " };\nconsole.log(JSON.stringify(text(logTab())));")
+
+    def test_log_turn_row_has_copy_done_and_failed_buttons_for_human_goals(self):
+        clog = {"t": "2026-10-17T10:00:00+09:00", "needs_total": 1, "stats": {}, "quests": [{"id": "Q001", "title": "週報", "label": "あなたの番", "goals": {"total": 2, "done": 1},
+                "needs": [{"kind": "result", "text": "G2「部長に聞く」"}], "blockers": [], "followups": []}]}
+        model = {"quests": [{"id": "Q001", "asks": [{"kind": "result", "sent": False, "goal": {"id": "G2", "title": "部長に聞く", "criteria": {"pass_line": "返事が 1 つある"}}}]}]}
+        out = self.log_text(clog, model)
+        for needle in ("内容をコピー", "できた", "できなかった"):
+            self.assertIn(needle, out, needle)
+        self.assertNotIn("内容をコピー", self.log_text(clog, {"quests": [{"id": "Q001", "asks": [{"kind": "approve", "sent": False}]}]}))
+
 
     def test_log_tab_shows_needs_workers_blockers_followups_and_stats(self):
         clog = {"t": "2026-10-17T10:00:00+09:00", "needs_total": 2,

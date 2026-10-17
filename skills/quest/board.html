@@ -188,6 +188,17 @@ input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .fname{min-width:0;word-break:break-all}
 .qa{margin:16px 0 4px;padding-top:6px;border-top:1px dashed var(--line)}
 .qa:first-of-type{border-top:0}
+.must{border:2px solid var(--banner);background:#F6E4E1;border-radius:4px;padding:10px 12px;margin:12px 0 4px}
+.must b{color:var(--banner)}
+.must .why{font-size:13px;color:var(--sub);margin:4px 0 0}
+.badge-req{display:inline-block;font-size:11px;font-weight:700;background:var(--banner);color:var(--on);border-radius:3px;padding:0 6px;margin-left:6px;vertical-align:middle}
+textarea.need{border:2px solid var(--banner);background:#F6E4E1}
+.hint.err{color:var(--ng);font-weight:700}
+.tn{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px dashed var(--line)}
+.tn:first-child{border-top:0}
+.tn .tt{flex:1 1 320px;min-width:0}
+.tn .ta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;margin-left:auto}
+.tn .ta .who{font-size:12px}
 
 /* クエスト掲示板：左に一覧、右に詳細パネル。狭い画面（760px 未満）では、一覧と詳細を切り替える（S.pane） */
 .wrap.wide{max-width:1400px}
@@ -844,10 +855,13 @@ function letterFor(qd, a) {
       h('div', { class: 'kick' }, `あなたの番：${t.id}`), h('h3', null, t.title),
       t.instruction ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, 'お願いしたいこと'), h('p', { style: 'white-space:pre-wrap;margin:0' }, t.instruction)) : null,
       h('p', null, (t.instruction ? 'できたと言える状態：' : '合格ライン：') + ((t.criteria && t.criteria.pass_line) || '')),
+      t.criteria && t.criteria.check ? h('div', { class: 'must', role: 'note' }, h('b', null, '鑑定士が確かめること'), h('div', null, t.criteria.check),
+        h('div', { class: 'why' }, '「できた」を送るときは、メモか添付に、これが分かる内容を書いてください。鑑定士は、あなたの報告だけで判定するため、書かないと不合格になります。')) : null,
       h('span', { class: 'lbl' }, '結果を教えてください'),
       radio(k + 'r', ok, 'yes', 'できた', '', '', 'yes'), radio(k + 'r', ok, 'no', 'できなかった', '', '', 'yes'),
-      h('label', { class: 'lbl', for: k + 'memo' }, '一言メモ（任意）'), textarea(memo, { id: k + 'memo' }),
-      h('span', { class: 'lbl' }, '記録の添付（任意）'), fileField(k, '記録の添付', true),
+      h('label', { class: 'lbl', for: k + 'memo' }, '一言メモ', h('span', { class: 'badge-req' }, '「できた」のときは、メモか添付が必須')), textarea(memo, { id: k + 'memo', class: 'need' }),
+      h('span', { class: 'lbl' }, '記録の添付（メモの代わりにできます）'), fileField(k, '記録の添付', true),
+      S.form[k + ':err'] ? h('p', { class: 'hint err', role: 'alert' }, S.form[k + ':err']) : null,
       h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendResult(qd.id, t, k) }, '結果を送る')),
       h('p', { class: 'fine', style: 'margin:10px 0 0' }, '送ると ', code(`.work/${qd.id}/inbox/`), ' に保存されます。/guild:quest が動いていれば、すぐ進みます。'), sentNote(k));
   }
@@ -1714,6 +1728,30 @@ const ROLE_MODELS = {
 };
 // ---- クエストログ：guild.py digest が、待機の直前と完了時に作る記録（機械で作るので、事実だけ）
 const CLASS_NAMES = { wizard: '魔法使い', alchemist: '錬金術師', adventurer: '冒険者' };
+// クエストログの「あなたの番」：1 件 1 行。実行する目標には、右に「内容をコピー」「できた」「できなかった」を出す（押すと、送る確認が同じ行に出る）
+function resultAsks(qid) {
+  const qd = S.model && S.model.quests.find((x) => x.id === qid);
+  return qd ? qd.asks.filter((a) => a.kind === 'result' && !a.sent) : [];
+}
+function turnRow(q) {
+  const text = h('span', { class: 'tt' }, h('b', null, `${q.id} ${q.title}`), '：', q.needs.map((n) => n.text + (n.advice ? `（鑑定士のおすすめ：${n.advice.text}）` : '')).join('、'));
+  const asks = resultAsks(q.id);
+  const btns = asks.map((a) => {
+    const t = a.goal, key = `${q.id}:${t.id}:result`, ask = S.form['log:ask'];
+    const body = `【${t.id}】${t.title}\n${t.instruction ? 'お願いしたいこと：' + t.instruction + '\n' : ''}${t.instruction ? 'できたと言える状態：' : '合格ライン：'}${(t.criteria && t.criteria.pass_line) || ''}`;
+    const go = (ok) => () => { S.form['log:ask'] = `${key}:${ok ? 'yes' : 'no'}`; render(); };
+    if (ask && ask.startsWith(key + ':')) {
+      const ok = ask.endsWith(':yes');
+      return h('span', { class: 'ta', role: 'alert' }, h('span', { class: 'fine' }, `${t.id}を「${ok ? 'できた' : 'できなかった'}」で送る？（メモ・添付なし）`),
+        h('button', { type: 'button', class: 'btn sm go', onclick: async () => { S.form['log:ask'] = ''; await send(q.id, { type: 'result', goal: t.id, ok, note: '', files: [] }, key); } }, '送る'),
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.form['log:ask'] = ''; render(); } }, 'やめる'));
+    }
+    return h('span', { class: 'ta' }, asks.length > 1 ? h('span', { class: 'fine' }, t.id) : null,
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyText(body, '内容') }, '内容をコピー'),
+      h('button', { type: 'button', class: 'btn sm go', onclick: go(true) }, 'できた'), h('button', { type: 'button', class: 'btn sm', onclick: go(false) }, 'できなかった'));
+  });
+  return h('div', { class: 'tn' }, text, ...btns);
+}
 function logTab() {
   const c = S.clog;
   const head = [h('h2', { class: 'h2' }, 'クエストログ'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼の進み・あなたの番・担当・止まっている理由を、事実だけでまとめた記録です。/guild:quest が、待機に入る直前と完了時に作ります。いまの状態は「クエスト掲示板」で見てください。')];
@@ -1725,7 +1763,7 @@ function logTab() {
   const empty = (t) => h('p', { class: 'fine', style: 'margin:0' }, t);
   const st = c.stats || {};
   return [...head, h('p', { class: 'fine' }, `${when} 時点`),
-    sec(`あなたの番（${c.needs_total || 0} 件）`, turn.length ? h('ul', null, turn.map((q) => h('li', null, h('b', null, `${q.id} ${q.title}`), '：', q.needs.map((n) => n.text + (n.advice ? `（鑑定士のおすすめ：${n.advice.text}）` : '')).join('、')))) : empty('いまは、あなたの番はありません。')),
+    sec(`あなたの番（${c.needs_total || 0} 件）`, turn.length ? turn.map((q) => turnRow(q)) : empty('いまは、あなたの番はありません。')),
     sec('進行中', open.length ? h('ul', null, open.map((q) => h('li', null, h('b', null, `${q.id} ${q.title}`), q.series ? `（${q.series}）` : '', `　${q.label}　${(q.goals || {}).done || 0}/${(q.goals || {}).total || 0}`,
       (q.active || []).length ? [h('br'), (q.active || []).map((a) => `${CLASS_NAMES[a.class] || a.class || '—'}：${a.id} ${a.title || ''}`).join('、')] : null))) : empty('進行中の依頼はありません。')),
     sec('止まっている理由', c.quests.some((q) => (q.blockers || []).length) ? h('ul', null, c.quests.flatMap((q) => (q.blockers || []).map((b) => h('li', null, `${q.id} ${b.goal} は、${(b.because || []).length ? b.because.join('、') + ' ができなかったため' : '前提が止まっているため'}、止まっています。`)))) : empty('止まっている目標はありません。')),
@@ -2088,6 +2126,11 @@ async function send(qid, obj, key) {
 }
 async function sendResult(qid, t, key) {
   const files = S.files[key] || [], names = [];
+  if ((S.form[key + ':ok'] || 'yes') === 'yes' && !(S.form[key + ':memo'] || '').trim() && !files.length) {  // 鑑定士は報告だけで判定する。空の「できた」は、不合格で戻るだけなので、送る前に止める
+    S.form[key + ':err'] = '「できた」を送るには、メモか添付が要ります。鑑定士が確かめること（上の枠）が分かる内容を書いてください。'; render();
+    const m = document.getElementById(key + 'memo'); if (m) m.focus(); return;
+  }
+  S.form[key + ':err'] = '';
   try {
     for (const f of files) { const n = `${t.id}-${f.name}`; await S.fs.writeBlob(`${qid}/inbox/files/${n}`, f); names.push(`inbox/files/${n}`); }
   } catch (e) { S.fallback = { path: `guild/${physical(qid + '/inbox/files/')}`, text: '添付ファイルを保存できませんでした。', err: `${e.name}：${e.message}` }; render(); return; }

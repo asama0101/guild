@@ -165,3 +165,9 @@ class WhoBadgeTest(unittest.TestCase):
         badge = BOARD[BOARD.index("function whoBadge("):BOARD.index("function goalRow(")]
         for needle in ("あなたが実行", "ギルドが自動（実行前に確認）"):
             self.assertIn(needle, badge, needle)
+
+
+class ResultLetterRequiresRecordTest(unittest.TestCase):
+    def test_yes_without_memo_or_attachment_is_stopped_before_sending(self):
+        for needle in ("鑑定士が確かめること", "!(S.form[key + ':memo'] || '').trim() && !files.length", "S.form[key + ':err']", "textarea(memo, { id: k + 'memo', class: 'need' })"):
+            self.assertIn(needle, BOARD, needle)
