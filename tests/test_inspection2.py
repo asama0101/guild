@@ -157,5 +157,23 @@ class WebHostTest(unittest.TestCase):
             self.assertEqual(webaccess.gate(gdir, "https://例え.jp/b", "p")[0], "allow")
 
 
+class WebIngestOrderTest(unittest.TestCase):
+    def test_answers_stay_in_the_inbox_when_saving_fails(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            gdir = Path(d) / "guild"
+            inbox = gdir / ".work" / "web" / "inbox"
+            inbox.mkdir(parents=True)
+            (inbox / "1.json").write_text(json.dumps({"type": "web", "decisions": {"example.com": "allow"}}), encoding="utf-8")
+            with mock.patch.object(webaccess, "save", side_effect=PermissionError("ロック中")):
+                with self.assertRaises(PermissionError):
+                    webaccess.ingest(gdir)
+            self.assertTrue((inbox / "1.json").exists())
+            self.assertFalse((inbox / "done").exists())
+            report = webaccess.ingest(gdir)  # 次に、そのまま反映できる
+            self.assertEqual(len(report["applied"]), 1)
+            self.assertIn("example.com", webaccess.load(gdir)["allow"])
+
+
 if __name__ == "__main__":
     unittest.main()

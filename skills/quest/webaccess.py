@@ -180,6 +180,7 @@ def ingest(gdir):
     if not inbox.is_dir():
         return report
     data = load(gdir)
+    moves = []  # 答えのファイルの移動は、許可リストの保存のあとに行う。保存前に落ちても、答えは inbox に残る
     for f in sorted(inbox.glob("*.json")):
         try:
             try:
@@ -192,12 +193,14 @@ def ingest(gdir):
             dest, key, item, reason = inbox / "done", "applied", f.name, None
         except WebError as e:
             dest, key, item, reason = inbox / "rejected", "rejected", {"file": f.name, "reason": str(e)}, str(e)
+        moves.append((f, dest, reason))
+        report[key].append(item)
+    save(gdir, data)
+    for f, dest, reason in moves:
         dest.mkdir(exist_ok=True)
         shutil.move(str(f), str(dest / f.name))
         if reason:
             (dest / f"{f.name}.reason.txt").write_text(reason, encoding="utf-8")
-        report[key].append(item)
-    save(gdir, data)
     return report
 
 
