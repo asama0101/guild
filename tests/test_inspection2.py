@@ -175,5 +175,33 @@ class WebIngestOrderTest(unittest.TestCase):
             self.assertIn("example.com", webaccess.load(gdir)["allow"])
 
 
+BOARD_SRC = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
+
+
+@unittest.skipUnless(shutil.which("node"), "node がありません")
+class BoardSentStateTest(unittest.TestCase):
+    def test_sent_flags_are_dropped_when_the_inbox_is_empty(self):
+        code = extract("pruneSent") + r"""
+const S = { sent: { 'Q001:abort': true, 'Q001:G2:result': true, 'in:Q001': true, 'Q002:approve': true, 'a:form': true } };
+pruneSent({ quests: [{ id: 'Q001', q: { inbox: [] } }, { id: 'Q002', q: { inbox: [{ type: 'approve' }] } }] });
+console.log(JSON.stringify(Object.keys(S.sent).sort()));"""
+        self.assertEqual(node_eval(code), ["Q002:approve", "a:form"])
+
+    def test_sent_label_names_what_was_actually_sent(self):
+        code = extract("sentLabel") + r"""
+const has = (inbox) => (type, goal, choice) => inbox.some((x) => x.type === type && (goal == null || x.goal === goal) && (choice == null || x.choice === choice));
+console.log(JSON.stringify([
+  sentLabel('approve', has([{ type: 'approve' }])), sentLabel('approve', has([{ type: 'decision', choice: 'abort' }])),
+  sentLabel('approve', has([{ type: 'decision', choice: 'replan' }])), sentLabel('accept', has([{ type: 'accept' }])),
+  sentLabel('accept', has([{ type: 'decision', choice: 'replan' }])), sentLabel('accept', has([]))]));"""
+        self.assertEqual(node_eval(code), ["計画の承認", "中止", "計画の直し", "納品物の受け取り確認", "納品物の直し（見直し）", ""])
+
+    def test_log_turn_list_includes_closed_quests_waiting_for_the_archive(self):
+        self.assertIn("const turn = c.quests.filter((q) => (q.needs || []).length);", BOARD_SRC)
+
+    def test_received_banner_only_for_quests_waiting_to_be_accepted(self):
+        self.assertIn("m.quests.filter((x) => x.label === '受け取り待ち')", BOARD_SRC)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -654,7 +654,7 @@ function derive(q) {
   if (p.status === 'aborted') { d.label = '中止'; d.cls = 'sd-stop'; d.info = 'aborted'; d.me = d.asks.some((a) => !a.sent) ? '書庫の登録候補' : '—'; return d; }
   if (p.status === 'replan') { if (askQuestions()) return d; d.label = '計画を直し中'; d.cls = 'sd-run'; d.info = 'replan'; return d; }
   if (!p.approved) {
-    d.asks.push({ kind: 'approve', key: `${q.id}:approve`, label: '承認', sent: inboxHas('approve') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
+    d.asks.push({ kind: 'approve', key: `${q.id}:approve`, label: '承認', sent: inboxHas('approve') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort'), sentAs: sentLabel('approve', inboxHas) });
   } else {
     for (const t of p.goals) {
       if (t.state === 'awaiting_confirm') d.asks.push({ kind: 'confirm', goal: t, key: `${q.id}:${t.id}:confirm`, label: `${t.id}（確認）`, sent: inboxHas('confirm', t.id) });
@@ -664,7 +664,7 @@ function derive(q) {
   }
   const hasOverall = overallJudge(q.overall) !== null;
   d.overallPending = p.approved && d.allDone && !p.accepted && !hasOverall && (p.status === 'active' || p.status === undefined);
-  if (p.approved && d.allDone && !p.accepted && hasOverall) d.asks.push({ kind: 'accept', key: `${q.id}:accept`, label: '受け取り', sent: inboxHas('accept') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
+  if (p.approved && d.allDone && !p.accepted && hasOverall) d.asks.push({ kind: 'accept', key: `${q.id}:accept`, label: '受け取り', sent: inboxHas('accept') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort'), sentAs: sentLabel('accept', inboxHas) });
   const waiting = d.asks.filter((a) => !a.sent);
   if (d.finished) { d.label = '完了'; d.cls = 'sd-ok'; }
   else if (waiting.some((a) => a.kind === 'decision')) { d.label = '要判断'; d.cls = 'sd-ng'; }
@@ -700,6 +700,15 @@ function reopensOf(plan) { return plan && Array.isArray(plan.history) ? plan.his
 function pendingMark(qd) { return qd.pending ? h('span', { class: 'stamp sd-wait sm', title: '送りました。/guild:quest が読み取ると、反映されます' }, qd.pending) : null; }
 function rerunMark(n, what) { return n > 0 ? h('span', { class: 'rerun', title: `${what}（${n}回）` }, `↻ 再実行 ${n}`) : null; }
 
+// 送ったあと、/guild:quest が読み取ると、inbox から入力が消える。その依頼の inbox が空なら、「送りました」の印は古い（再実行・やり直しで、また同じ手紙が出たときに、残らないように）
+function pruneSent(model) {
+  for (const qd of model.quests) if (!qd.q.inbox.length) for (const k of Object.keys(S.sent)) if (k.split(':').includes(qd.id)) delete S.sent[k];
+}
+// 「送りました」の手紙に書く、実際に送った内容。承認・受け取りの手紙に「中止」「直してほしい」を送ったときに、承認や受け取りを送ったと言わない
+function sentLabel(kind, has) {
+  if (kind === 'approve') return has('approve') ? '計画の承認' : has('decision', null, 'abort') ? '中止' : has('decision', null, 'replan') ? '計画の直し' : '';
+  return has('accept') ? '納品物の受け取り確認' : has('decision', null, 'abort') ? '中止' : has('decision', null, 'replan') ? '納品物の直し（見直し）' : '';
+}
 function sentNote(key) {
   return S.sent[key] ? h('p', { class: 'saved', role: 'status' }, HANDOFF) : null;
 }
@@ -813,7 +822,7 @@ function appraiserNote(qd, t) {
 function letterFor(qd, a) {
   const k = a.key;
   if (a.sent) return h('section', { class: 'letter sentbox' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '送信済み'),
-    h('h3', null, `${a.kind === 'approve' ? '計画の承認' : askText(qd, a)}を送りました`),
+    h('h3', null, `${a.sentAs || (a.kind === 'approve' ? '計画の承認' : askText(qd, a))}を送りました`),
     h('p', null, '/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。'));
   if (a.kind === 'questions') {
     return h('section', { class: 'letter', 'aria-label': '質問' }, seal('問'),
@@ -1841,7 +1850,7 @@ function logTab() {
   if (!c || !Array.isArray(c.quests)) return [...head, h('p', { class: 'fine' }, 'まだクエストログがありません。/guild:quest を動かすと、待機の直前に作られます。')];
   const when = Number.isNaN(Date.parse(c.t)) ? '' : new Date(c.t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const open = c.quests.filter((q) => !['完了', '中止', '旧形式'].includes(q.label));
-  const turn = open.filter((q) => (q.needs || []).length);
+  const turn = c.quests.filter((q) => (q.needs || []).length);  // 完了・中止した依頼でも、書庫の確認待ちは「あなたの番」に数える（見出しの件数と合わせる）
   const sec = (t, ...ch) => h('section', { class: 'card' }, h('h3', null, t), ...ch);
   const empty = (t) => h('p', { class: 'fine', style: 'margin:0' }, t);
   const st = c.stats || {};
@@ -2036,7 +2045,7 @@ function delivTab() {
   const fm = filesModel(m), view = S.fview === 'kind' ? 'kind' : 'quest', kind = FKINDS.includes(S.fkind) || S.fkind === 'all' ? S.fkind : '納品物', q = (S.form['f:fs'] || '').trim().toLowerCase();
   const hitQ = (x) => hit(q, x.id, x.title, x.series);
   const count = (k) => fm.kinds.filter(([n]) => k === 'all' || n === k).reduce((a, [, fs]) => a + fs.length, 0);
-  const waiting = m.quests.filter((x) => x.allDone && !x.finished && x.q.plan && x.q.plan.status === 'active');
+  const waiting = m.quests.filter((x) => x.label === '受け取り待ち');
   const navBtn = (k, label) => h('button', { type: 'button', 'aria-pressed': String(kind === k), onclick: () => { S.fkind = k; render(); } }, h('span', null, label), h('span', { class: 'n' }, String(count(k))));
   const nav = h('div', { class: 'dnav', role: 'group', 'aria-label': '種類' }, navBtn('納品物', '納品物'), h('div', { class: 'sep' }), ['成果物', '報告', '書庫', 'インプット'].map((k) => navBtn(k, k)), h('div', { class: 'sep' }), navBtn('all', 'すべて'));
   const seg = h('span', { class: 'dseg', role: 'group', 'aria-label': '並べ方' }, FVIEWS.map(([k, l]) => h('button', { type: 'button', 'aria-pressed': String(view === k), onclick: () => { S.fview = k; render(); } }, l)));
@@ -2304,7 +2313,7 @@ async function refresh(force) {
     if (!force && key !== S.dataKey && (isEditing() || isPressing() || S.reader || S.fallback)) return;
     if (force || key !== S.dataKey) {
       const staticTab = S.tab === 'help' || S.tab === 'obs';
-      S.dataKey = key; S.model = buildModel(raw); S.rcache = {};  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
+      S.dataKey = key; S.model = buildModel(raw); S.rcache = {}; pruneSent(S.model);  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
       const ids = S.model.quests.map((x) => x.id);
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
       if (!force && staticTab && chromeSig() === S.chromeSig) return;  // 読み物の画面は、見出しの件数が同じなら作り直さない
