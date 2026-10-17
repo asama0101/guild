@@ -82,5 +82,23 @@ class ArchivePrefixTest(unittest.TestCase):
             self.assertFalse((q / "reports" / "G1-appraiser.md").exists())
 
 
+class EvidenceDecorationTest(unittest.TestCase):
+    def check(self, body):
+        with tempfile.TemporaryDirectory() as d:
+            q = Path(d)
+            (q / "reports").mkdir()
+            (q / "reports" / "G1-appraiser.md").write_text(body, encoding="utf-8")
+            guild.check_evidence({"history": []}, "G1", q)
+
+    def test_decorated_passed_is_accepted(self):
+        for body in ("## 判定\npassed\n", "## 判定\n**passed**\n", "## 判定\n- passed\n", "## 判定\n`passed`\n", "## 判定\n> Passed\n"):
+            self.check(body)
+
+    def test_other_verdicts_are_refused(self):
+        for body in ("## 判定\n**rejected**\n", "## 判定\nnot passed\n", "## 判定\n\n", "判定なし"):
+            with self.assertRaises(guild.GuildError, msg=body):
+                self.check(body)
+
+
 if __name__ == "__main__":
     unittest.main()

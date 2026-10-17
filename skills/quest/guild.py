@@ -432,8 +432,9 @@ def check_evidence(plan, goal_id, qdir):
     f = Path(qdir) / "reports" / f"{goal_id}-appraiser.md"
     if not f.is_file() or f.stat().st_size == 0:
         raise GuildError(f"{goal_id}: 鑑定士の報告 reports/{goal_id}-appraiser.md がないか空です。鑑定士が報告を書いてから passed を送ってください")
-    verdict = re.search(r"##\s*判定\s*" + chr(10) + r"\s*(\S+)", f.read_text(encoding="utf-8", errors="replace"))
-    if not verdict or not verdict.group(1).lower().startswith("passed"):
+    verdict = re.search(r"##\s*判定\s*" + chr(10) + r"\s*(.+)", f.read_text(encoding="utf-8", errors="replace"))
+    word = re.sub(r"^[\s>*`_-]+", "", verdict.group(1)).lower() if verdict else ""  # **passed**・- passed のような飾りは取る（overall_state と同じ）
+    if not word.startswith("passed"):
         raise GuildError(f"{goal_id}: 鑑定士の報告の「## 判定」が passed ではありません（{verdict.group(1) if verdict else '見つかりません'}）")
     sent = [h for h in plan.get("history", []) if h.get("id") == goal_id and h.get("to") == "review"]
     if sent:
