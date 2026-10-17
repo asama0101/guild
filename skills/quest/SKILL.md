@@ -56,6 +56,7 @@ disable-model-invocation: true
    - 出力先：`<dir>/reports/plan-draft.json`
    - 質問への回答があるとき、またはやり直しのときは、その内容（下の4・5）
 3. `plan-draft.json` を読む。
+   - **受付係が `plan-draft.json` を書き込めず、中身を返り値で返してきたとき**は、その JSON を手を加えずに `<dir>/reports/plan-draft.json` に保存してから読む。受付係が質問を文章だけで返してきたとき（`plan-draft.json` がない、または `questions` が空なのに質問がある）も、**チャットで依頼主に聞かない**。質問を `questions` の形（`text`・`options`・`recommended`・`reason`）に直して `plan-draft.json`（`goals` は空）に書き、受付係を呼び直す必要もない（手紙が出る）。
    - `questions` が空でなければ、そこで止める。ボードが `plan-draft.json` を読んで、質問の手紙を出す。あなたは何もしない（手順4で、回答の到着を待つ）。
    - `questions` が空なら、`guild.py adopt <dir>/plan.json` を実行する。検査に落ちたら（`inputs`・`candidates` の名前が `guild/inputs/` にない、など）、エラーを添えて受付係に差し戻す（2回まで）。直らなければ、状況を短くチャットで伝えて、その依頼は止める。
 4. 質問への回答が届いたら（`guild.py answers <dir>` で取り出す）、その内容を添えて受付係をもう一度呼ぶ（手順1へ。回答を足して `inputs-list` からやり直す）。

@@ -289,3 +289,12 @@ class RejectedRedoArchiveTest(Base):
         self.assertFalse((self.q / "output" / "G1").exists())
         self.assertEqual(len(list((self.q / "prev").glob("*/output/G1/old.md"))), 1)
         self.assertTrue((self.q / "reports" / "G1-appraiser.md").is_file())
+
+
+class QuestionsGoToTheBoardTest(unittest.TestCase):
+    def test_instructions_keep_questions_out_of_the_chat(self):
+        r = (ROOT / "agents" / "receptionist.md").read_text(encoding="utf-8")
+        self.assertIn("返り値の文章で質問しない", r)
+        self.assertIn("ファイルの中身そのもの", r)
+        s = (ROOT / "skills" / "quest" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("チャットで依頼主に聞かない", s)
