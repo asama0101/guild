@@ -2139,7 +2139,14 @@ function keepToast() {
   S.toastTimer = setTimeout(() => { S.toastFor = ''; if (S.toast === shown) { S.toast = ''; render(); } }, 3000);
 }
 const KEEP_SCROLL = ['.rbox', '.qrows', '.nbox', '.iplist', '.plist'];  // 描き直しても、中でスクロールしている位置を保つ枠
-function render() {
+// 画面の中身の「型」。自動更新のとき、作り直した結果が今の画面と同じなら、置き換えない（置き換えると、ちかちかする）。稼働の表示・通知の文字は比べない
+function domSig(nodes) {
+  const box = document.createElement('div');
+  nodes.forEach((n) => box.appendChild(n.cloneNode(true)));
+  box.querySelectorAll('#alive, .toast, .toastfix').forEach((e) => { e.textContent = ''; e.className = ''; });
+  return box.innerHTML;
+}
+function render(opts) {
   const app = document.getElementById('app');
   const ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.key : null, ss = ae && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
@@ -2147,10 +2154,12 @@ function render() {
   const tops = KEEP_SCROLL.map((s) => { const e = document.querySelector(s); return e ? e.scrollTop : 0; });
   const tabs = [['board', 'クエスト掲示板'], ['log', 'クエストログ'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
   const body = { board: boardTab, log: logTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
-  app.style.minHeight = app.offsetHeight + 'px';  // 作り直す間に、ページが縮んで、スクロール位置が上へ丸められないように
-  app.replaceChildren(h('div', { class: 'wrap wide' }, h('div', { class: 'stickyhead' }, banner(),
+  const built = [h('div', { class: 'wrap wide' }, h('div', { class: 'stickyhead' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools())),
-    h('div', { class: 'panel' }, connectBox(), aliveBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
+    h('div', { class: 'panel' }, connectBox(), aliveBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean)];
+  if (opts && opts.auto && domSig(built) === domSig(Array.from(app.childNodes))) return;  // 自動更新で、見た目が変わらないときは、何もしない
+  app.style.minHeight = app.offsetHeight + 'px';  // 作り直す間に、ページが縮んで、スクロール位置が上へ丸められないように
+  app.replaceChildren(...built);
   keepToast(); updateAlive(); updateTitle();
   const head = document.querySelector('.stickyhead');
   document.documentElement.style.setProperty('--headh', (head && getComputedStyle(head).position === 'sticky' ? head.offsetHeight : 60) + 'px');  // 固定した見出しの高さ。その下に固定する部品が使う
@@ -2287,7 +2296,7 @@ async function refresh(force) {
       const ids = S.model.quests.map((x) => x.id);
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
       if (!force && staticTab && chromeSig() === S.chromeSig) return;  // 読み物の画面は、見出しの件数が同じなら作り直さない
-      render();
+      render({ auto: !force });
     }
   } catch (e) { S.connMsg = `読み込めませんでした（${e.name || 'エラー'}：${e.message || e}）。`; S.conn = 'error'; render(); }
   finally { S.busy = false; }

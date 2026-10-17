@@ -217,3 +217,9 @@ console.log(JSON.stringify([rerunsOf(plan, { id: 'G1' }), rerunsOf(plan, { id: '
     def test_marks_are_shown_on_rows_headers_and_goal_lists(self):
         for needle in ("rerunMark(rerunsOf(qd.q.plan, t)", "rerunMark(reopensOf(qd.q.plan)", ".rerun{"):
             self.assertIn(needle, BOARD, needle)
+
+
+class AutoRefreshDoesNotFlickerTest(unittest.TestCase):
+    def test_auto_render_is_skipped_when_the_page_would_look_the_same(self):
+        for needle in ("function domSig(nodes)", "function render(opts)", "if (opts && opts.auto && domSig(built) === domSig(Array.from(app.childNodes))) return;", "render({ auto: !force })"):
+            self.assertIn(needle, BOARD, needle)
