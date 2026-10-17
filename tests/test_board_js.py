@@ -193,3 +193,10 @@ class FollowupActionsTest(unittest.TestCase):
         for needle in ("function followupList(", "依頼にする", "見送る", "見送った提案", "'guild.followups.hidden'", "function followupToRequest("):
             self.assertIn(needle, BOARD, needle)
         self.assertIn("app.style.minHeight", BOARD)  # 作り直す間にページが縮まない
+
+
+class LogYesNeedsMemoTest(unittest.TestCase):
+    def test_log_yes_asks_for_a_memo_in_the_same_row(self):
+        row = BOARD[BOARD.index("function turnRow("):BOARD.index("function logTab(")]
+        for needle in ("class: 'logmemo'", "if (ok && !note)", "メモを書いてください", "e.key === 'Enter'", "note, files: []"):
+            self.assertIn(needle, row, needle)

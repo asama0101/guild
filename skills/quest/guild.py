@@ -461,6 +461,8 @@ def ingest(plan_path, plan, tr, commit=None):
     for f in sorted(inbox.glob("*.json")):
         try:
             data = load_json(f)
+            if isinstance(data, dict) and data.get("type") == "answers" and plan.get("status") == "replan":
+                continue  # 計画を直し中の質問への答えは、ここでは取り込まない（`answers` で取り出して、受付係を呼び直す）
             if isinstance(data, dict) and data.get("type") == "archive":
                 archive_decide(Path(plan_path).parent, data)  # 書庫の確認は、中止された依頼でも受け付ける
             else:
@@ -1653,9 +1655,11 @@ def stats(root):
 
 
 def take_answers(qdir):
-    """計画がまだない依頼の inbox から、質問への回答（type が answers）を取り出して done/ に移す。"""
+    """計画がまだない依頼（と、計画を直し中の依頼）の inbox から、質問への回答（type が answers）を取り出して done/ に移す。
+    計画がある依頼では、answers 以外の入力は、そのまま残す（ingest が取り込む）。"""
     inbox = Path(qdir) / "inbox"
     got = []
+    has_plan = (Path(qdir) / "plan.json").exists()
     if inbox.is_dir():
         for f in sorted(inbox.glob("*.json")):
             try:
@@ -1663,6 +1667,8 @@ def take_answers(qdir):
                 ok = isinstance(d, dict) and d.get("type") == "answers"
             except GuildError:
                 ok = False  # 壊れたファイル
+            if has_plan and not ok:
+                continue  # 計画がある依頼の、ほかの入力は、取り出さない
             # 取り出せなかったものは rejected/ へ。残すと wait が待たずに返り続ける
             dest = inbox / ("done" if ok else "rejected")
             dest.mkdir(exist_ok=True)

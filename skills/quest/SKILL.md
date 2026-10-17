@@ -59,7 +59,7 @@ disable-model-invocation: true
    - **受付係が `plan-draft.json` を書き込めず、中身を返り値で返してきたとき**は、その JSON を手を加えずに `<dir>/reports/plan-draft.json` に保存してから読む。受付係が質問を文章だけで返してきたとき（`plan-draft.json` がない、または `questions` が空なのに質問がある）も、**チャットで依頼主に聞かない**。質問を `questions` の形（`text`・`options`・`recommended`・`reason`）に直して `plan-draft.json`（`goals` は空）に書き、受付係を呼び直す必要もない（手紙が出る）。
    - `questions` が空でなければ、そこで止める。ボードが `plan-draft.json` を読んで、質問の手紙を出す。あなたは何もしない（手順4で、回答の到着を待つ）。
    - `questions` が空なら、`guild.py adopt <dir>/plan.json` を実行する。検査に落ちたら（`inputs`・`candidates` の名前が `guild/inputs/` にない、など）、エラーを添えて受付係に差し戻す（2回まで）。直らなければ、状況を短くチャットで伝えて、その依頼は止める。
-4. 質問への回答が届いたら（`guild.py answers <dir>` で取り出す）、その内容を添えて受付係をもう一度呼ぶ（手順1へ。回答を足して `inputs-list` からやり直す）。
+4. 質問への回答が届いたら（`guild.py answers <dir>` で取り出す）、その内容を添えて受付係をもう一度呼ぶ（手順1へ。回答を足して `inputs-list` からやり直す）。計画を直し中（`replan`）の依頼なら、下の5の指示（完了済みの目標を変えずに残す）も、あわせて渡す。
 5. 「計画を直す」が届いたら（計画の `status` が `replan`）、受付係を呼び直す（手順1へ）。
    - 渡すもの：これまでの計画と、`plan.json` の `history` の最後の `decision`（`choice` が `replan`）か `reopen`（完了・中止した依頼を、依頼主が「修正して再実行」したもの）の `comment`。`reopen` のときは、「コメントの直したい内容に関係する目標だけをやり直し、関係しない合格済みの目標は変えずに残す」と、メッセージに足す。納品物の取り下げと書庫の状態の初期化は `ingest` が済ませている。
    - メッセージに必ず書くこと：「完了済み（`done`）の目標は、`id`・種別・職業（`class`）・題名・合格基準を変えずにそのまま残す。直すのは、できなかった部分と、足す部分だけ」。
@@ -83,7 +83,7 @@ disable-model-invocation: true
    - 書庫への入力（`kind` が `archive`。依頼主がボードで書庫に直接登録・昇格・廃止・種類の付け替えをしたもの）→ `guild.py archive-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
    - 外部アクセスの答え（`kind` が `web`。依頼主がボードで、魔法使いの WebFetch の許可・不許可や、許可リストの変更をしたもの）→ `guild.py web-ingest <root>`。拒否された入力があれば、理由を短くチャットで伝える。
    - `inbox`（計画あり。登録候補への答え `archive` も含む）→ `guild.py ingest <dir>/plan.json`。拒否された入力があれば、理由を短くチャットで伝える。戻りの `warnings`（納品物の置き直しの失敗など）があれば、内容を伝えて `publish <dir>` を再実行する。
-   - `inbox`（計画なし）→ `guild.py answers <dir>` で回答を取り出し、手順2の4へ。
+   - `inbox`（計画なし）→ `guild.py answers <dir>` で回答を取り出し、手順2の4へ。**計画があっても `status` が `replan`（計画を直し中）で、受付係の質問への答え（`answers`）が `inbox` にあるときも同じ**（`ingest` は `answers` を取り込まずに残す。ほかの入力は、`ingest` が取り込む）。
 2. **進める**：計画のある依頼ごとに、`guild.py sync <plan>`、続けて `guild.py next <plan>` を実行する。**「旧形式の計画です」で止まった依頼は、処理せず、飛ばす**（以前の版の依頼で、この版では読めない。中止もしない。`arrivals`・`wait` も、その依頼の `inbox` は数えない。ボードには「旧形式の依頼」と出る。依頼主には、チャットで 1 回だけ「旧形式の依頼 Q### は読めないので飛ばしました。必要なら出し直してください」と伝える）。`next` の各グループを次のように扱う。
 
    | グループ | 対応 |
