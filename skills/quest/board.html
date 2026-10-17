@@ -211,7 +211,7 @@ svg.humbars{min-width:0;max-width:100%}
   .qhide,.hidebar{display:none}
   .qback{display:inline-flex}
 }
-/* 詳細パネルのタブ（道のり／日付／インプット）と、道のりの行。パネルが広いとき（一覧を隠したときなど）は、選んだ Todo の合格基準を右に出す */
+/* 詳細パネルのタブ（道のり／日付／インプット）と、道のりの行。パネルが広いとき（一覧を隠したときなど）は、選んだ目標の合格基準を右に出す */
 .dtabs{display:flex;gap:4px;margin:18px 0 0;border-bottom:2px solid var(--brass)}
 .dtabs button{font:inherit;font-weight:700;font-size:14px;min-height:40px;padding:4px 18px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--paper2);color:var(--sub);cursor:pointer;margin-bottom:-2px}
 .dtabs button[aria-selected="true"]{background:var(--paper);color:var(--ink);border-color:var(--line)}
@@ -446,7 +446,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', openTodo: null, rcache: {}, prog: { sel: null, open: false }, kn: { cur: null },
+  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', open目標: null, rcache: {}, prog: { sel: null, open: false }, kn: { cur: null },
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -485,10 +485,10 @@ async function loadAll() {
     const output = await listFilesDeep(`${q}/output`, 2);
     const inbox = [];
     for (const f of await S.fs.list(`${q}/inbox`)) {
-      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, todo: j.todo || null, choice: j.choice || null, qs: null, due: j.due === undefined ? undefined : j.due, add: Array.isArray(j.add) ? j.add : null, remove: Array.isArray(j.remove) ? j.remove : null }); }
+      if (f.kind === 'file' && f.name.endsWith('.json')) { const j = await readJSON(`${q}/inbox/${f.name}`); if (j) inbox.push({ type: j.type, goal: j.goal || null, choice: j.choice || null, qs: null, due: j.due === undefined ? undefined : j.due, add: Array.isArray(j.add) ? j.add : null, remove: Array.isArray(j.remove) ? j.remove : null }); }
     }
     if (!plan) for (const f of await S.fs.list(`${q}/inbox/done`)) {
-      if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', todo: null, choice: null, qs: j.answers.map((a) => a.q) }); }
+      if (f.kind === 'file' && f.name.endsWith('-answers.json')) { const j = await readJSON(`${q}/inbox/done/${f.name}`); if (j && Array.isArray(j.answers)) inbox.push({ type: 'answers', goal: null, choice: null, qs: j.answers.map((a) => a.q) }); }
     }
     const archive = await readJSON(`${q}/archive.json`);
     quests.push({ id: q, plan, request, draft, reports, output, inbox, archive, published: delivFiles.filter((n) => n.startsWith(q + '_')) });
@@ -530,22 +530,22 @@ const TSTATE = {
   waiting_user: ['あなたの番', 'sd-turn'], review: ['鑑定中', 'sd-run'], done: ['合格', 'sd-ok'], failed: ['できず', 'sd-ng'], skipped: ['やめた', 'sd-stop']
 };
 const closed = (s) => s === 'done' || s === 'skipped';
-// 期限は日付だけ。その日の終わり（ローカル時刻の 23:59:59.999）を過ぎたら期限切れ。済んだ Todo には付けない
-const overdue = (t, nowMs) => !!t.due && !closed(t.state) && nowMs > new Date(t.due + 'T23:59:59.999').getTime();
+// 期限は日付だけ。その日の終わり（ローカル時刻の 23:59:59.999）を過ぎたら期限切れ。済んだ目標には付けない
+const overdue = (t, nowMs) => !!t.due && !closed(t.state) && nowMs > new Date(t.due + 'G23:59:59.999').getTime();
 // 日付の矛盾は警告にとどめる（遷移には使わない）。YYYY-MM-DD は文字列のまま比べられる
 function dateIssues(plan, t) {
   const out = [], s = t.scheduled, d = t.due;
   if (s && plan.start && s < plan.start) out.push(`予定日が依頼の開始日（${plan.start}）より前です。`);
   if (s && d && s > d) out.push('予定日が締切より後です。');
   if (d && plan.due && d > plan.due) out.push(`締切が依頼の締切（${plan.due}）より後です。`);
-  for (const id of t.deps || []) { const u = plan.todos.find((x) => x.id === id); if (u && u.scheduled && s && u.scheduled > s) out.push(`前提 ${id} の予定日（${u.scheduled}）より前です。`); }
+  for (const id of t.deps || []) { const u = plan.goals.find((x) => x.id === id); if (u && u.scheduled && s && u.scheduled > s) out.push(`前提 ${id} の予定日（${u.scheduled}）より前です。`); }
   return out;
 }
 
 // 流れの注意：止まっている原因（失敗した前提）、やめた前提（結果がないまま進む）、前提の完了待ち。承認前の計画には出さない
 function flowIssues(plan, t) {
-  if (!plan.approved || plan.status === 'aborted' || closed(t.state) || !Array.isArray(plan.todos)) return [];
-  const by = new Map(plan.todos.map((x) => [x.id, x])), out = [];
+  if (!plan.approved || plan.status === 'aborted' || closed(t.state) || !Array.isArray(plan.goals)) return [];
+  const by = new Map(plan.goals.map((x) => [x.id, x])), out = [];
   const failedAncestors = (id, seen = new Set()) => {
     const r = [];
     for (const d of (by.get(id) || {}).deps || []) {
@@ -555,7 +555,7 @@ function flowIssues(plan, t) {
     }
     return r;
   };
-  if (t.state === 'blocked') { const c = [...new Set(failedAncestors(t.id))]; out.push(c.length ? `止まっている原因：${c.join('、')} ができませんでした。` : '前提の Todo が止まっています。'); }
+  if (t.state === 'blocked') { const c = [...new Set(failedAncestors(t.id))]; out.push(c.length ? `止まっている原因：${c.join('、')} ができませんでした。` : '前提の目標が止まっています。'); }
   const skipped = (t.deps || []).filter((d) => (by.get(d) || {}).state === 'skipped');
   if (skipped.length) out.push(`前提 ${skipped.join('、')} はやめたので、その結果がないまま進みます。`);
   if (t.state === 'pending') { const wait = (t.deps || []).filter((d) => by.get(d) && !closed(by.get(d).state) && by.get(d).state !== 'failed'); if (wait.length) out.push(`${wait.join('、')} の完了を待っています。`); }
@@ -563,8 +563,8 @@ function flowIssues(plan, t) {
 }
 function dependents(plan, id) {
   const set = new Set([id]); let grew = true;
-  while (grew) { grew = false; for (const t of plan.todos) if (!set.has(t.id) && (t.deps || []).some((d) => set.has(d))) { set.add(t.id); grew = true; } }
-  set.delete(id); return plan.todos.filter((t) => set.has(t.id));
+  while (grew) { grew = false; for (const t of plan.goals) if (!set.has(t.id) && (t.deps || []).some((d) => set.has(d))) { set.add(t.id); grew = true; } }
+  set.delete(id); return plan.goals.filter((t) => set.has(t.id));
 }
 
 // 計画のインプット（inputs: [{name, source, reason}]）と候補（candidates: [{name, reason}]）。ない古い計画・壊れた要素は除く
@@ -572,8 +572,8 @@ const planList = (p, k) => (p && Array.isArray(p[k]) ? p[k].filter((x) => x && t
 function derive(q) {
   const p = q.plan;
   const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 80)) || q.id;
-  const d = { id: q.id, title, asks: [], info: null, todos: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q, inputs: planList(p, 'inputs'), candidates: planList(p, 'candidates') };
-  const inboxHas = (type, todo, choice) => q.inbox.some((x) => x.type === type && (todo == null || x.todo === todo) && (choice == null || x.choice === choice));
+  const d = { id: q.id, title, asks: [], info: null, goals: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q, inputs: planList(p, 'inputs'), candidates: planList(p, 'candidates') };
+  const inboxHas = (type, goal, choice) => q.inbox.some((x) => x.type === type && (goal == null || x.goal === goal) && (choice == null || x.choice === choice));
   if (!p) {
     const qs = q.draft && Array.isArray(q.draft.questions) ? q.draft.questions : [];
     if (qs.length) {
@@ -583,12 +583,12 @@ function derive(q) {
     }
     d.label = '分解中'; d.cls = 'sd-run'; d.info = 'decomposing'; return d;
   }
-  d.todos = p.todos.map((t) => {
+  d.goals = p.goals.map((t) => {
     const st = TSTATE[t.state] || [t.state, 'sd-wait'];
     const draft = !p.approved && t.state === 'pending';
     return { ...t, stamp: draft ? '案' : st[0], cls: draft ? 'sd-draft' : st[1] };
   });
-  d.total = p.todos.length; d.done = p.todos.filter((t) => closed(t.state)).length;
+  d.total = p.goals.length; d.done = p.goals.filter((t) => closed(t.state)).length;
   d.allDone = d.total > 0 && d.done === d.total;
   d.finished = d.allDone && !!p.accepted;
   // 書庫の登録候補（依頼が完了・中止したあと、司書が出したもの）。中止された依頼でも答えられる
@@ -598,10 +598,10 @@ function derive(q) {
   if (!p.approved) {
     d.asks.push({ kind: 'approve', key: `${q.id}:approve`, label: '承認', sent: inboxHas('approve') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
   } else {
-    for (const t of p.todos) {
-      if (t.state === 'awaiting_confirm') d.asks.push({ kind: 'confirm', todo: t, key: `${q.id}:${t.id}:confirm`, label: `${t.id}（確認）`, sent: inboxHas('confirm', t.id) });
-      if (t.state === 'waiting_user') d.asks.push({ kind: 'result', todo: t, key: `${q.id}:${t.id}:result`, label: t.id, sent: inboxHas('result', t.id) });
-      if (t.state === 'failed') d.asks.push({ kind: 'decision', todo: t, key: `${q.id}:${t.id}:decision`, label: `${t.id}（判断）`, sent: inboxHas('decision', t.id) || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
+    for (const t of p.goals) {
+      if (t.state === 'awaiting_confirm') d.asks.push({ kind: 'confirm', goal: t, key: `${q.id}:${t.id}:confirm`, label: `${t.id}（確認）`, sent: inboxHas('confirm', t.id) });
+      if (t.state === 'waiting_user') d.asks.push({ kind: 'result', goal: t, key: `${q.id}:${t.id}:result`, label: t.id, sent: inboxHas('result', t.id) });
+      if (t.state === 'failed') d.asks.push({ kind: 'decision', goal: t, key: `${q.id}:${t.id}:decision`, label: `${t.id}（判断）`, sent: inboxHas('decision', t.id) || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
     }
   }
   if (p.approved && d.allDone && !p.accepted) d.asks.push({ kind: 'accept', key: `${q.id}:accept`, label: '受け取り', sent: inboxHas('accept') || inboxHas('decision', null, 'replan') || inboxHas('decision', null, 'abort') });
@@ -626,9 +626,9 @@ function askText(x, a) {
   if (a.kind === 'accept') return '納品物の受け取り確認';
   if (a.kind === 'questions') return '依頼についての質問';
   if (a.kind === 'archive') return '書庫に登録する候補の確認';
-  if (a.kind === 'confirm') return `${a.todo.id}「${a.todo.title}」の実行前の確認`;
-  if (a.kind === 'result') return `${a.todo.id}「${a.todo.title}」`;
-  return `${a.todo.id} ができなかったため、進め方の判断`;
+  if (a.kind === 'confirm') return `${a.goal.id}「${a.goal.title}」の実行前の確認`;
+  if (a.kind === 'result') return `${a.goal.id}「${a.goal.title}」`;
+  return `${a.goal.id} ができなかったため、進め方の判断`;
 }
 
 // ============================================================ 描画（部品）
@@ -657,13 +657,13 @@ function answerOf(x, form, k, i) {
   if (x.multi) { const a = form[key] !== undefined ? form[key] : asList(x.recommended); return { q: x.text, choice: a.join('、'), choices: a, note }; }
   return { q: x.text, choice: form[key] !== undefined ? form[key] : (x.recommended || ''), note };
 }
-// 中止した依頼の「一部の成果物」。合格（done）した Todo の成果物だけ
+// 中止した依頼の「一部の成果物」。合格（done）した目標の成果物だけ
 function partialOutputs(qd) {
   const p = qd.q.plan, all = qd.q.output || [];
-  const ok = p ? p.todos.filter((t) => t.state === 'done').map((t) => t.id) : [];
+  const ok = p ? p.goals.filter((t) => t.state === 'done').map((t) => t.id) : [];
   return all.filter((f) => ok.some((i) => f.startsWith(`${qd.id}/output/${i}/`)));
 }
-// 納品物は、全 Todo が済んだ時に guild.py が guild/deliverables/ に置いたもの（Q###_…）。output/ の中のファイルは材料
+// 納品物は、全目標が済んだ時に guild.py が guild/deliverables/ に置いたもの（Q###_…）。output/ の中のファイルは材料
 function deliverables(qd) {
   const main = (qd.q.published || []).map((n) => 'deliverables/' + n);
   return { main, rest: qd.q.output };
@@ -692,7 +692,7 @@ function promptRow(f) {
 function deliverableBlock(qd) {
   const d = deliverables(qd), docs = d.main.filter((f) => !isPrompt(f)), prompts = d.main.filter(isPrompt);
   return [
-    docs.length ? h('ul', { class: 'flist' }, docs.map((f) => fileRow(f))) : (prompts.length ? null : h('p', null, qd.allDone ? '納品物はまだ置かれていません（全 Todo が済むと guild.py が deliverables/ に置きます）。' : '納品物のファイルはありません（報告だけです）。')),
+    docs.length ? h('ul', { class: 'flist' }, docs.map((f) => fileRow(f))) : (prompts.length ? null : h('p', null, qd.allDone ? '納品物はまだ置かれていません（全目標が済むと guild.py が deliverables/ に置きます）。' : '納品物のファイルはありません（報告だけです）。')),
     prompts.length ? [h('p', { class: 'fine', style: 'margin:8px 0 4px' }, 'PowerPoint・Excel など Markdown 以外が要る部分は、Claude Code に渡すプロンプトにしてあります。「プロンプトをコピー」で貼り付けて、Claude Code に作らせてください。'),
       h('ul', { class: 'flist' }, prompts.map(promptRow))] : null,
     h('p', { class: 'fine', style: 'margin:0 0 8px' }, '納品物は ', code('guild/deliverables/'), ' にもあります（Obsidian で読めます）。「パスをコピー」は、フルパスでコピーします。'),
@@ -726,7 +726,7 @@ function reportSection(text, title) {
   const m = String(text || '').match(new RegExp(`^##[ \\t]*${title}[ \\t]*\\r?\\n([\\s\\S]*?)(?=^##[ \\t]|(?![\\s\\S]))`, 'm'));
   return m && m[1].trim() ? m[1] : null;
 }
-// 失敗の判断の手紙に出す、鑑定士の指摘（reports/<Todo>-appraiser.md の「## 指摘」の節の、空でない最初の6行。節がなければ報告の冒頭6行）。報告がなければ出さない
+// 失敗の判断の手紙に出す、鑑定士の指摘（reports/<目標>-appraiser.md の「## 指摘」の節の、空でない最初の6行。節がなければ報告の冒頭6行）。報告がなければ出さない
 function appraiserNote(qd, t) {
   const name = `${t.id}-appraiser.md`;
   if (!qd.q.reports.includes(name)) return null;
@@ -778,10 +778,10 @@ function letterFor(qd, a) {
     const ck = k + ':fix';
     return h('section', { class: 'letter', 'aria-label': '受け取りの確認' }, seal('検'),
       h('div', { class: 'kick' }, 'お願い：受け取りの確認'), h('h3', null, '納品物を確かめて、受け取ってください'),
-      h('p', null, 'すべての Todo が合格基準を満たしました。ただし、依頼主が受け取るまでは、完了になりません。納品物（まとめた資料）を、ファイル名を押して開いて確かめてください。'),
+      h('p', null, 'すべての目標が合格基準を満たしました。ただし、依頼主が受け取るまでは、完了になりません。納品物（まとめた資料）を、ファイル名を押して開いて確かめてください。'),
       deliverableBlock(qd),
       h('label', { class: 'lbl', for: ck }, '直してほしいこと（直す場合だけ）'),
-      textarea(ck, { id: ck, placeholder: '例：T2 の比較表に、価格の列を足してほしい' }),
+      textarea(ck, { id: ck, placeholder: '例：G2 の比較表に、価格の列を足してほしい' }),
       h('div', { class: 'btns' },
         h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'accept' }, k) }, '受け取る'),
         h('button', { class: 'btn', type: 'button', onclick: () => send(qd.id, { type: 'decision', choice: 'replan', comment: (S.form[ck] || '').trim() }, k) }, '直してほしい')),
@@ -790,11 +790,11 @@ function letterFor(qd, a) {
   if (a.kind === 'approve') {
     return h('section', { class: 'letter', 'aria-label': '計画の承認' }, seal('印'),
       h('div', { class: 'kick' }, 'お願い：承認'), h('h3', null, 'この計画で進めてよいですか'),
-      h('p', null, `地図師が、依頼を ${qd.total} つの Todo に分けました。下の「道のり」タブで Todo と合格基準を確かめて、承認してください。日付は「日付」タブで直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
+      h('p', null, `地図師が、依頼を ${qd.total} つの目標に分けました。下の「道のり」タブで目標と合格基準を確かめて、承認してください。日付は「日付」タブで直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
       planBriefBlock(qd.q.plan),
       h('span', { class: 'lbl' }, `使うインプット（${qd.inputs.length}件。外す・候補の追加は、承認の前でもできます）`), inputsBlock(qd),
       h('label', { class: 'lbl', for: k + 'fix' }, '直してほしいこと（直す場合だけ）'),
-      (() => { const t = textarea(k + ':fix', { id: k + 'fix', placeholder: '例：T2 の前に、資料を共有する Todo を足してほしい' }); return t; })(),
+      (() => { const t = textarea(k + ':fix', { id: k + 'fix', placeholder: '例：G2 の前に、資料を共有する目標を足してほしい' }); return t; })(),
       h('div', { class: 'btns' },
         h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'approve' }, k) }, '承認して進める'),
         h('button', { class: 'btn', type: 'button', onclick: () => send(qd.id, { type: 'decision', choice: 'replan', comment: (S.form[k + ':fix'] || '').trim() }, k) }, 'この内容で計画を直す'),
@@ -802,7 +802,7 @@ function letterFor(qd, a) {
       sentNote(k));
   }
   if (a.kind === 'result') {
-    const t = a.todo, ok = k + ':ok', memo = k + ':memo';
+    const t = a.goal, ok = k + ':ok', memo = k + ':memo';
     return h('section', { class: 'letter', 'aria-label': 'あなたの実行' }, seal('君'),
       h('div', { class: 'kick' }, `あなたの番：${t.id}`), h('h3', null, t.title),
       t.instruction ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, 'お願いしたいこと'), h('p', { style: 'white-space:pre-wrap;margin:0' }, t.instruction)) : null,
@@ -815,17 +815,17 @@ function letterFor(qd, a) {
       h('p', { class: 'fine', style: 'margin:10px 0 0' }, '送ると ', code(`.work/${qd.id}/inbox/`), ' に保存されます。/guild:quest が動いていれば、すぐ進みます。'), sentNote(k));
   }
   if (a.kind === 'confirm') {
-    const t = a.todo;
+    const t = a.goal;
     return h('section', { class: 'letter danger', 'aria-label': '実行前の確認' }, seal('封', 'ng'),
       h('div', { class: 'kick' }, '実行の前に確認です'), h('h3', null, `${t.id}「${t.title}」を実行してよいですか`),
-      h('p', null, 'この Todo には「外部への公開」など、元に戻せないことがある作業の確認の印が付いています。計画の承認とは別にお聞きしています。'),
+      h('p', null, 'この目標には「外部への公開」など、元に戻せないことがある作業の確認の印が付いています。計画の承認とは別にお聞きしています。'),
       h('div', { class: 'btns' },
-        h('button', { class: 'btn wax', type: 'button', onclick: () => send(qd.id, { type: 'confirm', todo: t.id, ok: true }, k) }, '実行する'),
-        h('button', { class: 'btn', type: 'button', onclick: () => send(qd.id, { type: 'confirm', todo: t.id, ok: false }, k) }, '実行しない')),
+        h('button', { class: 'btn wax', type: 'button', onclick: () => send(qd.id, { type: 'confirm', goal: t.id, ok: true }, k) }, '実行する'),
+        h('button', { class: 'btn', type: 'button', onclick: () => send(qd.id, { type: 'confirm', goal: t.id, ok: false }, k) }, '実行しない')),
       h('p', { class: 'fine', style: 'margin:10px 0 0' }, '「実行しない」を選ぶと、失敗として扱われ、進め方を選ぶ手紙に変わります。'), sentNote(k));
   }
   // decision
-  const t = a.todo, plan = qd.q.plan, deps = dependents(plan, t.id), names = deps.map((x) => x.id).join('、');
+  const t = a.goal, plan = qd.q.plan, deps = dependents(plan, t.id), names = deps.map((x) => x.id).join('、');
   const hk = k + ':how';
   return h('section', { class: 'letter danger', 'aria-label': '失敗の判断' }, seal('急', 'ng'),
     h('div', { class: 'kick' }, `困りごと：${t.id} ができませんでした`), h('h3', null, 'どう進めるか、選んでください'),
@@ -833,13 +833,13 @@ function letterFor(qd, a) {
     h('p', { class: 'fine' }, 'やり直しの上限に達したか、「実行しない」「できなかった」と答えたため、ここで判断をお願いしています。'),
     appraiserNote(qd, t),
     radio(k + 'h', hk, 'retry', `${t.id} をもう一度やる`, 'やり直しの回数を数え直して、最初から実行します。古い成果物と報告は prev/ に残ります。', '', 'drop'),
-    radio(k + 'h', hk, 'drop', deps.length ? `${t.id} と、それに続く ${names} もやめる` : `${t.id} をやめる`, deps.length ? `${names} は実行しません。ほかの Todo の成果物は残ります。` : 'この Todo を計画から外します。', '', 'drop'),
+    radio(k + 'h', hk, 'drop', deps.length ? `${t.id} と、それに続く ${names} もやめる` : `${t.id} をやめる`, deps.length ? `${names} は実行しません。ほかの目標の成果物は残ります。` : 'この目標を計画から外します。', '', 'drop'),
     deps.length ? radio(k + 'h', hk, 'skip', `${t.id} だけやめて、${names} は進める`, `${names} を実行します。`, `注意：${names} は ${t.id} が前提です。${t.id} の結果がないまま進みます。`, 'drop') : null,
-    radio(k + 'h', hk, 'replan', '計画を直す', 'たとえば「修正をもらってから、もう一度やる」Todo を足します。', '', 'drop'),
+    radio(k + 'h', hk, 'replan', '計画を直す', 'たとえば「修正をもらってから、もう一度やる」目標を足します。', '', 'drop'),
     radio(k + 'h', hk, 'abort', 'この依頼を中止する', 'ここで止めます。できた成果物は残ります。', '', 'drop'),
     h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => {
       const how = S.form[hk] || 'drop';
-      send(qd.id, how === 'replan' || how === 'abort' ? { type: 'decision', choice: how } : { type: 'decision', todo: t.id, choice: how }, k);
+      send(qd.id, how === 'replan' || how === 'abort' ? { type: 'decision', choice: how } : { type: 'decision', goal: t.id, choice: how }, k);
     } }, 'この方針で進める')), sentNote(k));
 }
 
@@ -850,8 +850,8 @@ function infoLetter(qd) {
     const part = partialOutputs(qd);
     return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, part.length ? '中止（一部の成果物あり）' : '中止'), h('h3', null, 'この依頼は中止されました'),
       part.length
-        ? [h('p', null, '合格した Todo の成果物です。納品物ではなく、途中までのものです（未鑑定・不合格のものは含みません）。'), h('ul', { class: 'flist' }, part.map((f) => fileRow(f)))]
-        : h('p', null, '合格した Todo の成果物はありません。途中のファイルは ', code(`.work/${qd.id}/output/`), ' に残っていることがあります。'));
+        ? [h('p', null, '合格した目標の成果物です。納品物ではなく、途中までのものです（未鑑定・不合格のものは含みません）。'), h('ul', { class: 'flist' }, part.map((f) => fileRow(f)))]
+        : h('p', null, '合格した目標の成果物はありません。途中のファイルは ', code(`.work/${qd.id}/output/`), ' に残っていることがあります。'));
   }
   if (qd.info === 'finished') {
     return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
@@ -863,7 +863,7 @@ function infoLetter(qd) {
 
 // ---- 詳細パネルのタブ（道のり／日付／インプット）と、報告の読み込み
 const DTABS = [['way', '道のり'], ['dates', '日付'], ['inputs', 'インプット']];
-// 報告のファイル（reports/<Todo>-<役>.md）。道のりの行に、この順で並べる
+// 報告のファイル（reports/<目標>-<役>.md）。道のりの行に、この順で並べる
 const REPORT_ROLES = [['adventurer', '冒険者'], ['scout', '斥候'], ['verify-scout', '斥候（出典の確認）'], ['user', 'あなた'], ['appraiser', '鑑定士']];
 function reportsOf(qd, tid) { return REPORT_ROLES.map(([r, label]) => ({ name: `${tid}-${r}.md`, label })).filter((x) => qd.q.reports.includes(x.name)); }
 // 報告の中身は、行を開いたとき・判断の手紙を出すときだけ読む（S.rcache に覚える。null は読み込み中、'' は読めなかった）
@@ -892,10 +892,10 @@ function reportLine(qd, r) {
         h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${r.name} のパスをコピー`, onclick: () => copyPath(rel) }, 'パスをコピー'))),
     txt === null ? h('p', { class: 'fine', style: 'margin:2px 0 0' }, '読み込み中…') : lines.length ? h('p', { class: 'repx' }, lines.join(' ／ ')) : null);
 }
-function todoRow(qd, t) {
-  const key = `${qd.id}:${t.id}`, open = S.openTodo === key, over = overdue(t, Date.now()), warns = dateIssues(qd.q.plan, t).concat(flowIssues(qd.q.plan, t)), reps = open ? reportsOf(qd, t.id) : [];
+function goalRow(qd, t) {
+  const key = `${qd.id}:${t.id}`, open = S.open目標 === key, over = overdue(t, Date.now()), warns = dateIssues(qd.q.plan, t).concat(flowIssues(qd.q.plan, t)), reps = open ? reportsOf(qd, t.id) : [];
   return h('div', { class: 'td' + (open ? ' open' : '') + (over ? ' over' : '') },
-    h('button', { type: 'button', class: 'tdrow', 'aria-expanded': String(open), 'aria-controls': `td-${key}`, 'data-key': 'td:' + key, onclick: () => { S.openTodo = open ? null : key; render(); } },
+    h('button', { type: 'button', class: 'tdrow', 'aria-expanded': String(open), 'aria-controls': `td-${key}`, 'data-key': 'td:' + key, onclick: () => { S.open目標 = open ? null : key; render(); } },
       h('span', { class: 'tid' }, t.id),
       h('span', { class: 'tdt' }, h('span', { class: 'kind' }, t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動（実行前に確認）' : '自動'), h('b', null, t.title)),
       h('span', { class: 'tdd' }, '予定 ', t.scheduled || '—'),
@@ -910,33 +910,33 @@ function todoRow(qd, t) {
         reps.length ? reps.map((r) => reportLine(qd, r)) : h('p', { class: 'fine', style: 'margin:4px 0 0' }, 'まだ報告はありません。'))) : null);
 }
 function wayTab(qd) {
-  if (!qd.todos.length) return h('p', { class: 'sub' }, 'Todo はありません。');
-  const cur = qd.todos.find((t) => S.openTodo === `${qd.id}:${t.id}`);
+  if (!qd.goals.length) return h('p', { class: 'sub' }, '目標はありません。');
+  const cur = qd.goals.find((t) => S.open目標 === `${qd.id}:${t.id}`);
   return h('div', { class: 'waygrid' },
-    h('div', { class: 'waylist' }, h('p', { class: 'fine', style: 'margin:0 0 6px' }, '行を開くと、合格基準と報告が読めます。日付を直すときは「日付」タブへ。'), qd.todos.map((t) => todoRow(qd, t))),
-    h('aside', { class: 'critside', 'aria-label': '選んだ Todo の合格基準' },
+    h('div', { class: 'waylist' }, h('p', { class: 'fine', style: 'margin:0 0 6px' }, '行を開くと、合格基準と報告が読めます。日付を直すときは「日付」タブへ。'), qd.goals.map((t) => goalRow(qd, t))),
+    h('aside', { class: 'critside', 'aria-label': '選んだ目標の合格基準' },
       cur ? [h('b', null, `${cur.id} の合格基準`), critList(cur)] : h('p', { class: 'fine', style: 'margin:0' }, '行を開くと、ここに合格基準が出ます。')));
 }
-// ---- 日付タブ：このクエストのガントと、依頼・Todo の日付の表
-// 表示の範囲（日番号）。依頼の開始日・締切と Todo の予定日のうち、正しい日付（okDate）だけを使い、前後に1日ずつ足す。
+// ---- 日付タブ：このクエストのガントと、依頼・目標の日付の表
+// 表示の範囲（日番号）。依頼の開始日・締切と目標の予定日のうち、正しい日付（okDate）だけを使い、前後に1日ずつ足す。
 // 正しい日付が1つもなければ今日。狭すぎると読めないので、幅は最低7日
 function dateRange(plan) {
-  const p = plan || {}, ds = [p.start, p.due, ...(Array.isArray(p.todos) ? p.todos : []).map((t) => t && t.scheduled)].filter(okDate).map(dayNum);
+  const p = plan || {}, ds = [p.start, p.due, ...(Array.isArray(p.goals) ? p.goals : []).map((t) => t && t.scheduled)].filter(okDate).map(dayNum);
   if (!ds.length) ds.push(dayNum(localToday()));
   const min = Math.min(...ds) - 1, max = Math.max(Math.max(...ds) + 1, min + 6);
   return { min, max };
 }
-// このクエストのガントのモデル。帯は開始日〜締切、◆ は Todo の予定日（不正なら開始日、それもなければ描かない）
+// このクエストのガントのモデル。帯は開始日〜締切、◆ は目標の予定日（不正なら開始日、それもなければ描かない）
 function qGanttModel(plan) {
   const p = plan || {}, r = dateRange(p), start = okDate(p.start) ? p.start : null, due = okDate(p.due) ? p.due : start;
-  const todos = (Array.isArray(p.todos) ? p.todos : []).map((t) => ({ id: t.id, title: t.title || '', state: t.state, scheduled: okDate(t.scheduled) ? t.scheduled : start, due: okDate(t.due) ? t.due : null }));
-  return { min: r.min, max: r.max, today: dayNum(localToday()), start, due, todos };
+  const goals = (Array.isArray(p.goals) ? p.goals : []).map((t) => ({ id: t.id, title: t.title || '', state: t.state, scheduled: okDate(t.scheduled) ? t.scheduled : start, due: okDate(t.due) ? t.due : null }));
+  return { min: r.min, max: r.max, today: dayNum(localToday()), start, due, goals };
 }
 function questGantt(qd) {
   const m = qGanttModel(qd.q.plan), LABEL = 200, W = 900, ROW = 24, HEAD = 30, n = m.max - m.min + 1, DW = (W - LABEL - 12) / n;
-  const x = (d) => LABEL + (d - m.min) * DW + DW / 2, H = HEAD + (m.todos.length + 1) * ROW + 8, every = Math.max(1, Math.ceil(44 / DW));
+  const x = (d) => LABEL + (d - m.min) * DW + DW / 2, H = HEAD + (m.goals.length + 1) * ROW + 8, every = Math.max(1, Math.ceil(44 / DW));
   const cut = (s, k) => (s.length > k ? s.slice(0, k) + '…' : s);
-  const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': `${qd.id} の予定（帯は開始日から締切、◆ は Todo の予定日）`, class: 'gantt qgantt' });
+  const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': `${qd.id} の予定（帯は開始日から締切、◆ は目標の予定日）`, class: 'gantt qgantt' });
   for (let d = m.min, k = 0; d <= m.max; d++, k++) {
     svg.append(sv('line', { x1: x(d), x2: x(d), y1: HEAD - 4, y2: H, stroke: 'var(--line)', 'stroke-width': 1, opacity: 0.5 }));
     if (k % every === 0) svg.append(sv('text', { x: x(d), y: 14, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--sub)' }, shortDate(dayStr(d))));
@@ -945,7 +945,7 @@ function questGantt(qd) {
   let y = HEAD + ROW / 2;
   svg.append(sv('text', { x: 4, y: y + 4, 'font-size': 12, 'font-weight': 700, fill: 'var(--ink)' }, `${qd.id} ${cut(qd.title, 12)}`));
   if (m.start) { const x1 = x(dayNum(m.start)) - DW / 2, x2 = x(dayNum(m.due)) + DW / 2; svg.append(sv('rect', { x: x1, y: y - 7, width: Math.max(x2 - x1, 6), height: 14, rx: 3, fill: 'var(--surface2)', stroke: 'var(--brass)' })); }
-  for (const t of m.todos) {
+  for (const t of m.goals) {
     y += ROW;
     svg.append(sv('text', { x: 16, y: y + 4, 'font-size': 11, fill: 'var(--sub)' }, `${t.id} ${cut(t.title, 13)}`));
     if (!t.scheduled) continue;
@@ -955,27 +955,27 @@ function questGantt(qd) {
   }
   return svg;
 }
-// 依頼の開始日・締切と、Todo ごとの予定日・締切を、まとめて直して送る。下書きは S.form の dt:<依頼>:… に持つ。
-// 空の欄は「変えない」（Todo の締切だけは、空にすると解除）。入力中は描き直さず、行の色・注意・ボタンだけをその場で直す（日付の欄の入力位置を保つ）
+// 依頼の開始日・締切と、目標ごとの予定日・締切を、まとめて直して送る。下書きは S.form の dt:<依頼>:… に持つ。
+// 空の欄は「変えない」（目標の締切だけは、空にすると解除）。入力中は描き直さず、行の色・注意・ボタンだけをその場で直す（日付の欄の入力位置を保つ）
 function datesTab(qd) {
   const p = qd.q.plan, editable = (p.status === 'active' || p.status === undefined) && !p.accepted, k = `dt:${qd.id}`;
   const val = (f, cur) => (S.form[`${k}:${f}`] !== undefined ? S.form[`${k}:${f}`] : (cur || ''));
   const mk = (f, cur, label) => { const i = h('input', { type: 'date', 'aria-label': label, disabled: !editable }); i.value = val(f, cur); bindKey(i, `${k}:${f}`); return i; };
   const qs = mk('start', p.start, '依頼の開始日'), qdue = mk('due', p.due, '依頼の締切'), qwarn = h('p', { class: 'dtw' });
   const qbox = h('div', { class: 'dtq' }, h('b', null, '依頼の日付'), h('label', null, '開始日 ', qs), h('label', null, '締切 ', qdue), qwarn);
-  const rows = qd.todos.map((t) => {
+  const rows = qd.goals.map((t) => {
     const sch = mk(`${t.id}:scheduled`, t.scheduled, `${t.id} の予定日`), due = mk(`${t.id}:due`, t.due, `${t.id} の締切`), warn = h('span', { class: 'dtw' });
     const tr = h('div', { class: 'dtr', role: 'row' }, h('b', { class: 'tid', role: 'cell' }, t.id), h('span', { role: 'cell', class: 'dtt' }, t.title, ' ', stampEl(t.stamp, t.cls + ' sm')),
       h('span', { role: 'cell' }, sch), h('span', { role: 'cell' }, due), h('span', { role: 'cell' }, warn));
     return { t, sch, due, warn, tr };
   });
-  // 送る中身（変わったものだけ）。空の欄は今の値のまま。Todo の締切だけは空＝null（解除）
+  // 送る中身（変わったものだけ）。空の欄は今の値のまま。目標の締切だけは空＝null（解除）
   const changes = () => {
     const out = [], st = qs.value || p.start, du = qdue.value || p.due;
     if (st !== p.start || du !== p.due) out.push({ type: 'due', start: st, due: du });
     for (const { t, sch, due } of rows) {
       const scheduled = sch.value || t.scheduled, d = due.value || null;
-      if (scheduled !== t.scheduled || d !== (t.due || null)) out.push({ type: 'due', todo: t.id, scheduled, due: d });
+      if (scheduled !== t.scheduled || d !== (t.due || null)) out.push({ type: 'due', goal: t.id, scheduled, due: d });
     }
     return out;
   };
@@ -983,10 +983,10 @@ function datesTab(qd) {
   const undo = h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { for (const f of Object.keys(S.form)) if (f.startsWith(k + ':')) delete S.form[f]; render(); } }, '元に戻す');
   const sync = () => {
     const probe = { ...p, start: qs.value || p.start, due: qdue.value || p.due };
-    probe.todos = qd.todos.map((t, i) => ({ ...t, scheduled: rows[i].sch.value || t.scheduled, due: rows[i].due.value || null }));
+    probe.goals = qd.goals.map((t, i) => ({ ...t, scheduled: rows[i].sch.value || t.scheduled, due: rows[i].due.value || null }));
     rows.forEach((r, i) => {
-      r.tr.classList.toggle('chg', probe.todos[i].scheduled !== r.t.scheduled || probe.todos[i].due !== (r.t.due || null));
-      r.warn.textContent = dateIssues(probe, probe.todos[i]).join(' ');
+      r.tr.classList.toggle('chg', probe.goals[i].scheduled !== r.t.scheduled || probe.goals[i].due !== (r.t.due || null));
+      r.warn.textContent = dateIssues(probe, probe.goals[i]).join(' ');
     });
     qbox.classList.toggle('chg', probe.start !== p.start || probe.due !== p.due);
     qwarn.textContent = okDate(probe.start) && okDate(probe.due) && probe.due < probe.start ? '締切が開始日より前です。' : '';
@@ -996,7 +996,7 @@ function datesTab(qd) {
   btn.addEventListener('click', async () => {
     const list = changes(); if (!list.length) return;
     btn.disabled = true;
-    for (const body of list) { await send(qd.id, body, `${k}:sent`); if (S.fallback) return; }  // Todo ごとに別の入力（1つ失敗したら止める）
+    for (const body of list) { await send(qd.id, body, `${k}:sent`); if (S.fallback) return; }  // 目標ごとに別の入力（1つ失敗したら止める）
     for (const f of Object.keys(S.form)) if (f.startsWith(k + ':')) delete S.form[f];
     render();
   });
@@ -1005,10 +1005,10 @@ function datesTab(qd) {
   const pend = qd.q.inbox.some((x) => x.type === 'due');
   return [
     h('div', { class: 'ganttbox' }, questGantt(qd)),
-    h('p', { class: 'fine', style: 'margin:4px 0 12px' }, '帯は依頼の開始日〜締切、◆ は Todo の予定日（色は状態）、赤い点線は今日です。'),
+    h('p', { class: 'fine', style: 'margin:4px 0 12px' }, '帯は依頼の開始日〜締切、◆ は目標の予定日（色は状態）、赤い点線は今日です。'),
     qbox,
-    h('div', { class: 'dtable', role: 'table', 'aria-label': 'Todo の日付' }, h('div', { class: 'dtr dth', role: 'row' }, ['番号', 'Todo', '予定日', '締切', '注意'].map((c) => h('span', { role: 'columnheader' }, c))), rows.map((r) => r.tr)),
-    editable ? h('div', { class: 'btns' }, btn, undo, h('span', { class: 'fine', style: 'align-self:center' }, '注意は表示だけで、送れます。日付を変えても、ほかの Todo の日付は自動では動きません。空の欄は今の日付のままです（Todo の締切だけは、空にすると解除）。'))
+    h('div', { class: 'dtable', role: 'table', 'aria-label': '目標の日付' }, h('div', { class: 'dtr dth', role: 'row' }, ['番号', '目標', '予定日', '締切', '注意'].map((c) => h('span', { role: 'columnheader' }, c))), rows.map((r) => r.tr)),
+    editable ? h('div', { class: 'btns' }, btn, undo, h('span', { class: 'fine', style: 'align-self:center' }, '注意は表示だけで、送れます。日付を変えても、ほかの目標の日付は自動では動きません。空の欄は今の日付のままです（目標の締切だけは、空にすると解除）。'))
       : h('p', { class: 'fine' }, '中止・見直し中・受け取り後のクエストの日付は直せません。'),
     pend ? h('p', { class: 'fine', role: 'status' }, '送った日付の変更が、反映を待っています（/guild:quest が動いていれば、すぐ反映されます）。') : null,
     sentNote(`${k}:sent`)];
@@ -1021,11 +1021,11 @@ function planBriefBlock(p) {
   const b = p.brief, warns = (p.check && p.check.warnings) || [], w = p.workload, df = p.replan_diff;
   const idTitle = (x) => `${x.id}「${x.title || ''}」`;
   return h('div', { class: 'planbrief' },
-    b && b.goal ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, '依頼の理解（言い換え）'), h('p', { style: 'margin:4px 0 0' }, b.goal)) : null,
+    b && b.intent ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, '依頼の理解（言い換え）'), h('p', { style: 'margin:4px 0 0' }, b.intent)) : null,
     b ? list('含めないこと', b.non_goals) : null,
     b ? list('推測で決めた前提（違っていたら「計画を直す」で伝えてください）', b.assumptions) : null,
     b ? list('うまくいかないかもしれないこと', b.risks) : null,
-    b && Array.isArray(b.coverage) && b.coverage.length ? list('依頼の要件と、それを満たす Todo', b.coverage.map((c) => `${c.requirement} → ${c.todos && c.todos.length ? c.todos.join('、') : '対応する Todo がありません'}`)) : null,
+    b && Array.isArray(b.coverage) && b.coverage.length ? list('依頼の要件と、それを満たす目標', b.coverage.map((c) => `${c.requirement} → ${c.goals && c.goals.length ? c.goals.join('、') : '対応する目標がありません'}`)) : null,
     warns.length ? list('計画の点検で気づいたこと（警告）', warns, 'fine warnlist') : null,
     w ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, 'あなたの作業量'),
       h('p', { style: 'margin:4px 0 0' }, w.human ? `あなたの実行は ${w.human} 件です（${Object.entries(w.days || {}).map(([d, n]) => `${d}：${n}件`).join('、')}）。` : 'あなたの実行はありません。すべて自動で進みます。'),
@@ -1033,7 +1033,7 @@ function planBriefBlock(p) {
       w.over_deadline && w.over_deadline.length ? h('p', { class: 'fine warnlist', style: 'margin:4px 0 0' }, `依頼の締切を過ぎる予定があります：${w.over_deadline.join('、')}`) : null) : null,
     df ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, '前の計画からの変更'),
       h('p', { class: 'fine', style: 'margin:4px 0 0' }, `引き継いだ（やり直さない）：${df.carried && df.carried.length ? df.carried.join('、') : 'なし'}`),
-      list('足した Todo', (df.added || []).map(idTitle)), list('なくした Todo', (df.removed || []).map(idTitle)), list('変えた Todo', (df.changed || []).map(idTitle))) : null);
+      list('足した目標', (df.added || []).map(idTitle)), list('なくした目標', (df.removed || []).map(idTitle)), list('変えた目標', (df.changed || []).map(idTitle))) : null);
 }
 const TEXT_INPUT = /\.(md|txt|csv)$/i;  // 画面で開けるもの（それ以外は、パスをコピーして開く）
 function inputsEditable(qd) { const p = qd.q.plan; return !!p && (p.status === 'active' || p.status === undefined) && !p.accepted; }
@@ -1136,7 +1136,7 @@ function questDetail(qd) {
 
 // ============================================================ クエスト進捗（ガント）
 const DAY_MS = 86400000;
-const dayNum = (s) => Math.floor(Date.parse(s + 'T00:00:00Z') / DAY_MS);
+const dayNum = (s) => Math.floor(Date.parse(s + 'G00:00:00Z') / DAY_MS);
 const dayStr = (n) => new Date(n * DAY_MS).toISOString().slice(0, 10);
 const okDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(dayNum(s));  // 不正な日付は無視する
 
@@ -1148,16 +1148,16 @@ function scheduleModel(quests, includeClosed, ids) {
     const state = p.status === 'aborted' ? 'aborted' : (p.accepted ? 'done' : 'active');
     if (!includeClosed && state !== 'active') continue;
     if (only && !only.has(q.id)) continue;
-    const todos = p.todos.map((t) => ({ id: t.id, title: t.title, kind: t.kind, state: t.state, scheduled: okDate(t.scheduled) ? t.scheduled : p.start, due: okDate(t.due) ? t.due : null }));
-    rows.push({ id: q.id, title: q.title, start: p.start, due: okDate(p.due) ? p.due : p.start, state, done: todos.filter((t) => closed(t.state)).length, total: todos.length, todos });
+    const goals = p.goals.map((t) => ({ id: t.id, title: t.title, kind: t.kind, state: t.state, scheduled: okDate(t.scheduled) ? t.scheduled : p.start, due: okDate(t.due) ? t.due : null }));
+    rows.push({ id: q.id, title: q.title, start: p.start, due: okDate(p.due) ? p.due : p.start, state, done: goals.filter((t) => closed(t.state)).length, total: goals.length, goals });
   }
   rows.sort((a, b) => a.id.localeCompare(b.id));
-  const days = rows.flatMap((r) => [r.start, r.due, ...r.todos.map((t) => t.scheduled)]).map(dayNum);
+  const days = rows.flatMap((r) => [r.start, r.due, ...r.goals.map((t) => t.scheduled)]).map(dayNum);
   const today = dayNum(localToday());  // 利用者の地方日付（UTC ではない）
   let min = days.length ? Math.min(...days, today) : today, max = days.length ? Math.max(...days, today) : today;
   min -= 1; max += 1; if (max - min < 7) max = min + 7;
   const byDay = new Map();
-  for (const r of rows) for (const t of r.todos) if (t.kind === 'human') {
+  for (const r of rows) for (const t of r.goals) if (t.kind === 'human') {
     const k = dayNum(t.scheduled), e = byDay.get(k) || { day: k, open: 0, done: 0 };
     if (closed(t.state)) e.done++; else e.open++;
     byDay.set(k, e);
@@ -1167,15 +1167,15 @@ function scheduleModel(quests, includeClosed, ids) {
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const sv = (tag, attrs, ...kids) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c)); return e; };
-// Todo の状態の色（印と同じ系統）
+// 目標の状態の色（印と同じ系統）
 const STATE_FILL = { pending: 'var(--mute)', blocked: 'var(--stop)', awaiting_confirm: 'var(--warn)', running: 'var(--brass)', waiting_user: 'var(--warn)', review: 'var(--brass)', done: 'var(--ok)', failed: 'var(--ng)', skipped: 'var(--stop)' };
 
 function ganttSvg(m) {
   const LABEL = 210, PAD = 16, ROW = 26, HEAD = 34, W = 1000, n = m.max - m.min + 1, DW = (W - LABEL - PAD) / n;
   const x = (day) => LABEL + (day - m.min) * DW + DW / 2;
-  const rows = m.rows.flatMap((r) => [{ q: r }, ...r.todos.map((t) => ({ q: r, t }))]);
+  const rows = m.rows.flatMap((r) => [{ q: r }, ...r.goals.map((t) => ({ q: r, t }))]);
   const H = HEAD + rows.length * ROW + 10, today = m.today;
-  const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': '依頼と Todo の予定', class: 'gantt' });
+  const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': '依頼と目標の予定', class: 'gantt' });
   // 罫線の数を抑える：範囲が広いほど間引く（最大およそ 300 本）
   const step = Math.max(n <= 31 ? 1 : n <= 120 ? 7 : 30, Math.ceil(n / 300));
   const every = Math.max(1, Math.ceil(60 / (step * DW)));  // ラベルは約 60px 以上あけて、おきに描く
@@ -1203,7 +1203,7 @@ function ganttSvg(m) {
 }
 
 function humanBars(m) {
-  if (!m.humanDays.length) return h('p', { class: 'sub' }, 'あなたの実行（human）の Todo はありません。');
+  if (!m.humanDays.length) return h('p', { class: 'sub' }, 'あなたの実行（human）の目標はありません。');
   const peak = Math.max(...m.humanDays.map((d) => d.open + d.done)), BW = 46, BH = 120, W = Math.max(m.humanDays.length * BW + 40, 300);
   const svg = sv('svg', { viewBox: `0 0 ${W} ${BH + 44}`, width: Math.min(W, 1000), style: `width:${Math.min(W, 1000)}px`, role: 'img', 'aria-label': '予定日ごとのあなたの実行の件数', class: 'gantt humbars' });
   m.humanDays.forEach((d, i) => {
@@ -1299,7 +1299,7 @@ function progressTab() {
     ids.length > MAX_TAGS ? h('span', { class: 'fine' }, `ほか ${ids.length - MAX_TAGS}件`) : null);
   const hiddenClosed = !inc && Array.isArray(S.prog.sel) && S.prog.sel.some((id) => byId.has(id) && planClosed(byId.get(id)));
   return [h('h2', { class: 'h2' }, 'クエスト進捗'),
-    h('p', { class: 'sub', style: 'margin:0 0 8px' }, '依頼は開始日から締切までの帯です（緑の塗りが、合格した Todo の割合）。◆ は Todo の予定日で、色が状態です。赤い点線は今日です。'),
+    h('p', { class: 'sub', style: 'margin:0 0 8px' }, '依頼は開始日から締切までの帯です（緑の塗りが、合格した目標の割合）。◆ は目標の予定日で、色が状態です。赤い点線は今日です。'),
     h('section', { class: 'pbar', 'aria-label': '絞り込み' }, progPicker(m0, inc, eff, base), quick, h('label', { class: 'fine', for: 'prog:closed' }, chk, ' 完了・中止した依頼も含める')),
     tags, legend,
     m.rows.length ? h('div', { class: 'ganttbox' }, ganttSvg(m))
@@ -1365,7 +1365,7 @@ function newDialog() {
       h('p', { class: 'fine nsum' }, newSummary(picked, ups, over))),
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
     h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn go', disabled: S.conn !== 'ok', onclick: sendRequest }, 'クエストを出す'), h('button', { type: 'button', class: 'btn ghost', onclick: closeNew }, 'やめる'),
-      h('span', { class: 'fine', style: 'align-self:center' }, '出すと、地図師が Todo に分け、日付も付けて、承認を求めます。')));
+      h('span', { class: 'fine', style: 'align-self:center' }, '出すと、地図師が目標に分け、日付も付けて、承認を求めます。')));
   box.addEventListener('keydown', trapTab);
   return h('div', { class: 'reader nmodal', onclick: (e) => { if (e.target === e.currentTarget) closeNew(); } }, box);
 }
@@ -1430,7 +1430,7 @@ function boardList(m) {
   return { q, f, counts, open, closed, nav: S.showClosed ? [...open, ...closed] : open };
 }
 function selectQuest(id) {
-  S.sel = id; S.pane = 'detail'; S.openTodo = null; render();
+  S.sel = id; S.pane = 'detail'; S.open目標 = null; render();
   const el = document.querySelector('.qpanel'), bar = document.querySelector('.tabs');
   if (el) { const top = el.getBoundingClientRect().top - (bar ? bar.offsetHeight : 0) - 8; if (top < 0 || top > window.innerHeight * 0.6) window.scrollTo(0, window.scrollY + top); }
 }
@@ -1740,7 +1740,7 @@ function flowSvg() {
   // 受付〜計画
   box(20, 20, 'me', '依頼を書く', '「＋ 新規」で出す');
   box(270, 20, 'gm', '受け付ける', '依頼のフォルダを作る');
-  box(520, 20, 'cart', 'Todo に分解', '前提・合格基準・形式');
+  box(520, 20, 'cart', '目標に分解', '前提・合格基準・形式');
   box(770, 20, 'me', '質問に答える', 'あいまいなときだけ');
   arrow([[220, 52], [270, 52]]); arrow([[470, 52], [520, 52]]);
   arrow([[720, 40], [770, 40]], '質問', 726, 33); arrow([[770, 66], [720, 66]], '回答', 728, 80);
@@ -1748,15 +1748,15 @@ function flowSvg() {
   arrow([[620, 84], [620, 118]]);
   // 実行ループ
   svg.append(E('rect', { x: 10, y: 205, width: 980, height: 315, rx: 10, style: 'fill:none;stroke:var(--brass);stroke-width:2;stroke-dasharray:7 5' }));
-  note(24, 227, '実行ループ（Todo ごとに、前提が済んだものからくり返す。独立した Todo は同時に進む。最後は「まとめの Todo」）');
+  note(24, 227, '実行ループ（目標ごとに、前提が済んだものからくり返す。独立した目標は同時に進む。最後は「まとめの目標」）');
   arrow([[620, 182], [620, 205]]);
-  box(40, 240, 'me', '実行前の確認', '確認の印がある Todo');
+  box(40, 240, 'me', '実行前の確認', '確認の印がある目標');
   box(40, 325, 'adv', '実行する', '調べる・書く（動的ページは斥候）');
   box(40, 410, 'me', 'あなたの実行', '他システムの操作・承認・判断');
   arrow([[140, 304], [140, 325]]);
   box(300, 325, 'app', '合格基準で判定', '合格か、不合格か');
   arrow([[240, 349], [300, 349]]); arrow([[240, 442], [272, 442], [272, 370], [300, 370]]);
-  box(560, 325, 'sys', '合格 → 次の Todo へ', '前提が済んだ Todo が動く');
+  box(560, 325, 'sys', '合格 → 次の目標へ', '前提が済んだ目標が動く');
   arrow([[500, 357], [560, 357]], '合格', 512, 349);
   box(300, 240, 'adv', '出典を読む（斥候）', '開けない出典を、ブラウザで読む', 230);
   arrow([[400, 325], [400, 304]], '開けない出典は確認を頼む（1回）', 412, 319, false, true);
@@ -1765,13 +1765,13 @@ function flowSvg() {
   box(560, 420, 'me', '失敗の判断', 'やめる・進める・直す・中止');
   arrow([[500, 452], [560, 452]], '上限超え', 502, 444);
   note(560, 506, '「実行しない」「できなかった」を選んだときも、ここへ');
-  box(790, 325, 'sys', '計画を直す', '合格済みの Todo は引き継ぐ', 190);
+  box(790, 325, 'sys', '計画を直す', '合格済みの目標は引き継ぐ', 190);
   arrow([[760, 452], [885, 452], [885, 389]], '直す', 800, 444, true);
   note(800, 478, '→ 地図師が作り直して、再承認');
-  note(24, 506, '不合格のとき、「あなたの実行」の Todo は、あなたに戻ります');
+  note(24, 506, '不合格のとき、「あなたの実行」の目標は、あなたに戻ります');
   // 納品
   arrow([[140, 520], [140, 550]]);
-  box(40, 550, 'sys', '全 Todo が済む', '最後のまとめの Todo が納品物を作る', 210);
+  box(40, 550, 'sys', '全目標が済む', '最後のまとめの目標が納品物を作る', 210);
   box(300, 550, 'me', '受け取りの確認', '受け取る／直してほしい');
   box(560, 550, 'lib', '書庫に残す', '依頼主が登録を選ぶ');
   arrow([[250, 582], [300, 582]]); arrow([[500, 582], [560, 582]], '受け取る', 506, 574);
@@ -1785,10 +1785,10 @@ function flowSvg() {
 // ヘルプの「役」。モデルは ROLE_MODELS（agents/*.md の model と、テストで一致を確かめている）から引く
 const ROLES = [
   ['ギルドマスター', null, '/guild:quest が動いている間、ずっと', '依頼を受け付け、役を呼び、あなたの答えを待ちます。進め方の判断（順序・遷移・やり直し）は guild.py に任せ、自分では判断しません。', '/guild:quest を動かしているセッションのモデル'],
-  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を Todo に分け、使うインプットを理由つきで選び（迷うものは候補に）、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる Todo を決めます。納品物は Markdown だけです。PowerPoint・Excel など Markdown 以外が要るときは、Claude Code に渡すプロンプト（*.prompt.md）にします。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
-  ['冒険者', 'adventurer', '自動でできる Todo ごと', '調べる・書き写す・整理する・書く。最後のまとめの Todo では、納品物の資料（Markdown）を作ります。Markdown 以外が要る部分は、Claude Code に渡すプロンプト（*.prompt.md）を書きます。報告は .work/Q###/reports/、成果物は .work/Q###/output/ に書き、納品物は全 Todo が済んだとき guild.py が deliverables/ に置きます。'],
-  ['斥候', 'scout', '動的ページを読む Todo。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
-  ['鑑定士', 'appraiser', 'Todo ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、斥候に読んでもらいます。成果物は直しません。'],
+  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を目標に分け、使うインプットを理由つきで選び（迷うものは候補に）、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる目標を決めます。納品物は Markdown だけです。PowerPoint・Excel など Markdown 以外が要るときは、Claude Code に渡すプロンプト（*.prompt.md）にします。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
+  ['冒険者', 'adventurer', '自動でできる目標ごと', '調べる・書き写す・整理する・書く。最後のまとめの目標では、納品物の資料（Markdown）を作ります。Markdown 以外が要る部分は、Claude Code に渡すプロンプト（*.prompt.md）を書きます。報告は .work/Q###/reports/、成果物は .work/Q###/output/ に書き、納品物は全目標が済んだとき guild.py が deliverables/ に置きます。'],
+  ['斥候', 'scout', '動的ページを読む目標。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
+  ['鑑定士', 'appraiser', '目標ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、斥候に読んでもらいます。成果物は直しません。'],
   ['司書', 'librarian', '依頼が完了したあと、中止したあと', '報告と成果物から、書庫に残す用語・業務フロー・業務情報・個人・心得の候補を、12件まで挙げます。登録はしません（選ぶのはあなたです。心得だけは、そのまま登録されます）。'],
   ['あなた', null, '計画の承認・確認の印の前・「あなたの実行」・失敗の判断・受け取り', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。', '—']];
 function rolesCard() {
@@ -1825,28 +1825,28 @@ function helpGrid() {
     sec('使い方', h('ol', null,
       h('li', null, h('b', null, '依頼を書く。'), '「クエスト掲示板」の「＋ 新規」で、依頼の内容・開始日・締切を書き、使う資料（インプット）を既存から選ぶかアップロードして、「クエストを出す」を押します。'),
       h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります（動いている間は、新しい依頼を自動で受け付けます）。足りないことは、この画面の「質問」の手紙で聞かれます。'),
-      h('li', null, h('b', null, '計画を承認する。'), '依頼が Todo に分けられ、承認の手紙が出ます。使うインプット（あなたの「指定」と、地図師が理由つきで選んだ「自動」）も、ここで外したり、候補から追加したりできます。承認はこの1回だけです。'),
+      h('li', null, h('b', null, '計画を承認する。'), '依頼が目標に分けられ、承認の手紙が出ます。使うインプット（あなたの「指定」と、地図師が理由つきで選んだ「自動」）も、ここで外したり、候補から追加したりできます。承認はこの1回だけです。'),
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「クエスト掲示板」の詳細に手紙が出ます。'),
       h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。'))),
     sec('クエスト掲示板の使い方', dl([
       ['一覧', '左にクエストの一覧があります。番号・題名で探せ、状態（すべて／あなたの番／進行中／受け取り待ち／完了）で絞れます。完了・中止は、ふだんは畳んであります。'],
       ['詳細', '行を押すと、右に詳細が出ます。上に「あなたの番」の手紙、下にタブ「道のり」「日付」「インプット」があります。'],
       ['一覧を隠す', '詳細を横幅いっぱいにします。上のツールバーの「‹ ›」で前後のクエストへ移り、検索で番号・題名から開けます。隠したことは、このブラウザが覚えます。狭い画面では、一覧と詳細を切り替えます（「‹ 一覧へ戻る」）。'],
-      ['道のり', 'Todo の一覧です。行を開くと、合格基準と報告（冒険者・斥候・鑑定士・あなた）が読めます。失敗の判断の手紙には、鑑定士の指摘が出ます。'],
-      ['日付', 'このクエストのガントと、依頼の開始日・締切、Todo の予定日・締切の表です。直して「変更を送る」を押します。順序の矛盾は注意だけで、ほかの日付は自動では動きません。'],
+      ['道のり', '目標の一覧です。行を開くと、合格基準と報告（冒険者・斥候・鑑定士・あなた）が読めます。失敗の判断の手紙には、鑑定士の指摘が出ます。'],
+      ['日付', 'このクエストのガントと、依頼の開始日・締切、目標の予定日・締切の表です。直して「変更を送る」を押します。順序の矛盾は注意だけで、ほかの日付は自動では動きません。'],
       ['インプット', 'このクエストが使うファイルです。「外す」「追加」「既存から選ぶ」で直せます（承認の前でも後でも）。'],
       ['進捗で見る', 'このクエストだけを選んだ状態で、「クエスト進捗」を開きます。']])),
     sec('スキルの使い方（チャットで使う）', dl([['/guild:init', 'プロジェクトのフォルダで、最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。何度実行しても、依頼や書庫の項目は消えません。プラグインを更新したあとにもう一度実行すると、この画面が最新になります。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。質問・承認・確認は、チャットではなく、この画面の「手紙」で聞きます。動いている間は、この画面での答えを待ち続け、届くとすぐ取り込みます。'], ['止まったとき', 'しばらく動きがなければ、チャットで /guild:quest と送ってください。保存済みの答えや依頼を読み取って、続きから進めます。']])),
-    sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（クエスト掲示板の一覧で使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', 'Todo ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全 Todo が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
-      h('p', { class: 'fine', style: 'margin:0 0 6px' }, 'Todo の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の Todo が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう Todo です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の Todo ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
-    sec('言葉の説明', dl([['Todo', '依頼を分けた、ひとつひとつの作業。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['インプット', '依頼で使う資料（guild/inputs/ に1つだけ置き、各クエストは名前で参照）。あなたが「＋ 新規」で選んだものが「指定」、地図師が依頼文と書庫をもとに理由つきで選んだものが「自動」です。地図師が迷ったものは「候補」になります。'], ['書庫の紐づけ', '書庫の項目に「インプット」を書いておくと、依頼文にその項目の名前・別名が出てきたとき、地図師にそのファイルが勧められます（確認済み・出典ありの項目の、3文字以上の語だけ）。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
+    sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（クエスト掲示板の一覧で使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', '目標ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全目標が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
+      h('p', { class: 'fine', style: 'margin:0 0 6px' }, '目標の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の目標が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう目標です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の目標ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
+    sec('言葉の説明', dl([['目標', '依頼を分けた、ひとつひとつの作業。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['インプット', '依頼で使う資料（guild/inputs/ に1つだけ置き、各クエストは名前で参照）。あなたが「＋ 新規」で選んだものが「指定」、地図師が依頼文と書庫をもとに理由つきで選んだものが「自動」です。地図師が迷ったものは「候補」になります。'], ['書庫の紐づけ', '書庫の項目に「インプット」を書いておくと、依頼文にその項目の名前・別名が出てきたとき、地図師にそのファイルが勧められます（確認済み・出典ありの項目の、3文字以上の語だけ）。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
     sec('困ったとき', h('div', { class: 'faq' },
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
       faq('間違えて承認した', 'チャットで「計画を直したい」と伝えてください。実行が始まる前なら、計画を作り直せます。'),
-      faq('予定や進み具合を見たい', '「クエスト進捗」のタブに、選んだクエストの帯と Todo の予定日（◆）、あなたの実行の日ごとの件数が出ます。「表示するクエスト」で絞れ、選んだものはこのブラウザが覚えます。日付は、クエスト掲示板の詳細の「日付」タブで直せます。'),
+      faq('予定や進み具合を見たい', '「クエスト進捗」のタブに、選んだクエストの帯と目標の予定日（◆）、あなたの実行の日ごとの件数が出ます。「表示するクエスト」で絞れ、選んだものはこのブラウザが覚えます。日付は、クエスト掲示板の詳細の「日付」タブで直せます。'),
       faq('納品物のテンプレートを使いたい', 'テンプレートの欄はありません。型にしたいファイルを「＋ 新規」でインプットとして付け、依頼文に「KGI定義.md の見出しに沿って」のように書いてください。'),
-      faq('冒険の書（やりとりの一覧）はどこ？', '冒険の書はなくなりました。役の報告は、クエスト掲示板の詳細の「道のり」で、Todo の行を開くと読めます。'),
+      faq('冒険の書（やりとりの一覧）はどこ？', '冒険の書はなくなりました。役の報告は、クエスト掲示板の詳細の「道のり」で、目標の行を開くと読めます。'),
       faq('依頼が受け付けられなかった', '選んだインプットが、出したあとで guild/inputs/ から消されると、依頼は受け付けられず、クエスト掲示板の上に理由が出ます。「出し直す」から、インプットを選び直して出してください。'),
       faq('PowerPoint や Excel がほしい', '納品物は Markdown です。Markdown 以外が要るときは、受け取りの確認の手紙に「プロンプトをコピー」が出ます。コピーして Claude Code に貼ると、作ってもらえます。'),
       faq('依頼を取り消したい', '進行中なら、詳細の下の「この依頼を中止する」か、失敗の判断で選べます。受付待ちの依頼は、一覧の「取り消す」で取り消せます（', code('guild/.work/requests/'), ' の該当ファイルを削除しても同じです）。'))));
@@ -1980,7 +1980,7 @@ function obsidianTab() {
         h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
       sec('ディレクトリ構成', pre(['guild/', '  board.html  config.json', '  archive/            書庫（用語名.md。種類は項目の type）', '    index.md          索引（役が最初に読む）',
         '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             依頼で使う資料（1つだけ置き、各クエストは名前で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、バックアップ'].join('\n'))),
-      sec('納品物を見る', dl([['場所', h('span', null, code('deliverables/Q###_…'), '。全 Todo が済んで受け取りの確認の手紙が出た時に置かれます。Markdown 以外が要る部分は ', code('.prompt.md'), '（Claude Code に渡すプロンプト）です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
+      sec('納品物を見る', dl([['場所', h('span', null, code('deliverables/Q###_…'), '。全目標が済んで受け取りの確認の手紙が出た時に置かれます。Markdown 以外が要る部分は ', code('.prompt.md'), '（Claude Code に渡すプロンプト）です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
       sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'inputs: ["KGI定義.md"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[KGI]] のようにリンクします。'].join('\n')),
         dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止'], ['inputs', '関係する guild/inputs/ のファイル名（任意）。依頼文にこの項目の名前が出ると、地図師にそのファイルが勧められます']]),
         h('p', { class: 'fine' }, '本文は Obsidian で編集してもかまいませんが、先頭のフロントマターは Obsidian の「プロパティ」画面で編集しないでください（別名などの書き方が変わり、読めなくなって消えることがあります）。索引（', code('index.md'), '）は自動では更新されません。確実に反映するには、この画面の「書庫」から編集してください。')),
@@ -1993,14 +1993,14 @@ function obsidianTab() {
 }
 
 // ============================================================ 書き込み
-function nowName(type, todo) { return `${stamp14(new Date())}-${type}${todo ? '-' + todo : ''}.json`; }
+function nowName(type, goal) { return `${stamp14(new Date())}-${type}${goal ? '-' + goal : ''}.json`; }
 async function writeOrFallback(path, text, onOk) {
   if (S.conn !== 'ok' || !S.fs) { S.fallback = { path: `guild/${physical(path)}`, text, err: '保存先につながっていません' }; render(); return false; }
   try { await S.fs.writeText(path, text); if (onOk) onOk(); return true; }
   catch (e) { S.fallback = { path: `guild/${physical(path)}`, text, err: `${e.name || 'エラー'}：${e.message || e}` }; render(); return false; }
 }
 async function send(qid, obj, key) {
-  const ok = await writeOrFallback(`${qid}/inbox/${nowName(obj.type, obj.todo)}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; });
+  const ok = await writeOrFallback(`${qid}/inbox/${nowName(obj.type, obj.goal)}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; });
   if (ok) { await refresh(true); }
 }
 async function sendResult(qid, t, key) {
@@ -2008,7 +2008,7 @@ async function sendResult(qid, t, key) {
   try {
     for (const f of files) { const n = `${t.id}-${f.name}`; await S.fs.writeBlob(`${qid}/inbox/files/${n}`, f); names.push(`inbox/files/${n}`); }
   } catch (e) { S.fallback = { path: `guild/${physical(qid + '/inbox/files/')}`, text: '添付ファイルを保存できませんでした。', err: `${e.name}：${e.message}` }; render(); return; }
-  await send(qid, { type: 'result', todo: t.id, ok: (S.form[key + ':ok'] || 'yes') === 'yes', note: (S.form[key + ':memo'] || '').trim(), files: names }, key);
+  await send(qid, { type: 'result', goal: t.id, ok: (S.form[key + ':ok'] || 'yes') === 'yes', note: (S.form[key + ':memo'] || '').trim(), files: names }, key);
 }
 // ローカルの今日（YYYY-MM-DD）。依頼の開始日の既定
 function localToday() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
@@ -2121,7 +2121,7 @@ function demoTree(scene) {
   const crit = (v, p, c) => ({ viewpoint: v, pass_line: p, check: c });
   const t1c = crit('digest.md の有無、行数、notes.txt との対応', 'ファイルが存在し、「- 」で始まる行がちょうど3行。notes.txt の4項目がすべて3行のどれかに含まれる。', '「- 」で始まる行を数え、4項目と1つずつ照らし合わせる。');
   const t2c = crit('上司の了承の有無', '上司から「了承する」という返事が1回ある。', 'あなたの報告（できた／できなかった）で判断する。');
-  const t3c = crit('publish フォルダの digest.md と元ファイルの一致', 'publish/digest.md が存在し、内容が output/T1/digest.md と同じ。', '2つのファイルの内容を比べる。');
+  const t3c = crit('publish フォルダの digest.md と元ファイルの一致', 'publish/digest.md が存在し、内容が output/G1/digest.md と同じ。', '2つのファイルの内容を比べる。');
   const mk = (id, title, kind, deps, state, c, extra) => ({ id, title, kind, deps, criteria: c, state, retries: 0, output: null, ...(extra || {}) });
   const S3 = {
     plan: [['pending'], ['pending'], ['pending']], human: [['done'], ['waiting_user'], ['pending']], confirm: [['done'], ['done'], ['awaiting_confirm']],
@@ -2129,41 +2129,41 @@ function demoTree(scene) {
   }[scene] || [['done'], ['waiting_user'], ['pending']];
   const approved = scene !== 'plan', isDone = scene === 'done' || scene === 'accept' || scene === 'archive';
   if (scene === 'questions') {
-    return { 'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), requests: {}, Q001: { 'request.json': J({ text: '社内の議事録テンプレートを見直したい' }), reports: { 'plan-draft.json': J({ quest: 'Q001', title: '議事録テンプレートの見直し', todos: [], questions: [{ text: '見直す対象は、どのテンプレートですか', options: ['週次定例の議事録', '全社会議の議事録', '両方'], recommended: '両方', reason: '依頼文からは、どちらか分からないため、まず両方を見るのが安全です。' }, { text: '納品物は、どの形がよいですか', options: ['比較表だけ', '新しいテンプレート案まで'], recommended: '新しいテンプレート案まで', reason: '「見直す」には、案を出すことまで含まれると考えられます。' }] }) }, output: {}, inbox: {} } };
+    return { 'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), requests: {}, Q001: { 'request.json': J({ text: '社内の議事録テンプレートを見直したい' }), reports: { 'plan-draft.json': J({ quest: 'Q001', title: '議事録テンプレートの見直し', goals: [], questions: [{ text: '見直す対象は、どのテンプレートですか', options: ['週次定例の議事録', '全社会議の議事録', '両方'], recommended: '両方', reason: '依頼文からは、どちらか分からないため、まず両方を見るのが安全です。' }, { text: '納品物は、どの形がよいですか', options: ['比較表だけ', '新しいテンプレート案まで'], recommended: '新しいテンプレート案まで', reason: '「見直す」には、案を出すことまで含まれると考えられます。' }] }) }, output: {}, inbox: {} } };
   }
   const h1 = [{ t: at(70), event: 'adopted' }];
-  if (approved) h1.push({ t: at(69), event: 'approved' }, { t: at(69), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(68), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(67), id: 'T1', event: 'passed', from: 'review', to: 'done' });
-  if (scene === 'human') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' });
-  if (scene === 'confirm' || isDone) h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'T2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(59), id: 'T2', event: 'passed', from: 'review', to: 'done' }, { t: at(59), id: 'T3', event: 'deps_done', from: 'pending', to: 'awaiting_confirm' });
-  if (isDone) h1.push({ t: at(55), id: 'T3', event: 'confirmed', from: 'awaiting_confirm', to: 'running' }, { t: at(54), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(53), id: 'T3', event: 'passed', from: 'review', to: 'done' });
-  if (scene === 'failed') h1.push({ t: at(67), id: 'T2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(62), id: 'T2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(60), id: 'T2', event: 'rejected', from: 'review', to: 'failed' }, { t: at(60), id: 'T3', event: 'dep_failed', from: 'pending', to: 'blocked' });
+  if (approved) h1.push({ t: at(69), event: 'approved' }, { t: at(69), id: 'G1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(68), id: 'G1', event: 'submitted', from: 'running', to: 'review' }, { t: at(67), id: 'G1', event: 'passed', from: 'review', to: 'done' });
+  if (scene === 'human') h1.push({ t: at(67), id: 'G2', event: 'deps_done', from: 'pending', to: 'waiting_user' });
+  if (scene === 'confirm' || isDone) h1.push({ t: at(67), id: 'G2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(60), id: 'G2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(59), id: 'G2', event: 'passed', from: 'review', to: 'done' }, { t: at(59), id: 'G3', event: 'deps_done', from: 'pending', to: 'awaiting_confirm' });
+  if (isDone) h1.push({ t: at(55), id: 'G3', event: 'confirmed', from: 'awaiting_confirm', to: 'running' }, { t: at(54), id: 'G3', event: 'submitted', from: 'running', to: 'review' }, { t: at(53), id: 'G3', event: 'passed', from: 'review', to: 'done' });
+  if (scene === 'failed') h1.push({ t: at(67), id: 'G2', event: 'deps_done', from: 'pending', to: 'waiting_user' }, { t: at(62), id: 'G2', event: 'submitted', from: 'waiting_user', to: 'review' }, { t: at(60), id: 'G2', event: 'rejected', from: 'review', to: 'failed' }, { t: at(60), id: 'G3', event: 'dep_failed', from: 'pending', to: 'blocked' });
   const p1 = { quest: 'Q001', title: 'notes.txt の要点を3行にまとめ、上司の了承後に公開する', approved, status: 'active', accepted: scene === 'done' || scene === 'archive', history: h1,
-    todos: [mk('T1', 'notes.txt を読み、要点を3行にまとめた digest.md を作る', 'auto', [], S3[0][0], t1c), mk('T2', '上司に口頭で内容を共有し、了承をもらう', 'human', ['T1'], S3[1][0], t2c), mk('T3', 'digest.md を publish フォルダにコピーして公開する', 'auto', ['T2'], S3[2][0], t3c, { confirm: true })] };
+    goals: [mk('G1', 'notes.txt を読み、要点を3行にまとめた digest.md を作る', 'auto', [], S3[0][0], t1c), mk('G2', '上司に口頭で内容を共有し、了承をもらう', 'human', ['G1'], S3[1][0], t2c), mk('G3', 'digest.md を publish フォルダにコピーして公開する', 'auto', ['G2'], S3[2][0], t3c, { confirm: true })] };
   const day = 24 * 60, p2 = { quest: 'Q002', title: '議事録のテンプレートを3種類比べる', approved: true, status: 'active', accepted: true,
-    history: [{ t: at(day + 120), event: 'adopted' }, { t: at(day + 118), event: 'approved' }, { t: at(day + 118), id: 'T1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 100), id: 'T1', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 98), id: 'T1', event: 'passed', from: 'review', to: 'done' },
-      { t: at(day + 98), id: 'T2', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 80), id: 'T2', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 79), id: 'T2', event: 'passed', from: 'review', to: 'done' },
-      { t: at(day + 79), id: 'T3', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 60), id: 'T3', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 58), id: 'T3', event: 'passed', from: 'review', to: 'done' }],
-    todos: [mk('T1', 'テンプレートを3種類集める', 'auto', [], 'done', t1c), mk('T2', '観点表をつくって比べる', 'auto', ['T1'], 'done', t1c), mk('T3', '比較表にまとめる', 'auto', ['T2'], 'done', t1c)] };
-  p1.todos[0].due = '2026-10-01'; p1.todos[1].due = '2026-12-31'; p1.todos[2].deliverable = true; p2.todos[2].deliverable = true;
-  p1.brief = { goal: 'notes.txt の要点を3行にまとめ、上司の了承を得てから公開する', non_goals: ['公開後の反応の集計はしない'], assumptions: ['公開先は publish フォルダ（依頼文に指定がないため推測）'], risks: ['上司の了承が取れないと、公開の Todo は実行されない'],
-    coverage: [{ requirement: '要点を3行にまとめる', todos: ['T1'] }, { requirement: '上司の了承を得る', todos: ['T2'] }, { requirement: '公開する', todos: ['T3'] }] };
-  p1.check = { warnings: ['T2: criteria.check が短すぎます（4 文字）。何をどう確かめるかを具体的に書いてください'] };
+    history: [{ t: at(day + 120), event: 'adopted' }, { t: at(day + 118), event: 'approved' }, { t: at(day + 118), id: 'G1', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 100), id: 'G1', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 98), id: 'G1', event: 'passed', from: 'review', to: 'done' },
+      { t: at(day + 98), id: 'G2', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 80), id: 'G2', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 79), id: 'G2', event: 'passed', from: 'review', to: 'done' },
+      { t: at(day + 79), id: 'G3', event: 'deps_done', from: 'pending', to: 'running' }, { t: at(day + 60), id: 'G3', event: 'submitted', from: 'running', to: 'review' }, { t: at(day + 58), id: 'G3', event: 'passed', from: 'review', to: 'done' }],
+    goals: [mk('G1', 'テンプレートを3種類集める', 'auto', [], 'done', t1c), mk('G2', '観点表をつくって比べる', 'auto', ['G1'], 'done', t1c), mk('G3', '比較表にまとめる', 'auto', ['G2'], 'done', t1c)] };
+  p1.goals[0].due = '2026-10-01'; p1.goals[1].due = '2026-12-31'; p1.goals[2].deliverable = true; p2.goals[2].deliverable = true;
+  p1.brief = { intent: 'notes.txt の要点を3行にまとめ、上司の了承を得てから公開する', non_goals: ['公開後の反応の集計はしない'], assumptions: ['公開先は publish フォルダ（依頼文に指定がないため推測）'], risks: ['上司の了承が取れないと、公開の目標は実行されない'],
+    coverage: [{ requirement: '要点を3行にまとめる', goals: ['G1'] }, { requirement: '上司の了承を得る', goals: ['G2'] }, { requirement: '公開する', goals: ['G3'] }] };
+  p1.check = { warnings: ['G2: criteria.check が短すぎます（4 文字）。何をどう確かめるかを具体的に書いてください'] };
   const d0 = (n) => new Date(now + n * 86400000).toISOString().slice(0, 10);
-  p1.workload = { human: 1, days: { [d0(1)]: 1 }, items: [{ id: 'T2', title: p1.todos[1].title, scheduled: d0(1), due: d0(2) }], over_deadline: [] };
-  p1.start = d0(-2); p1.due = d0(5); p1.todos.forEach((t, i) => { t.scheduled = d0(i); t.due = t.due || d0(i + 1); });
-  p2.start = d0(-10); p2.due = d0(-3); p2.todos.forEach((t, i) => { t.scheduled = d0(-9 + i * 2); t.due = d0(-8 + i * 2); });
+  p1.workload = { human: 1, days: { [d0(1)]: 1 }, items: [{ id: 'G2', title: p1.goals[1].title, scheduled: d0(1), due: d0(2) }], over_deadline: [] };
+  p1.start = d0(-2); p1.due = d0(5); p1.goals.forEach((t, i) => { t.scheduled = d0(i); t.due = t.due || d0(i + 1); });
+  p2.start = d0(-10); p2.due = d0(-3); p2.goals.forEach((t, i) => { t.scheduled = d0(-9 + i * 2); t.due = d0(-8 + i * 2); });
   p1.inputs = [{ name: 'notes.txt', source: 'user', reason: '依頼主の指定' }, { name: 'KGI定義.md', source: 'auto', reason: '要点の書き方の参考（書庫の用語『KPI』のヒント）' }];
   p1.candidates = [{ name: '古い資料.pdf', reason: '中身は読んでいない。名前からは関係が分からない' }]; p2.inputs = []; p2.candidates = [];
   const rep = {};
-  ['T1-adventurer.md', 'T1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "todos": [] }' : `## 結果\n${n} の見本です。`); });
-  if (scene === 'failed') { rep['T2-user.md'] = T('# T2 の結果\nできた：上司に口頭で共有した\nメモ：返事は「検討する」だった'); rep['T2-appraiser.md'] = T('---\ntodo: T2\n---\n# T2 の鑑定\n## 判定\n不合格\n## 指摘\n- 合格ラインの「了承する」という返事が、報告にない\n- 返事は「検討する」で、了承ではない\n- やり直しの回数（1回）を超えた\n## 未確認\n- なし'); }
+  ['G1-adventurer.md', 'G1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "goals": [] }' : `## 結果\n${n} の見本です。`); });
+  if (scene === 'failed') { rep['G2-user.md'] = T('# G2 の結果\nできた：上司に口頭で共有した\nメモ：返事は「検討する」だった'); rep['G2-appraiser.md'] = T('---\ngoal: G2\n---\n# G2 の鑑定\n## 判定\n不合格\n## 指摘\n- 合格ラインの「了承する」という返事が、報告にない\n- 返事は「検討する」で、了承ではない\n- やり直しの回数（1回）を超えた\n## 未確認\n- なし'); }
   return {
     'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), inputs: { 'notes.txt': T('- 要点1\n- 要点2\n- 要点3\n- 要点4'), 'KGI定義.md': T('# KGI の定義\n最終目標の達成度を測る指標'), '売上 2026Q3.csv': T('月,売上\n7月,100'), '古い資料.pdf': T('(PDF の見本)') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\ninputs: ["KGI定義.md"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },
     deliverables: { 'Q001_report.md': T('見本'), 'Q001_スライド.prompt.md': T('---\ntype: prompt\n---\n# PowerPoint 5枚を作って…'), 'Q002_comparison.md': T('見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', start: null, due: null, inputs: [], files: [] }),
       rejected: { 'R20261009-090000.json': J({ type: 'request', text: '売上の資料をまとめてほしい', inputs: ['消えた資料.xlsx'], files: [] }), 'R20261009-090000.json.reason.txt': T('選んだインプットが guild/inputs/ にありません（削除された可能性があります）: 消えた資料.xlsx') } },
-    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/T1/digest.md', inputs: ['notes.txt'] }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { T1: { 'digest.md': T('- 見本') }, T3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
-    Q002: { 'plan.json': J(p2), reports: { 'T1-appraiser.md': T('見本') }, output: { T3: { 'comparison.md': T('見本') } }, inbox: {} }
+    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/G1/digest.md', inputs: ['notes.txt'] }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { G1: { 'digest.md': T('- 見本') }, G3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
+    Q002: { 'plan.json': J(p2), reports: { 'G1-appraiser.md': T('見本') }, output: { G3: { 'comparison.md': T('見本') } }, inbox: {} }
   };
 }
 

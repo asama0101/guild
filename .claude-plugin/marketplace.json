@@ -1,12 +1,12 @@
 {
   "name": "guild-local",
   "owner": {"name": "Guild Authors"},
-  "metadata": {"description": "guild：依頼を Todo に分解し、自動実行と依頼主の実行待ちを分けて解決まで進めるプラグイン"},
+  "metadata": {"description": "guild：依頼を目標に分解し、自動実行と依頼主の実行待ちを分けて解決まで進めるプラグイン"},
   "plugins": [
     {
       "name": "guild",
       "source": "./",
-      "description": "依頼を Todo に分解し、自動実行と依頼主の実行待ちを分けて解決まで進め、用語・業務フロー・業務情報・個人を書庫に溜めて次の依頼で使うギルド"
+      "description": "依頼を目標に分解し、自動実行と依頼主の実行待ちを分けて解決まで進め、用語・業務フロー・業務情報・個人を書庫に溜めて次の依頼で使うギルド"
     }
   ]
 }

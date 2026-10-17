@@ -78,17 +78,17 @@ console.log(JSON.stringify([
 
     def test_flow_issues(self):
         code = "const closed = (s) => s === 'done' || s === 'skipped';\n" + extract("flowIssues") + """
-const plan = { approved: true, todos: [
-  { id: 'T1', state: 'failed', deps: [] }, { id: 'T2', state: 'blocked', deps: ['T1'] }, { id: 'T3', state: 'blocked', deps: ['T2'] },
-  { id: 'T4', state: 'skipped', deps: [] }, { id: 'T5', state: 'pending', deps: ['T4', 'T6'] }, { id: 'T6', state: 'running', deps: [] }] };
-const by = (id) => plan.todos.find((t) => t.id === id);
+const plan = { approved: true, goals: [
+  { id: 'G1', state: 'failed', deps: [] }, { id: 'G2', state: 'blocked', deps: ['G1'] }, { id: 'G3', state: 'blocked', deps: ['G2'] },
+  { id: 'G4', state: 'skipped', deps: [] }, { id: 'G5', state: 'pending', deps: ['G4', 'G6'] }, { id: 'G6', state: 'running', deps: [] }] };
+const by = (id) => plan.goals.find((t) => t.id === id);
 console.log(JSON.stringify({
-  t2: flowIssues(plan, by('T2')), t3: flowIssues(plan, by('T3')), t5: flowIssues(plan, by('T5')),
-  done: flowIssues(plan, { id: 'T9', state: 'done', deps: ['T4'] }), aborted: flowIssues({ ...plan, status: 'aborted' }, by('T2')), draft: flowIssues({ approved: false, todos: plan.todos }, by('T2')) }));"""
+  t2: flowIssues(plan, by('G2')), t3: flowIssues(plan, by('G3')), t5: flowIssues(plan, by('G5')),
+  done: flowIssues(plan, { id: 'G9', state: 'done', deps: ['G4'] }), aborted: flowIssues({ ...plan, status: 'aborted' }, by('G2')), draft: flowIssues({ approved: false, goals: plan.goals }, by('G2')) }));"""
         r = node_eval(code)
-        self.assertEqual(r["t2"], ["止まっている原因：T1 ができませんでした。"])
-        self.assertEqual(r["t3"], ["止まっている原因：T1 ができませんでした。"])  # 失敗の根本まで辿る
-        self.assertEqual(r["t5"], ["前提 T4 はやめたので、その結果がないまま進みます。", "T6 の完了を待っています。"])
+        self.assertEqual(r["t2"], ["止まっている原因：G1 ができませんでした。"])
+        self.assertEqual(r["t3"], ["止まっている原因：G1 ができませんでした。"])  # 失敗の根本まで辿る
+        self.assertEqual(r["t5"], ["前提 G4 はやめたので、その結果がないまま進みます。", "G6 の完了を待っています。"])
         self.assertEqual(r["done"], [])
         self.assertEqual(r["draft"], [])  # 承認前は出さない
         self.assertEqual(r["aborted"], [])  # 中止された依頼にも出さない

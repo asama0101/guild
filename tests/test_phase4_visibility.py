@@ -37,7 +37,7 @@ class HeartbeatTest(unittest.TestCase):
 
     def test_wait_marks_working_when_arrivals_exist(self):
         q = self.root / "guild" / ".work" / "Q001"
-        write(q / "plan.json", {"quest": "Q001", "todos": []})
+        write(q / "plan.json", {"quest": "Q001", "goals": []})
         write(q / "inbox" / "a.json", {"type": "approve"})
         r = guild.wait_for(self.root, 5, interval=0.05)
         self.assertFalse(r["timeout"])
@@ -60,25 +60,25 @@ class StatsTest(unittest.TestCase):
             root = Path(d)
             write(root / "guild" / ".work" / "Q001" / "plan.json", {
                 "quest": "Q001", "status": "active", "approved": True,
-                "todos": [{"id": "T1", "state": "done"}, {"id": "T2", "state": "failed"}, {"id": "T3", "state": "skipped"}],
+                "goals": [{"id": "G1", "state": "done"}, {"id": "G2", "state": "failed"}, {"id": "G3", "state": "skipped"}],
                 "history": [
                     {"t": "x", "event": "adopted"},
-                    {"t": "x", "id": "T1", "event": "rejected", "from": "review", "to": "running"},
-                    {"t": "x", "id": "T1", "event": "rejected", "from": "review", "to": "running"},
-                    {"t": "x", "id": "T2", "event": "rejected", "from": "review", "to": "failed"},
-                    {"t": "x", "id": "T2", "event": "retry", "from": "failed", "to": "running"},
-                    {"t": "x", "event": "replanned", "carried": ["T1"]}]})
+                    {"t": "x", "id": "G1", "event": "rejected", "from": "review", "to": "running"},
+                    {"t": "x", "id": "G1", "event": "rejected", "from": "review", "to": "running"},
+                    {"t": "x", "id": "G2", "event": "rejected", "from": "review", "to": "failed"},
+                    {"t": "x", "id": "G2", "event": "retry", "from": "failed", "to": "running"},
+                    {"t": "x", "event": "replanned", "carried": ["G1"]}]})
             write(root / "guild" / ".work" / "Q002" / "plan.json", {
                 "quest": "Q002", "status": "aborted", "approved": True,
-                "todos": [{"id": "T1", "state": "done"}], "history": []})
+                "goals": [{"id": "G1", "state": "done"}], "history": []})
             s = guild.stats(root)
             q1 = next(q for q in s["quests"] if q["id"] == "Q001")
-            self.assertEqual((q1["todos"], q1["done"], q1["failed"], q1["skipped"]), (3, 1, 1, 1))
+            self.assertEqual((q1["goals"], q1["done"], q1["failed"], q1["skipped"]), (3, 1, 1, 1))
             self.assertEqual((q1["rejected"], q1["retries"], q1["replans"]), (3, 1, 1))
             self.assertEqual(s["total"]["quests"], 2)
             self.assertEqual(s["total"]["rejected"], 3)
             self.assertEqual(s["total"]["aborted"], 1)
-            self.assertEqual(s["total"]["rejected_per_todo"], round(3 / 4, 2))
+            self.assertEqual(s["total"]["rejected_per_goal"], round(3 / 4, 2))
 
     def test_stats_ignores_broken_plan_and_empty(self):
         with tempfile.TemporaryDirectory() as d:
@@ -87,7 +87,7 @@ class StatsTest(unittest.TestCase):
             (root / "guild" / ".work" / "Q001" / "plan.json").write_text("{", encoding="utf-8")
             s = guild.stats(root)
             self.assertEqual(s["total"]["quests"], 0)
-            self.assertEqual(s["total"]["rejected_per_todo"], 0)
+            self.assertEqual(s["total"]["rejected_per_goal"], 0)
 
     def test_stats_cli(self):
         with tempfile.TemporaryDirectory() as d:

@@ -15,13 +15,13 @@ guild.py pause-status ROOT: pause.json があるかを返す（paused）。壊�
 guild.py pause-clear ROOT: pause.json を消す（ギルドマスターが起動したとき）。
 guild.py wait ROOT [秒]: 届くまで待つ（既定 540 秒）。届いていれば、すぐ返す。
 guild.py answers QDIR: 計画がない依頼の、質問への回答（type が answers）を取り出す。
-guild.py publish QDIR: 納品物を guild/deliverables/ へコピーする（全 Todo が済んだとき）。
+guild.py publish QDIR: 納品物を guild/deliverables/ へコピーする（全目標が済んだとき）。
 guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
 guild.py archive-ingest ROOT: .work/archive-inbox/ の入力（entry・promote・deprecate・retype）を書庫に反映する。
 guild.py web-ingest ROOT: .work/web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
 guild.py web-pending ROOT: 冒険者が止められて、依頼主の答え待ちのドメインを一覧する。
 guild.py web-reset ROOT: 「今回だけ」の許可と、許可しなかった記録を空にする（依頼の完了・中止のとき）。
-入力（inbox の JSON）の type には、due（依頼の開始日・締切、Todo の予定日・締切の設定。Todo の締切だけ解除できる）と、inputs（このクエストのインプットの追加・外す。足す名前は guild/inputs/ にあること）がある。
+入力（inbox の JSON）の type には、due（依頼の開始日・締切、目標の予定日・締切の設定。目標の締切だけ解除できる）と、inputs（このクエストのインプットの追加・外す。足す名前は guild/inputs/ にあること）がある。
 エラーは終了コード 1。
 """
 import contextlib
@@ -52,7 +52,7 @@ def gdir_of(qdir):
     return Path(qdir).parent.parent
 
 SATISFIED = ("done", "skipped")
-MAX_RETRIES_LIMIT = 5  # Todo ごとの max_retries の上限
+MAX_RETRIES_LIMIT = 5  # 目標ごとの max_retries の上限
 PROMPT_SUFFIX = ".prompt.md"  # Markdown 以外（PowerPoint・Excel など）が要るときの、Claude Code に渡すプロンプトのファイル名
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -84,6 +84,17 @@ def load_json(path):
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise GuildError(f"{path} を読めません: {e}")
+
+
+LEGACY_MSG = "旧形式の計画です（todos）。この版は「目標（goals）」を使うので、読めません。この依頼は中止して、もう一度出し直してください"
+
+
+def load_plan(path):
+    """plan.json を読む。旧形式（todos）は、分かるエラーで止める（自動の移行はしない）。"""
+    plan = load_json(path)
+    if isinstance(plan, dict) and "todos" in plan and "goals" not in plan:
+        raise GuildError(f"{path}: {LEGACY_MSG}")
+    return plan
 
 
 REPLACE_TRIES = 6  # Windows・OneDrive 配下で、置き換え先を他のプロセスが開いていると PermissionError になる。短い間隔で数回やり直す
@@ -187,8 +198,8 @@ def load_transitions(path=None):
     return load_json(path or HERE / "transitions.json")
 
 
-def todo_map(plan):
-    return {t["id"]: t for t in plan.get("todos", [])}
+def goal_map(plan):
+    return {t["id"]: t for t in plan.get("goals", [])}
 
 
 def effective(tr, kind):
@@ -198,11 +209,11 @@ def effective(tr, kind):
     return [t for t in tr["transitions"] if (t["from"], t["event"]) not in keys] + over
 
 
-def guard_ok(name, todo, tr):
+def guard_ok(name, goal, tr):
     if name is None:
         return True
-    left = todo.get("retries", 0) < todo.get("max_retries", tr.get("max_retries", 0))  # Todo ごとの max_retries が先
-    return {"confirm": bool(todo.get("confirm")), "no_confirm": not todo.get("confirm"),
+    left = goal.get("retries", 0) < goal.get("max_retries", tr.get("max_retries", 0))  # 目標ごとの max_retries が先
+    return {"confirm": bool(goal.get("confirm")), "no_confirm": not goal.get("confirm"),
             "retries_left": left, "no_retries_left": not left}[name]
 
 
@@ -216,33 +227,33 @@ def note(plan, **kw):
         plan.setdefault("history", []).append({"t": now(), **kw})
 
 
-def apply_event(todo, event, tr, plan=None):
-    for t in effective(tr, todo["kind"]):
-        if t["from"] == todo["state"] and t["event"] == event and guard_ok(t.get("guard"), todo, tr):
+def apply_event(goal, event, tr, plan=None):
+    for t in effective(tr, goal["kind"]):
+        if t["from"] == goal["state"] and t["event"] == event and guard_ok(t.get("guard"), goal, tr):
             if event == "rejected" and t["to"] != "failed":
-                todo["retries"] = todo.get("retries", 0) + 1
-            before = todo["state"]
-            todo["state"] = t["to"]
-            note(plan, id=todo["id"], event=event, **{"from": before, "to": t["to"]})
+                goal["retries"] = goal.get("retries", 0) + 1
+            before = goal["state"]
+            goal["state"] = t["to"]
+            note(plan, id=goal["id"], event=event, **{"from": before, "to": t["to"]})
             return t["to"]
-    raise GuildError(f"{todo['id']}: 状態 {todo['state']} では {event} できません")
+    raise GuildError(f"{goal['id']}: 状態 {goal['state']} では {event} できません")
 
 
 def validate(plan, tr):
     errs = []
-    todos = plan.get("todos")
-    if not isinstance(todos, list) or not todos:
-        return ["todos がありません"]
+    goals = plan.get("goals")
+    if not isinstance(goals, list) or not goals:
+        return ["goals がありません"]
     for k in ("start", "due"):
         try:
             check_date(plan.get(k), k)
         except GuildError as e:
             errs.append(str(e))
     errs += check_plan_inputs(plan)
-    ids = [t.get("id") for t in todos]
+    ids = [t.get("id") for t in goals]
     if len(set(ids)) != len(ids) or None in ids:
         errs.append("id が重複しているか、欠けています")
-    for t in todos:
+    for t in goals:
         i = t.get("id")
         if t.get("kind") not in tr["kinds"]:
             errs.append(f"{i}: kind が不明です: {t.get('kind')}")
@@ -260,7 +271,7 @@ def validate(plan, tr):
             if not isinstance(m, int) or isinstance(m, bool) or not 0 <= m <= MAX_RETRIES_LIMIT:
                 errs.append(f"{i}: max_retries は 0〜{MAX_RETRIES_LIMIT} の整数にしてください: {m!r}")
         if t.get("confirm") and t.get("kind") != "auto":
-            errs.append(f"{i}: confirm は auto の Todo だけに付けられます")
+            errs.append(f"{i}: confirm は auto の目標だけに付けられます")
         for k in ("scheduled", "due"):
             try:
                 check_date(t.get(k), k)
@@ -271,13 +282,13 @@ def validate(plan, tr):
                 errs.append(f"{i}: deps の {d} がありません")
             elif d == i:
                 errs.append(f"{i}: 自分自身に依存しています")
-    if not errs and has_cycle(todos):
+    if not errs and has_cycle(goals):
         errs.append("deps に循環があります")
     return errs
 
 
-def has_cycle(todos):
-    deps = {t["id"]: list(t.get("deps", [])) for t in todos}
+def has_cycle(goals):
+    deps = {t["id"]: list(t.get("deps", [])) for t in goals}
     done = set()
     while True:
         ready = [i for i, d in deps.items() if i not in done and all(x in done for x in d)]
@@ -295,11 +306,11 @@ def sync(plan, tr):
     changes = []
     if not runnable(plan):
         return changes
-    tm = todo_map(plan)
+    tm = goal_map(plan)
     moved = True
     while moved:
         moved = False
-        for t in plan["todos"]:
+        for t in plan["goals"]:
             st = [tm[d]["state"] for d in t.get("deps", [])]
             ok = all(s in SATISFIED for s in st)
             bad = any(s in ("failed", "blocked") for s in st)
@@ -330,13 +341,13 @@ def archive_state(qdir):
 def next_view(plan, qdir=None):
     groups = {"ready": "running", "confirm": "awaiting_confirm", "waiting_user": "waiting_user",
               "review": "review", "blocked": "blocked", "failed": "failed"}
-    out = {k: [t["id"] for t in plan["todos"] if t["state"] == s] for k, s in groups.items()}
+    out = {k: [t["id"] for t in plan["goals"] if t["state"] == s] for k, s in groups.items()}
     out["runnable"] = runnable(plan)
     out["status"] = plan.get("status", "active")
     out["approved"] = bool(plan.get("approved"))
-    out["finished"] = all(t["state"] in SATISFIED for t in plan["todos"])
+    out["finished"] = all(t["state"] in SATISFIED for t in plan["goals"])
     out["accepted"] = bool(plan.get("accepted"))
-    # 全 Todo が済んでも、依頼主が受け取るまでは完了ではない（awaiting_accept は依頼主待ち）
+    # 全目標が済んでも、依頼主が受け取るまでは完了ではない（awaiting_accept は依頼主待ち）
     out["awaiting_accept"] = out["finished"] and out["approved"] and out["status"] == "active" and not out["accepted"]
     out["complete"] = out["finished"] and out["accepted"]
     # 完了・中止した依頼の、書庫の記録（司書→依頼主の確認）がどこまで進んだか。closed になった依頼は、もう何もしない
@@ -347,23 +358,23 @@ def next_view(plan, qdir=None):
     return out
 
 
-def check_evidence(plan, todo_id, qdir):
-    """passed の証拠ゲート：鑑定士の報告 reports/<id>-appraiser.md があり、空でなく、Todo が鑑定待ちになったあとに書かれていること。
+def check_evidence(plan, goal_id, qdir):
+    """passed の証拠ゲート：鑑定士の報告 reports/<id>-appraiser.md があり、空でなく、目標が鑑定待ちになったあとに書かれていること。
     報告を読まずに、または古い報告のまま合格にすることを防ぐ（rejected には要らない）。"""
-    f = Path(qdir) / "reports" / f"{todo_id}-appraiser.md"
+    f = Path(qdir) / "reports" / f"{goal_id}-appraiser.md"
     if not f.is_file() or f.stat().st_size == 0:
-        raise GuildError(f"{todo_id}: 鑑定士の報告 reports/{todo_id}-appraiser.md がないか空です。鑑定士が報告を書いてから passed を送ってください")
+        raise GuildError(f"{goal_id}: 鑑定士の報告 reports/{goal_id}-appraiser.md がないか空です。鑑定士が報告を書いてから passed を送ってください")
     verdict = re.search(r"##\s*判定\s*" + chr(10) + r"\s*(\S+)", f.read_text(encoding="utf-8", errors="replace"))
     if not verdict or not verdict.group(1).lower().startswith("passed"):
-        raise GuildError(f"{todo_id}: 鑑定士の報告の「## 判定」が passed ではありません（{verdict.group(1) if verdict else '見つかりません'}）")
-    sent = [h for h in plan.get("history", []) if h.get("id") == todo_id and h.get("to") == "review"]
+        raise GuildError(f"{goal_id}: 鑑定士の報告の「## 判定」が passed ではありません（{verdict.group(1) if verdict else '見つかりません'}）")
+    sent = [h for h in plan.get("history", []) if h.get("id") == goal_id and h.get("to") == "review"]
     if sent:
         try:
             ts = datetime.datetime.fromisoformat(sent[-1]["t"]).timestamp()
         except (KeyError, ValueError, TypeError):
             return
         if f.stat().st_mtime < ts - 2:
-            raise GuildError(f"{todo_id}: 鑑定士の報告が、鑑定待ちになる前の古いものです。鑑定士にもう一度判定させてください")
+            raise GuildError(f"{goal_id}: 鑑定士の報告が、鑑定待ちになる前の古いものです。鑑定士にもう一度判定させてください")
 
 
 def ingest(plan_path, plan, tr, commit=None):
@@ -413,7 +424,7 @@ def ingest(plan_path, plan, tr, commit=None):
 
 
 def write_user_report(qdir, data):
-    """依頼主の結果（type が result）を、鑑定士が読める報告 reports/<Todo>-user.md にする。"""
+    """依頼主の結果（type が result）を、鑑定士が読める報告 reports/<目標>-user.md にする。"""
     if data.get("type") != "result":
         return
     rep = Path(qdir) / "reports"
@@ -421,12 +432,12 @@ def write_user_report(qdir, data):
     files = "\n".join(f"- [[{x}]]" for x in data.get("files", [])) or "なし"
     result = "できた" if data.get("ok") else "できなかった"
     body = f"## 結果\n{result}\n## メモ\n{data.get('note') or 'なし'}\n## 添付\n{files}\n"
-    (rep / f"{data['todo']}-user.md").write_text(body, encoding="utf-8")
+    (rep / f"{data['goal']}-user.md").write_text(body, encoding="utf-8")
 
 
 def apply_input(plan, data, tr, qdir=None, after=None):
     kind = data.get("type")
-    tm = todo_map(plan)
+    tm = goal_map(plan)
     status = plan.get("status", "active")
     # 中止された依頼は、終わったもの。見直し中は、中止以外の入力を受け付けない
     if status == "aborted":
@@ -442,8 +453,8 @@ def apply_input(plan, data, tr, qdir=None, after=None):
     if kind == "accept":
         if plan.get("accepted"):
             raise GuildError("すでに受け取り済みです")
-        if not plan.get("approved") or not all(t["state"] in SATISFIED for t in plan["todos"]):
-            raise GuildError("すべての Todo が済むまで、受け取れません")
+        if not plan.get("approved") or not all(t["state"] in SATISFIED for t in plan["goals"]):
+            raise GuildError("すべての目標が済むまで、受け取れません")
         plan["accepted"] = True
         note(plan, event="accepted")
         return
@@ -461,9 +472,9 @@ def apply_input(plan, data, tr, qdir=None, after=None):
             raise GuildError("受け取り済みの依頼のインプットは変えられません")
         apply_inputs(plan, data, gdir_of(qdir) if qdir is not None else None)
         return
-    t = tm.get(data.get("todo"))
+    t = tm.get(data.get("goal"))
     if t is None:
-        raise GuildError(f"todo がありません: {data.get('todo')}")
+        raise GuildError(f"goal がありません: {data.get('goal')}")
     if kind == "confirm":
         apply_event(t, "confirmed" if data["ok"] else "declined", tr, plan)
     elif kind == "result":
@@ -472,23 +483,23 @@ def apply_input(plan, data, tr, qdir=None, after=None):
     elif kind == "decision" and data.get("choice") == "skip":
         apply_event(t, "skip", tr, plan)
     elif kind == "decision" and data.get("choice") == "retry":
-        # 失敗した Todo をもう一度やる。やり直しの回数は数え直し、古い成果物と報告は prev/ へ退避する（保存のあと）
+        # 失敗した目標をもう一度やる。やり直しの回数は数え直し、古い成果物と報告は prev/ へ退避する（保存のあと）
         apply_event(t, "retry", tr, plan)
         t["retries"], t["output"] = 0, None
         if qdir is not None:
-            job = lambda: archive_outputs({"todos": [t]}, [], qdir)
+            job = lambda: archive_outputs({"goals": [t]}, [], qdir)
             after.append(job) if after is not None else job()
     elif kind == "decision" and data.get("choice") == "drop":
-        # 失敗した Todo と、それに(間接にでも)依存する後続をやめる。後続は実行しない
+        # 失敗した目標と、それに(間接にでも)依存する後続をやめる。後続は実行しない
         apply_event(t, "skip", tr, plan)
         dropped, grew = {t["id"]}, True
         while grew:
             grew = False
-            for u in plan["todos"]:
+            for u in plan["goals"]:
                 if u["id"] not in dropped and any(d in dropped for d in u.get("deps", [])):
                     dropped.add(u["id"])
                     grew = True
-        for u in plan["todos"]:
+        for u in plan["goals"]:
             if u["id"] in dropped and u["state"] in ("pending", "blocked"):
                 note(plan, id=u["id"], event="dropped", **{"from": u["state"], "to": "skipped"})
                 u["state"] = "skipped"
@@ -497,24 +508,24 @@ def apply_input(plan, data, tr, qdir=None, after=None):
 
 
 def apply_dates(plan, data):
-    """日付の設定。todo があれば Todo の scheduled / due、なければ依頼の start / due。"""
+    """日付の設定。goal があれば目標の scheduled / due、なければ依頼の start / due。"""
     keys = [k for k in ("start", "due", "scheduled") if k in data]
-    todo = None
-    if data.get("todo") is not None:
-        todo = todo_map(plan).get(data["todo"])
-        if todo is None:
-            raise GuildError(f"todo がありません: {data.get('todo')}")
-    allowed = ("scheduled", "due") if todo is not None else ("start", "due")
+    goal = None
+    if data.get("goal") is not None:
+        goal = goal_map(plan).get(data["goal"])
+        if goal is None:
+            raise GuildError(f"goal がありません: {data.get('goal')}")
+    allowed = ("scheduled", "due") if goal is not None else ("start", "due")
     if not keys or any(k not in allowed for k in keys):
         raise GuildError(f"日付の入力が不正です: {keys or '日付なし'}")
     new = {}
     for k in keys:
         v = check_date(data[k], k)
-        if v is None and not (k == "due" and todo is not None):  # 解除できるのは Todo の締切だけ
+        if v is None and not (k == "due" and goal is not None):  # 解除できるのは目標の締切だけ
             raise GuildError(f"{k} は解除できません")
         new[k] = v
-    (todo if todo is not None else plan).update(new)
-    note(plan, event="due", **({"todo": todo["id"]} if todo is not None else {}), **new)
+    (goal if goal is not None else plan).update(new)
+    note(plan, event="due", **({"goal": goal["id"]} if goal is not None else {}), **new)
 
 
 def apply_inputs(plan, data, gdir):
@@ -654,7 +665,7 @@ def check_plan_inputs(plan):
 AMBIGUOUS = ("適切", "十分", "適宜", "なるべく", "できるだけ", "速やか", "高品質", "わかりやすく", "分かりやすく", "きちんと", "しっかり", "必要に応じて")
 # 「不適切」「二十分」のような別の意味の語に当たらないよう、前に付く字で除く
 _AMBIGUOUS_RE = {w: re.compile(("(?<!不)" if w == "適切" else "(?<![二三四五六七八九〇0-9０-９])" if w == "十分" else "") + re.escape(w)) for w in AMBIGUOUS}
-MAX_TODOS = 12  # これを超えたら、粒度が細かすぎないかの警告
+MAX_GOALS = 12  # これを超えたら、粒度が細かすぎないかの警告
 MIN_CRITERIA_LEN = 6  # これより短い合格基準は、測れる書き方になっていない可能性の警告
 
 
@@ -663,42 +674,42 @@ def _str_list(v):
 
 
 def normalize_brief(brief, ids):
-    """地図師の自己点検（目的・非目標・前提・リスク・要件と Todo の対応）を整える。返り値は (brief か None, エラー, 警告)。"""
+    """地図師の自己点検（目的・非目標・前提・リスク・要件と目標の対応）を整える。返り値は (brief か None, エラー, 警告)。"""
     if not isinstance(brief, dict):
-        return None, [], ["地図師の自己点検（brief）がありません。要件が Todo で網羅されているかは、確かめられていません"]
+        return None, [], ["地図師の自己点検（brief）がありません。要件が目標で網羅されているかは、確かめられていません"]
     errs, warns = [], []
-    out = {"goal": str(brief.get("goal") or "").strip(), "non_goals": _str_list(brief.get("non_goals")),
+    out = {"intent": str(brief.get("intent") or "").strip(), "non_goals": _str_list(brief.get("non_goals")),
            "assumptions": _str_list(brief.get("assumptions")), "risks": _str_list(brief.get("risks")), "coverage": []}
-    if not out["goal"]:
-        warns.append("自己点検に、目的の言い換え（goal）がありません")
+    if not out["intent"]:
+        warns.append("自己点検に、目的の言い換え（intent）がありません")
     cov = brief.get("coverage")
     for c in cov if isinstance(cov, list) else []:
         if not isinstance(c, dict) or not str(c.get("requirement") or "").strip():
             continue
-        req, todos = str(c["requirement"]).strip(), _str_list(c.get("todos"))
-        for i in todos:
+        req, goals = str(c["requirement"]).strip(), _str_list(c.get("goals"))
+        for i in goals:
             if i not in ids:
-                errs.append(f"自己点検の「{req}」が、ない Todo {i} を指しています")
-        if not todos:
-            warns.append(f"要件「{req}」に対応する Todo がありません（網羅漏れの可能性）")
-        out["coverage"].append({"requirement": req, "todos": todos})
+                errs.append(f"自己点検の「{req}」が、ない目標 {i} を指しています")
+        if not goals:
+            warns.append(f"要件「{req}」に対応する目標がありません（網羅漏れの可能性）")
+        out["coverage"].append({"requirement": req, "goals": goals})
     if not out["coverage"]:
-        warns.append("自己点検に、要件と Todo の対応（coverage）がありません")
+        warns.append("自己点検に、要件と目標の対応（coverage）がありません")
     return out, errs, warns
 
 
 def plan_quality(plan, brief):
     """計画の質の検査（adopt のときだけ）。エラーは地図師に差し戻し、警告は承認の手紙に出す（承認は止めない）。
     返り値は (エラー, 警告, 整えた brief)。"""
-    todos = plan["todos"]
+    goals = plan["goals"]
     errs, warns = [], []
-    n = sum(1 for t in todos if t.get("deliverable") is True)
+    n = sum(1 for t in goals if t.get("deliverable") is True)
     if n != 1:
-        errs.append(f"deliverable: true の Todo は、最後のまとめ 1 つだけにしてください（いま {n} 件）")
-    for t in todos:
+        errs.append(f"deliverable: true の目標は、最後のまとめ 1 つだけにしてください（いま {n} 件）")
+    for t in goals:
         i = t.get("id")
         if t.get("kind") == "human" and not (isinstance(t.get("instruction"), str) and t["instruction"].strip()):
-            errs.append(f"{i}: human の Todo には instruction（依頼主への頼み方）が要ります")
+            errs.append(f"{i}: human の目標には instruction（依頼主への頼み方）が要ります")
         for k in CRITERIA_KEYS:
             v = str((t.get("criteria") or {}).get(k, "")).strip()
             hit = [w for w in AMBIGUOUS if _AMBIGUOUS_RE[w].search(v)]
@@ -706,17 +717,17 @@ def plan_quality(plan, brief):
                 warns.append(f"{i}: criteria.{k} に測れない言葉があります（{'・'.join(hit)}）。数や有無で言える書き方にしてください")
             elif v and len(v) < MIN_CRITERIA_LEN:
                 warns.append(f"{i}: criteria.{k} が短すぎます（{len(v)} 文字）。何をどう確かめるかを具体的に書いてください")
-    if len(todos) > MAX_TODOS:
-        warns.append(f"Todo が {len(todos)} 件あります（{MAX_TODOS} 件超）。粒度が細かすぎないか確かめてください")
-    ids = {t.get("id") for t in todos}
+    if len(goals) > MAX_GOALS:
+        warns.append(f"目標が {len(goals)} 件あります（{MAX_GOALS} 件超）。粒度が細かすぎないか確かめてください")
+    ids = {t.get("id") for t in goals}
     out, b_errs, b_warns = normalize_brief(brief, ids)
     return errs + b_errs, warns + b_warns, out
 
 
 def workload(plan):
-    """依頼主（あなた）の作業量：human の Todo の件数・予定日ごとの件数・一覧。依頼の締切を超える予定の Todo も返す。"""
+    """依頼主（あなた）の作業量：human の目標の件数・予定日ごとの件数・一覧。依頼の締切を超える予定の目標も返す。"""
     items = [{"id": t["id"], "title": t.get("title"), "scheduled": t.get("scheduled"), "due": t.get("due")}
-             for t in plan["todos"] if t.get("kind") == "human"]
+             for t in plan["goals"] if t.get("kind") == "human"]
     days = {}
     for i in items:
         if i["scheduled"]:
@@ -727,14 +738,14 @@ def workload(plan):
 
 
 def plan_diff(old, plan, carried):
-    """再計画の差分：足された Todo・なくなった Todo・変わった Todo（番号は同じで、種別・題名・合格基準・依存のどれかが違う）・引き継がれた Todo。"""
+    """再計画の差分：足された目標・なくなった目標・変わった目標（番号は同じで、種別・題名・合格基準・依存のどれかが違う）・引き継がれた目標。"""
     brief = lambda t: {"id": t["id"], "title": t.get("title")}
-    old_by = {t["id"]: t for t in old.get("todos", [])}
-    new_by = {t["id"]: t for t in plan["todos"]}
+    old_by = {t["id"]: t for t in old.get("goals", [])}
+    new_by = {t["id"]: t for t in plan["goals"]}
     keys = ("kind", "title", "criteria", "deps")
-    return {"added": [brief(t) for t in plan["todos"] if t["id"] not in old_by],
-            "removed": [brief(t) for t in old.get("todos", []) if t["id"] not in new_by],
-            "changed": [brief(t) for t in plan["todos"] if t["id"] in old_by and t["id"] not in carried
+    return {"added": [brief(t) for t in plan["goals"] if t["id"] not in old_by],
+            "removed": [brief(t) for t in old.get("goals", []) if t["id"] not in new_by],
+            "changed": [brief(t) for t in plan["goals"] if t["id"] in old_by and t["id"] not in carried
                         and any(old_by[t["id"]].get(k) != t.get(k) for k in keys)],
             "carried": list(carried)}
 
@@ -747,26 +758,26 @@ def adopt(plan_path, tr):
         raise GuildError(f"{draft_path} がありません")
     old = None
     if plan_path.exists():
-        old = load_json(plan_path)
+        old = load_plan(plan_path)
         if old.get("status") != "replan":
             raise GuildError(f"{plan_path} がすでにあります（上書きしません。やり直すには replan の判断が要ります）")
     draft = load_json(draft_path)
-    todos = draft.get("todos")
-    if not isinstance(todos, list):
-        raise GuildError("plan-draft.json に todos がありません")
+    goals = draft.get("goals")
+    if not isinstance(goals, list):
+        raise GuildError("plan-draft.json に goals がありません")
     inputs, candidates = selected_inputs(plan_path.parent, draft, old)  # 何も書く前に検査する（落ちたら地図師に差し戻す）
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False, "status": "active",
             **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}),
             "inputs": inputs, "candidates": candidates,
-            "todos": [], "history": [{"t": now(), "event": "adopted"}]}
+            "goals": [], "history": [{"t": now(), "event": "adopted"}]}
     plan.update(quest_dates(plan_path.parent, old))
-    for t in todos:
+    for t in goals:
         if not isinstance(t, dict):
-            raise GuildError("todos の要素が不正です")
+            raise GuildError("goals の要素が不正です")
         item = dict(t, deps=list(t.get("deps", [])), state=tr["initial"], retries=0, output=None)
         item["scheduled"] = item.get("scheduled") or plan["start"]
         item["due"] = item.get("due") or plan["due"]
-        plan["todos"].append(item)
+        plan["goals"].append(item)
     errs = validate(plan, tr)
     if errs:
         raise GuildError("plan-draft.json の検査に失敗しました: " + " / ".join(errs))
@@ -781,23 +792,23 @@ def adopt(plan_path, tr):
         plan["replan_diff"] = plan_diff(old, plan, carried)
     save_plan(plan_path, plan)  # 保存してから成果物を動かす。保存に失敗しても、成果物は元の場所に残る
     if old is not None:
-        unpublish_deliverables(plan_path.parent)  # 作り直し。置いた納品物は、また全 Todo が済んだ時に置き直す
+        unpublish_deliverables(plan_path.parent)  # 作り直し。置いた納品物は、また全目標が済んだ時に置き直す
         try:
             archive_outputs(old, carried, plan_path.parent)
         except OSError as e:  # 計画は保存済み。やり直すと adopt が拒否するので、警告にして続ける
             warnings.append(f"古い成果物の退避に失敗しました（{e}）。output/ と reports/ に残った古いファイルを、手で prev/ へ移してください")
-    return {"adopted": len(plan["todos"]), "replaced": old is not None, "carried": carried, **({"warnings": warnings} if warnings else {})}
+    return {"adopted": len(plan["goals"]), "replaced": old is not None, "carried": carried, **({"warnings": warnings} if warnings else {})}
 
 
 def carry_over(plan, old):
-    """計画の作り直し。完了済みで、番号・種別・題名・合格基準・依存が同じで、依存先もすべて引き継がれる Todo は、状態を引き継ぐ。
-    上流が変わった（引き継がれなかった）Todo の下流は、古い成果物が前提にずれるので引き継がない。
+    """計画の作り直し。完了済みで、番号・種別・題名・合格基準・依存が同じで、依存先もすべて引き継がれる目標は、状態を引き継ぐ。
+    上流が変わった（引き継がれなかった）目標の下流は、古い成果物が前提にずれるので引き継がない。
     経緯（history）は旧計画のものに追記する。引き継いだ id の一覧を返す（成果物の退避は archive_outputs）。"""
     same = lambda a, b: all(a.get(k) == b.get(k) for k in ("kind", "title", "criteria"))         and list(a.get("deps", [])) == list(b.get("deps", []))
-    new_by = {t["id"]: t for t in plan["todos"]}
-    old_by = {t["id"]: t for t in old.get("todos", [])}
+    new_by = {t["id"]: t for t in plan["goals"]}
+    old_by = {t["id"]: t for t in old.get("goals", [])}
     carried = []
-    undecided = {o["id"] for o in old.get("todos", [])}  # 依存の順に辿る。上流が先に決まるまで待つ
+    undecided = {o["id"] for o in old.get("goals", [])}  # 依存の順に辿る。上流が先に決まるまで待つ
     progressed = True
     while progressed:
         progressed = False
@@ -811,15 +822,15 @@ def carry_over(plan, old):
             if n is not None and o.get("state") == "done" and same(o, n) and all(d in carried for d in deps):
                 n["state"], n["retries"], n["output"] = "done", o.get("retries", 0), o.get("output")
                 carried.append(i)
-    carried = [o["id"] for o in old.get("todos", []) if o["id"] in carried]
+    carried = [o["id"] for o in old.get("goals", []) if o["id"] in carried]
     plan["history"] = list(old.get("history", [])) + [{"t": now(), "event": "replanned", "carried": carried}]
     return carried
 
 
 def archive_outputs(old, carried, qdir):
-    """引き継がなかった Todo の成果物と報告を、prev/<日時>/ へ退避する（計画を保存したあとに呼ぶ）。"""
+    """引き継がなかった目標の成果物と報告を、prev/<日時>/ へ退避する（計画を保存したあとに呼ぶ）。"""
     arch = Path(qdir) / "prev" / datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    for o in old.get("todos", []):
+    for o in old.get("goals", []):
         if o["id"] in carried:
             continue
         out = Path(qdir) / "output" / o["id"]
@@ -969,7 +980,7 @@ def close_quests(root):
         bak, plan_path = wdir / "backup" / q.name, q / "plan.json"
         if not bak.is_dir() or not plan_path.exists():
             continue
-        plan = load_json(plan_path)
+        plan = load_plan(plan_path)
         if plan.get("accepted") or plan.get("status") == "aborted":
             shutil.rmtree(bak)
             removed.append(q.name)
@@ -980,10 +991,10 @@ DELIV = "deliverables"
 
 
 def deliverable_files(qdir, plan):
-    """納品物にするファイルを (Todo の id, パス) で返す。合格（done）した Todo の、
-    deliverable の印がある Todo の .md と、どの Todo でも *.prompt.md。印のある Todo が1つもなければ、done の Todo すべての .md。"""
-    marked = {t["id"] for t in plan["todos"] if t.get("deliverable")} or {t["id"] for t in plan["todos"]}
-    for t in plan["todos"]:
+    """納品物にするファイルを (目標の id, パス) で返す。合格（done）した目標の、
+    deliverable の印がある目標の .md と、どの目標でも *.prompt.md。印のある目標が1つもなければ、done の目標すべての .md。"""
+    marked = {t["id"] for t in plan["goals"] if t.get("deliverable")} or {t["id"] for t in plan["goals"]}
+    for t in plan["goals"]:
         d = Path(qdir) / "output" / t["id"]
         if t.get("state") != "done" or not d.is_dir():
             continue
@@ -1010,7 +1021,7 @@ def publish_deliverables(qdir, plan=None):
     plan を渡すと、ディスクの plan.json の代わりにそれを使う（ingest が保存前の状態で呼ぶため）。"""
     qdir = Path(qdir)
     if plan is None:
-        plan = load_json(qdir / "plan.json")
+        plan = load_plan(qdir / "plan.json")
     unpublish_deliverables(qdir)
     dest = gdir_of(qdir) / DELIV
     dest.mkdir(exist_ok=True)
@@ -1157,18 +1168,18 @@ def wait_for(root, seconds, interval=1.0):
 
 
 def stats(root):
-    """効果の測定：依頼ごとの Todo 数・完了・失敗・やめた数・不合格（rejected）の回数・もう一度やる（retry）の回数・計画の直し（replan）の回数を、
+    """効果の測定：依頼ごとの目標数・完了・失敗・やめた数・不合格（rejected）の回数・もう一度やる（retry）の回数・計画の直し（replan）の回数を、
     plan.json の history から数える。壊れた計画は読み飛ばす。"""
     quests = []
-    tot = {"quests": 0, "todos": 0, "done": 0, "failed": 0, "skipped": 0, "rejected": 0, "retries": 0, "replans": 0, "aborted": 0}
+    tot = {"quests": 0, "goals": 0, "done": 0, "failed": 0, "skipped": 0, "rejected": 0, "retries": 0, "replans": 0, "aborted": 0}
     wd = work_dir(Path(root) / "guild")
     for f in sorted(wd.glob("Q*/plan.json")) if wd.is_dir() else []:
         try:
-            p = load_json(f)
-            todos, hist = p.get("todos", []), p.get("history", [])
-            q = {"id": f.parent.name, "status": p.get("status", "active"), "todos": len(todos),
-                 "done": sum(t.get("state") == "done" for t in todos), "failed": sum(t.get("state") == "failed" for t in todos),
-                 "skipped": sum(t.get("state") == "skipped" for t in todos),
+            p = load_plan(f)
+            goals, hist = p.get("goals", []), p.get("history", [])
+            q = {"id": f.parent.name, "status": p.get("status", "active"), "goals": len(goals),
+                 "done": sum(t.get("state") == "done" for t in goals), "failed": sum(t.get("state") == "failed" for t in goals),
+                 "skipped": sum(t.get("state") == "skipped" for t in goals),
                  "rejected": sum(h.get("event") == "rejected" for h in hist), "retries": sum(h.get("event") == "retry" for h in hist),
                  "replans": sum(h.get("event") == "replanned" for h in hist)}
         except (GuildError, AttributeError, TypeError):
@@ -1176,9 +1187,9 @@ def stats(root):
         quests.append(q)
         tot["quests"] += 1
         tot["aborted"] += q["status"] == "aborted"
-        for k in ("todos", "done", "failed", "skipped", "rejected", "retries", "replans"):
+        for k in ("goals", "done", "failed", "skipped", "rejected", "retries", "replans"):
             tot[k] += q[k]
-    tot["rejected_per_todo"] = round(tot["rejected"] / tot["todos"], 2) if tot["todos"] else 0
+    tot["rejected_per_goal"] = round(tot["rejected"] / tot["goals"], 2) if tot["goals"] else 0
     return {"quests": quests, "total": tot}
 
 
@@ -1573,7 +1584,7 @@ def inputs_list(root, text=""):
 
 def mutate_plan(cmd, path, argv):
     """sync / advance / ingest：plan.json を読み、変え、保存する（呼び出し側が plan_lock で包む）。"""
-    plan, tr = load_json(path), load_transitions()
+    plan, tr = load_plan(path), load_transitions()
     errs = validate(plan, tr)
     if errs:
         raise GuildError("plan.json の検査に失敗しました: " + " / ".join(errs))
@@ -1583,9 +1594,9 @@ def mutate_plan(cmd, path, argv):
     elif cmd == "advance":
         if len(argv) != 5:
             raise GuildError("advance PLAN ID EVENT の形で指定してください")
-        t = todo_map(plan).get(argv[3])
+        t = goal_map(plan).get(argv[3])
         if t is None:
-            raise GuildError(f"todo がありません: {argv[3]}")
+            raise GuildError(f"goal がありません: {argv[3]}")
         if argv[4] == "passed" and t["state"] == "review":  # 状態が違うときは、apply_event が状態のエラーを返す
             check_evidence(plan, t["id"], Path(path).parent)
         apply_event(t, argv[4], tr, plan)
@@ -1664,7 +1675,7 @@ def main(argv):
         if cmd in ("sync", "advance", "ingest"):
             with plan_lock(path):  # load から save までを 1 つずつにする（並列の advance で更新が消えない）
                 return mutate_plan(cmd, path, argv)
-        plan, tr = load_json(path), load_transitions()
+        plan, tr = load_plan(path), load_transitions()
         if cmd == "validate":
             errs = validate(plan, tr)
             print(json.dumps({"ok": not errs, "errors": errs}, ensure_ascii=False))
