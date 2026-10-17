@@ -762,7 +762,7 @@ function letterFor(qd, a) {
     const typeName = (t) => (ARCH_TYPES.find((x) => x[0] === t) || [t, t])[1];
     return h('section', { class: 'letter', 'aria-label': '書庫の登録候補' }, seal('書'),
       h('div', { class: 'kick' }, 'お願い：書庫に残すもの'), h('h3', null, '次の依頼で役に立てるものを、選んでください'),
-      h('p', null, `司書が挙げた候補のうち、出典があるもの（${a.auto} 件）は、すでに書庫に登録しました。ここに出ているのは、推測のもの、既存の項目との食い違い、確認済みの項目を低い確度で書き換えるものです。「登録」を選んだものだけが、書庫に入ります。推測のものは、はじめ「不要」になっています。`),
+      h('p', null, !a.cands.length ? `司書が挙げた候補は、すべて書庫に登録しました（${a.auto} 件）。ここには、掟への提案だけが出ています。` : `司書が挙げた候補のうち、出典があるもの（${a.auto} 件）は、すでに書庫に登録しました。ここに出ているのは、推測のもの、既存の項目との食い違い、確認済みの項目を低い確度で書き換えるものです。「登録」を選んだものだけが、書庫に入ります。推測のものは、はじめ「不要」になっています。`),
       a.cands.map((c, i) => {
         const ck = `${k}:c${c.id}`, def = c.confidence === 'guess' ? 'skip' : 'register', cf = CONF[c.confidence] || [c.confidence, 'sd-wait'];
         return h('div', { class: 'qa' },

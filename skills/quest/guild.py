@@ -921,7 +921,7 @@ CODEX = "codex"  # guild/.work/codex/：default.md（既定の掟のコピー。
 
 EXPERIENCE = "experience"  # guild/.work/experience/<class>/：summary.md（司書がまとめる）と notes/<依頼>-<目標>.md（各役が書く）
 EXPERIENCE_MAX = 2000  # 職業ごとの経験の要約の長さの上限（文字）。役が作業の前に読むので、短く保つ
-AUTO_CONFIDENCE = ("sourced", "confirmed")  # 書庫に自動で登録してよい確度（推測は、依頼主が選ぶ）
+AUTO_CONFIDENCE = ("sourced",)  # 書庫に自動で登録してよい確度（推測は依頼主が選ぶ。確認済みは依頼主だけが付ける）
 
 
 def experience_dir(gdir):
@@ -1477,8 +1477,8 @@ def apply_experience(qdir):
             out["rejected"].append({"class": c, "reason": f"職業は {'・'.join(CLASSES)} のどれかです"})
         elif not isinstance(text, str) or not text.strip():
             out["rejected"].append({"class": c, "reason": "本文が空です"})
-        elif len(text) > EXPERIENCE_MAX:
-            out["rejected"].append({"class": c, "reason": f"{EXPERIENCE_MAX} 字を超えています（{len(text)} 字）"})
+        elif len(text.strip()) > EXPERIENCE_MAX:
+            out["rejected"].append({"class": c, "reason": f"{EXPERIENCE_MAX} 字を超えています（{len(text.strip())} 字）"})
         else:
             d = experience_dir(gdir) / c
             d.mkdir(parents=True, exist_ok=True)
@@ -1488,18 +1488,27 @@ def apply_experience(qdir):
 
 
 def auto_registrable(adir, c):
-    """書庫に自動で登録してよい候補か。心得、または確度が出典あり以上で、既存との食い違いがなく、
-    既存の項目の確度を下げる更新でないもの。推測・食い違い・確度を下げる更新は、依頼主が選ぶ。"""
+    """書庫に自動で登録してよい候補か。心得、または確度が出典あり（sourced）で、既存との食い違いがなく、
+    依頼主が確認した項目（confirmed）や、要確認の項目を、書き換えるものではないもの。
+    推測・食い違い・確認済み／要確認の項目の更新は、依頼主が選ぶ。"""
     if c["type"] == "lesson":
         return True
     if c.get("conflict") or c.get("confidence") not in AUTO_CONFIDENCE:
         return False
     rel = c.get("update_of")
     if rel and (Path(adir) / rel).is_file():
-        old = read_entry(entry_path(adir, rel)).get("confidence", "guess")
-        if CONFIDENCE.index(c["confidence"]) < CONFIDENCE.index(old):
+        old = read_entry(entry_path(adir, rel))
+        if old.get("confidence") == "confirmed" or old.get("status") == "要確認":
             return False
     return True
+
+
+def one_line(text):
+    """1 行にする。改行・\r・U+2028 など、すべての空白を 1 つの空白にし、行頭の見出し・箇条書きの記号を落とす。"""
+    t = " ".join(str(text or "").split())
+    while t[:1] in ("#", "-", "*", ">", "+"):
+        t = t[1:].lstrip()
+    return t
 
 
 def codex_proposals(cands, quest):
@@ -1508,14 +1517,14 @@ def codex_proposals(cands, quest):
     out = []
     for c in cands:
         if c["type"] == "lesson" and c.get("update_of"):
-            text = str(c.get("codex") or c.get("summary") or "").strip().replace("\n", " ")
+            text = one_line(c.get("codex") or c.get("summary"))
             if text:
-                out.append({"id": f"K{len(out) + 1}", "name": c["name"], "text": text, "quest": quest})
+                out.append({"id": f"K{len(out) + 1}", "name": one_line(c["name"]), "text": text, "quest": quest})
     return out
 
 
 def archive_propose(qdir):
-    """司書の候補を検査する。心得と、確度が出典あり以上で食い違いのないものは、そのまま書庫に登録する。
+    """司書の候補を検査する。心得と、確度が出典あり（sourced）で食い違いのないものは、そのまま書庫に登録する。
     推測・既存との食い違い・確度を下げる更新は、依頼主の確認待ち（archive.json）。同名・別名は更新の候補にする。
     同じ心得の 2 回目は、掟への提案にする。職業ごとの経験の要約（experience-draft.json）も、ここで書く。"""
     qdir = Path(qdir)
@@ -1532,6 +1541,7 @@ def archive_propose(qdir):
         check_entry(c)
     registered, pending = [], []
     for c in cands:
+        c.pop("update_of", None)  # 更新先は、司書の指定ではなく、書庫の検索の結果だけを使う
         found = find_entry(adir, c["type"], [c["name"], *c.get("aliases", [])])
         if found:
             c["update_of"] = found
@@ -1585,8 +1595,9 @@ def append_codex(gdir, proposal):
     path = work_dir(gdir) / CODEX / "project.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     text = path.read_text(encoding="utf-8") if path.exists() else "# プロジェクトの掟（追記）\n\n"
-    line = f"- {proposal['text']}（心得「{proposal['name']}」、{proposal.get('quest', '')}、{today()}）"
-    if f"- {proposal['text']}（" in text:
+    ptext, pname = one_line(proposal["text"]), one_line(proposal["name"])
+    line = f"- {ptext}（心得「{pname}」、{one_line(proposal.get('quest'))}、{today()}）"
+    if f"- {ptext}（" in text:
         return
     if "（まだありません）" in text:
         text = text.replace("（まだありません）\n", "")

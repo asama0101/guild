@@ -171,7 +171,7 @@
 | `arrivals <root>` | ボードから届いて、まだ取り込んでいない入力と依頼を一覧する |
 | `wait <root> [秒]` | 入力か依頼が届くまで待つ（既定 540 秒）。届いていれば、すぐ返す |
 | `answers <dir>` | 計画がない依頼の、質問への回答を取り出す |
-| `archive-propose <dir>` | 司書の候補（`reports/archive-draft.json`）を検査し、心得と、確度が出典あり以上で既存と食い違わない候補は**自動で登録**する。推測・食い違い（`conflict`）・既存の確認済みより確度が低い更新は、確認待ち（`archive.json` の `status` が `proposed`）にする。同じ心得の 2 回目（既存の心得の更新）は、掟への提案（`archive.json` の `codex_proposals`）にする。司書の経験の要約（`reports/experience-draft.json`）を、職業ごとの `guild/.work/experience/<職業>/summary.md` に書く（2000 字まで。出力の `experience` に `written`・`rejected`）。同名・別名の項目は更新の候補にする。候補は12件まで |
+| `archive-propose <dir>` | 司書の候補（`reports/archive-draft.json`）を検査し、心得と、確度が出典あり（`sourced`）で既存と食い違わない候補は**自動で登録**する。推測・食い違い（`conflict`）・既存の確認済みより確度が低い更新は、確認待ち（`archive.json` の `status` が `proposed`）にする。同じ心得の 2 回目（既存の心得の更新）は、掟への提案（`archive.json` の `codex_proposals`）にする。司書の経験の要約（`reports/experience-draft.json`）を、職業ごとの `guild/.work/experience/<職業>/summary.md` に書く（2000 字まで。出力の `experience` に `written`・`rejected`）。同名・別名の項目は更新の候補にする。候補は12件まで |
 | `archive-ingest <root>` | `.work/archive-inbox/` の入力（`entry`・`promote`・`deprecate`・`retype`）を書庫に反映し、索引（`archive/index.md`）を作り直す |
 | `adopt <plan.json>` | 同じフォルダの `reports/plan-draft.json` を検査（`validate` と同じ検査に加えて、`inputs`・`candidates` の名前が `guild/inputs/` にあるか）し、承認前の `plan.json` にする（`inputs` は依頼主の指定が先頭、`candidates` は選ばなかった候補）。さらに計画の質を検査する（下の「計画の質の検査」）。すでにあれば上書きしない（`status` が `replan` のときだけ、完了済みの目標と、依頼主が直した `inputs` を引き継いで置き換える） |
 | `validate <plan.json>` | `deps` の参照切れ、循環、`kind`・`criteria` の欠け、未知の `state`、`human` の `confirm`、`inputs`・`candidates` の形の誤り（名前・`source`・`reason`・重なり）を検出する |
