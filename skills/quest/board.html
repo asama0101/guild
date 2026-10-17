@@ -1470,7 +1470,7 @@ function sendWeb(obj, key) {
   return writeOrFallback(`web/inbox/${nowName('web', String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true); });
 }
 // 許可の手紙は、親ドメインごとに 1 行にまとめる。決めた答えは親ドメインに対して送り、許可リストにはその下の子ドメインも入る
-const SHARED_HOSTS = ['github.io', 'gitlab.io', 'blogspot.com', 'wordpress.com', 'netlify.app', 'vercel.app', 'pages.dev', 'herokuapp.com', 'web.app', 'firebaseapp.com', 'appspot.com', 'cloudfront.net', 'azurewebsites.net', 'notion.site', 'amazonaws.com', 'workers.dev', 'onrender.com', 'fly.dev'];
+const SHARED_HOSTS = ['github.io', 'gitlab.io', 'blogspot.com', 'wordpress.com', 'netlify.app', 'vercel.app', 'pages.dev', 'herokuapp.com', 'web.app', 'firebaseapp.com', 'appspot.com', 'cloudfront.net', 'azurewebsites.net', 'notion.site', 'amazonaws.com', 'workers.dev', 'onrender.com', 'fly.dev', 'githubusercontent.com', 'hatenablog.com', 'hateblo.jp', 'tumblr.com', 'glitch.me', 'r2.dev', 'myshopify.com', 'wixsite.com', 'webflow.io', 'surge.sh'];
 const SECOND_LEVEL = ['co', 'or', 'ne', 'go', 'ac', 'ad', 'ed', 'gr', 'lg', 'com', 'org', 'net', 'gov', 'edu'];
 function parentDomain(d) {
   const l = String(d).split('.');

@@ -1,6 +1,7 @@
 """監査（ponytail-audit）の指摘の修正を確かめる。"""
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -14,7 +15,7 @@ HOOKS = str(ROOT / "hooks")
 sys.path.insert(0, QUEST)
 import guild  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
-from test_board_js import extract, node_eval  # noqa: E402
+from test_board_js import extract, node_eval, script as board_script  # noqa: E402
 
 CRIT = {"viewpoint": "a", "pass_line": "b", "check": "c"}
 
@@ -213,6 +214,16 @@ class BoardLoadCostTest(unittest.TestCase):
         files = {"config.json": "{}", "Q001/plan.json": json.dumps({"accepted": True, "goals": []}), "Q001/request.json": "{}",
                  "Q001/archive.json": json.dumps({"status": "done"}), "Q001/inbox/x.json": json.dumps({"type": "reopen"})}
         self.assertGreater(self.run_load(files)["second"], 0)
+
+
+@unittest.skipUnless(__import__("shutil").which("node"), "node がありません")
+class SharedHostTest(unittest.TestCase):
+    def test_user_content_hosts_are_split_per_user(self):
+        script = board_script()
+        src = "".join(re.search(rf"const {n} = .*?\n", script).group(0) for n in ("SHARED_HOSTS", "SECOND_LEVEL")) + extract("parentDomain")
+        cases = ["alice.tumblr.com", "bob.hatenablog.com", "carol.hateblo.jp", "x.glitch.me", "pub-1.r2.dev", "shop.myshopify.com", "d.wixsite.com", "p.webflow.io", "q.surge.sh"]
+        out = node_eval(src + f"console.log(JSON.stringify({json.dumps(cases)}.map(parentDomain)))")
+        self.assertEqual(out, cases)
 
 
 if __name__ == "__main__":
