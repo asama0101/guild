@@ -153,7 +153,7 @@ class SelectOpenDefersRefreshTest(unittest.TestCase):
 class AllowListLinksTest(unittest.TestCase):
     def test_allow_list_domains_are_links(self):
         card = BOARD[BOARD.index("function webCard(m)"):BOARD.index("function webTab()")]
-        for needle in ("const site = (d) =>", "href: `https://${d}/`", "rel: 'noopener noreferrer'", "site(d)"):
+        for needle in ("class: 'wrow'", "const site = (d) =>", "href: `https://${d}/`", "rel: 'noopener noreferrer'", "site(d)"):
             self.assertIn(needle, card, needle)
 
 

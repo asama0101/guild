@@ -172,6 +172,7 @@ input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .wlist{list-style:none;margin:0 0 6px;padding:0}
 .wlist li{display:block;padding:6px 0;border-bottom:1px dashed var(--line);word-break:break-all}
 .wlist .wnote{margin:2px 0 0}
+.wlist .wrow{display:flex;gap:8px 12px;align-items:baseline;justify-content:space-between}
 .wnote{flex-basis:100%;font-size:12px;color:var(--sub);padding-left:2px}
 .wflt{width:100%;max-width:320px;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:4px;margin:0 0 8px}
 .wseg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;flex:none}
@@ -1516,7 +1517,7 @@ function webCard(m) {
   const notes = w.notes || {};
   const noteOf = (d) => notes[d] || (Object.keys(notes).find((k) => k.endsWith('.' + d)) ? notes[Object.keys(notes).find((k) => k.endsWith('.' + d))] : '');  // 許可が親ドメインでも、その下のサイトの説明を出す
   const note = (d) => (noteOf(d) ? h('div', { class: 'wnote' }, h('b', null, 'AI の推測（事実ではありません）：'), noteOf(d)) : h('div', { class: 'wnote' }, '説明はまだありません（ギルドマスターが、次の機会に書きます）'));
-  const row = (d) => h('li', null, site(d), ' ', h('button', { type: 'button', class: 'linkbtn', disabled: !!w.wait, onclick: () => sendWeb({ type: 'web', remove: [d] }, 'web:rm:' + d) }, '外す'), note(d));
+  const row = (d) => h('li', null, h('div', { class: 'wrow' }, site(d), h('button', { type: 'button', class: 'linkbtn', disabled: !!w.wait, onclick: () => sendWeb({ type: 'web', remove: [d] }, 'web:rm:' + d) }, '外す')), note(d));
   return h('section', { class: 'card' }, h('h3', null, `許可リスト（${w.allow.length}件）`),
     h('p', { class: 'fine' }, '魔法使いが WebFetch で開けるサイトです。ドメインを許可すると、その下のサイト（www.go.jp など）も開けます。ドメイン名を押すと、新しいタブでサイトを開いて確かめられます。'),
     w.allow.length ? h('ul', { class: 'wlist' }, w.allow.map(row)) : h('p', { class: 'fine' }, 'まだありません。'),
