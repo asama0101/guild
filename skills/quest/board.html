@@ -35,7 +35,6 @@ body{margin:0;background:var(--bg)}
 .qopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 20px;align-items:start;margin-top:10px}
 .saved{margin:8px 0 0;font-size:13.5px;color:var(--ok);font-weight:700}
 .toastfix{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);margin:0;z-index:40;background:var(--surface);border:1px solid var(--brass);border-radius:6px;padding:8px 16px;box-shadow:0 2px 10px rgba(0,0,0,.25);max-width:90vw}
-.gantt{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 18px 16px;margin-bottom:16px}
 .stamp{font-family:'Shippori Mincho B1','Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif;font-weight:800;font-size:13px;border:2px solid;border-radius:4px;padding:0 9px;display:inline-block;white-space:nowrap;transform:rotate(-2deg)}
 .sd-ok{color:var(--ok);border-color:var(--ok);background:var(--ok-bg)}
 .sd-ng{color:var(--ng);border-color:var(--ng)}
@@ -190,11 +189,6 @@ input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .qa{margin:16px 0 4px;padding-top:6px;border-top:1px dashed var(--line)}
 .qa:first-of-type{border-top:0}
 
-.ganttbox{box-sizing:border-box;overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--paper2);padding:6px}
-svg.gantt{display:block;min-width:720px;max-width:100%}
-svg.gantt:not(.humbars){width:100%}
-svg.humbars{min-width:0;max-width:100%}
-.plegend .lg{margin-right:12px;font-size:13px;white-space:nowrap}
 /* クエスト掲示板：左に一覧、右に詳細パネル。狭い画面（760px 未満）では、一覧と詳細を切り替える（S.pane） */
 .wrap.wide{max-width:1400px}
 .qb{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:18px;align-items:start}
@@ -280,8 +274,7 @@ svg.humbars{min-width:0;max-width:100%}
   .td .tdcrit{display:none}
 }
 @media (max-width:620px){.tdrow{grid-template-columns:auto minmax(0,1fr) auto 18px}.tdrow .tdd{display:none}}
-/* 日付タブ：このクエストのガントと、日付の表（変えた行は色を変える。注意は表示だけ） */
-svg.qgantt{min-width:560px}
+/* 日付タブ：日付の表（変えた行は色を変える。注意は表示だけ） */
 .dtq{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 12px;border:1px solid var(--line);border-left:6px solid var(--brass);border-radius:3px;background:var(--surface);margin-bottom:10px;font-size:13.5px}
 .dtable{border:1px solid var(--line);border-radius:3px;background:var(--surface);font-size:13.5px}
 .dtr{display:grid;grid-template-columns:44px minmax(0,1fr) 150px 150px minmax(0,1fr);gap:4px 10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--grid);border-left:4px solid transparent}
@@ -976,44 +969,7 @@ function wayTab(qd) {
     h('aside', { class: 'critside', 'aria-label': '選んだ目標の合格基準' },
       cur ? [h('b', null, `${cur.id} の合格基準`), critList(cur)] : h('p', { class: 'fine', style: 'margin:0' }, '行を開くと、ここに合格基準が出ます。')));
 }
-// ---- 日付タブ：このクエストのガントと、依頼・目標の日付の表
-// 表示の範囲（日番号）。依頼の開始日・締切と目標の予定日のうち、正しい日付（okDate）だけを使い、前後に1日ずつ足す。
-// 正しい日付が1つもなければ今日。狭すぎると読めないので、幅は最低7日
-function dateRange(plan) {
-  const p = plan || {}, ds = [p.start, p.due, ...(Array.isArray(p.goals) ? p.goals : []).map((t) => t && t.scheduled)].filter(okDate).map(dayNum);
-  if (!ds.length) ds.push(dayNum(localToday()));
-  const min = Math.min(...ds) - 1, max = Math.max(Math.max(...ds) + 1, min + 6);
-  return { min, max };
-}
-// このクエストのガントのモデル。帯は開始日〜締切、◆ は目標の予定日（不正なら開始日、それもなければ描かない）
-function qGanttModel(plan) {
-  const p = plan || {}, r = dateRange(p), start = okDate(p.start) ? p.start : null, due = okDate(p.due) ? p.due : start;
-  const goals = (Array.isArray(p.goals) ? p.goals : []).map((t) => ({ id: t.id, title: t.title || '', state: t.state, scheduled: okDate(t.scheduled) ? t.scheduled : start, due: okDate(t.due) ? t.due : null }));
-  return { min: r.min, max: r.max, today: dayNum(localToday()), start, due, goals };
-}
-function questGantt(qd) {
-  const m = qGanttModel(qd.q.plan), LABEL = 200, W = 900, ROW = 24, HEAD = 30, n = m.max - m.min + 1, DW = (W - LABEL - 12) / n;
-  const x = (d) => LABEL + (d - m.min) * DW + DW / 2, H = HEAD + (m.goals.length + 1) * ROW + 8, every = Math.max(1, Math.ceil(44 / DW));
-  const cut = (s, k) => (s.length > k ? s.slice(0, k) + '…' : s);
-  const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': `${qd.id} の予定（帯は開始日から締切、◆ は目標の予定日）`, class: 'gantt qgantt' });
-  for (let d = m.min, k = 0; d <= m.max; d++, k++) {
-    svg.append(sv('line', { x1: x(d), x2: x(d), y1: HEAD - 4, y2: H, stroke: 'var(--line)', 'stroke-width': 1, opacity: 0.5 }));
-    if (k % every === 0) svg.append(sv('text', { x: x(d), y: 14, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--sub)' }, shortDate(dayStr(d))));
-  }
-  if (m.today >= m.min && m.today <= m.max) svg.append(sv('line', { x1: x(m.today), x2: x(m.today), y1: HEAD - 4, y2: H, stroke: 'var(--ng)', 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }), sv('text', { x: x(m.today), y: 26, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--ng)' }, '今日'));
-  let y = HEAD + ROW / 2;
-  svg.append(sv('text', { x: 4, y: y + 4, 'font-size': 12, 'font-weight': 700, fill: 'var(--ink)' }, `${qd.id} ${cut(qd.title, 12)}`));
-  if (m.start) { const x1 = x(dayNum(m.start)) - DW / 2, x2 = x(dayNum(m.due)) + DW / 2; svg.append(sv('rect', { x: x1, y: y - 7, width: Math.max(x2 - x1, 6), height: 14, rx: 3, fill: 'var(--surface2)', stroke: 'var(--brass)' })); }
-  for (const t of m.goals) {
-    y += ROW;
-    svg.append(sv('text', { x: 16, y: y + 4, 'font-size': 11, fill: 'var(--sub)' }, `${t.id} ${cut(t.title, 13)}`));
-    if (!t.scheduled) continue;
-    const cx = x(dayNum(t.scheduled)), s = 6;
-    svg.append(sv('path', { d: `M${cx} ${y - s} L${cx + s} ${y} L${cx} ${y + s} L${cx - s} ${y} Z`, fill: STATE_FILL[t.state] || 'var(--mute)', stroke: 'var(--ink)', 'stroke-width': 0.6 },
-      sv('title', null, `${t.id} ${t.title}\n予定日 ${t.scheduled}${t.due ? '　締切 ' + t.due : ''}\n${(TSTATE[t.state] || [t.state])[0]}`)));
-  }
-  return svg;
-}
+// ---- 日付タブ：依頼・目標の日付の表
 // 依頼の開始日・締切と、目標ごとの予定日・締切を、まとめて直して送る。下書きは S.form の dt:<依頼>:… に持つ。
 // 空の欄は「変えない」（目標の締切だけは、空にすると解除）。入力中は描き直さず、行の色・注意・ボタンだけをその場で直す（日付の欄の入力位置を保つ）
 function datesTab(qd) {
@@ -1063,8 +1019,6 @@ function datesTab(qd) {
   sync();
   const pend = qd.q.inbox.some((x) => x.type === 'due');
   return [
-    h('div', { class: 'ganttbox' }, questGantt(qd)),
-    h('p', { class: 'fine', style: 'margin:4px 0 12px' }, '帯は依頼の開始日〜締切、◆ は目標の予定日（色は状態）、赤い点線は今日です。'),
     qbox,
     h('div', { class: 'dtable', role: 'table', 'aria-label': '目標の日付' }, h('div', { class: 'dtr dth', role: 'row' }, ['番号', '目標', '予定日', '締切', '注意'].map((c) => h('span', { role: 'columnheader' }, c))), rows.map((r) => r.tr)),
     editable ? h('div', { class: 'btns' }, btn, undo, h('span', { class: 'fine', style: 'align-self:center' }, '注意は表示だけで、送れます。日付を変えても、ほかの目標の日付は自動では動きません。空の欄は今の日付のままです（目標の締切だけは、空にすると解除）。'))
@@ -1208,16 +1162,10 @@ function questDetail(qd) {
   return h('div', { class: 'qbody' }, qd.asks.map((a) => letterFor(qd, a)), infoLetter(qd), qd.q.plan ? detailTabs(qd) : null, abortBlock(qd));
 }
 
-// ============================================================ 日付（ガントの共通の道具）
+// ============================================================ 日付の道具
 const DAY_MS = 86400000;
 const dayNum = (s) => Math.floor(Date.parse(s + 'G00:00:00Z') / DAY_MS);
-const dayStr = (n) => new Date(n * DAY_MS).toISOString().slice(0, 10);
 const okDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(dayNum(s));  // 不正な日付は無視する
-
-const SVGNS = 'http://www.w3.org/2000/svg';
-const sv = (tag, attrs, ...kids) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c)); return e; };
-// 目標の状態の色（印と同じ系統）
-const STATE_FILL = { pending: 'var(--mute)', blocked: 'var(--stop)', awaiting_confirm: 'var(--warn)', running: 'var(--brass)', waiting_user: 'var(--warn)', review: 'var(--brass)', done: 'var(--ok)', failed: 'var(--ng)', skipped: 'var(--stop)' };
 
 // ============================================================ 描画（画面）
 function banner() {
@@ -1802,7 +1750,7 @@ function helpGrid() {
       ['詳細', '行を押すと、右に詳細が出ます。上に「あなたの番」の手紙、下にタブ「道のり」「日付」「インプット」があります。'],
       ['一覧を隠す', '詳細を横幅いっぱいにします。上のツールバーの「‹ ›」で前後のクエストへ移り、検索で番号・題名から開けます。隠したことは、このブラウザが覚えます。狭い画面では、一覧と詳細を切り替えます（「‹ 一覧へ戻る」）。'],
       ['道のり', '目標の一覧です。行を開くと、合格基準と報告（魔法使い・錬金術師・冒険者・鑑定士・あなた）が読めます。失敗の判断の手紙には、鑑定士の指摘が出ます。'],
-      ['日付', 'このクエストのガントと、依頼の開始日・締切、目標の予定日・締切の表です。直して「変更を送る」を押します。順序の矛盾は注意だけで、ほかの日付は自動では動きません。'],
+      ['日付', '依頼の開始日・締切、目標の予定日・締切の表です。直して「変更を送る」を押します。順序の矛盾は注意だけで、ほかの日付は自動では動きません。'],
       ['インプット', 'このクエストが使うファイルです。「外す」「追加」「既存から選ぶ」で直せます（承認の前でも後でも）。']])),
     sec('スキルの使い方（チャットで使う）', dl([['/guild:init', 'プロジェクトのフォルダで、最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。何度実行しても、依頼や書庫の項目は消えません。プラグインを更新したあとにもう一度実行すると、この画面が最新になります。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。質問・承認・確認は、チャットではなく、この画面の「手紙」で聞きます。動いている間は、この画面での答えを待ち続け、届くとすぐ取り込みます。'], ['止まったとき', 'しばらく動きがなければ、チャットで /guild:quest と送ってください。保存済みの答えや依頼を読み取って、続きから進めます。']])),
     sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（クエスト掲示板の一覧で使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', '目標ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全目標が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
@@ -1812,7 +1760,7 @@ function helpGrid() {
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
       faq('間違えて承認した', 'チャットで「計画を直したい」と伝えてください。実行が始まる前なら、計画を作り直せます。'),
-      faq('予定や進み具合を見たい', 'クエスト掲示板の詳細の「道のり」で、目標ごとの状態と予定が見えます。「日付」タブには、そのクエストのガントと日付の表があり、日付を直せます。'),
+      faq('予定や進み具合を見たい', 'クエスト掲示板の詳細の「道のり」で、目標ごとの状態と予定が見えます。「日付」タブで、日付の表を見て直せます。'),
       faq('納品物のテンプレートを使いたい', 'テンプレートの欄はありません。型にしたいファイルを「＋ 新規」でインプットとして付け、依頼文に「KGI定義.md の見出しに沿って」のように書いてください。'),
       faq('冒険の書（やりとりの一覧）はどこ？', '冒険の書はなくなりました。役の報告は、クエスト掲示板の詳細の「道のり」で、目標の行を開くと読めます。'),
       faq('依頼が受け付けられなかった', '選んだインプットが、出したあとで guild/inputs/ から消されると、依頼は受け付けられず、クエスト掲示板の上に理由が出ます。「出し直す」から、インプットを選び直して出してください。'),
@@ -2332,7 +2280,7 @@ async function start() {
     if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
     if (k && t.type === 'date') S.form[k] = t.value;
   });
-  window.__guildBoard = { S, render, refresh, lsGet, lsSet, boardBucket, boardList, jumpQuest, dateRange, qGanttModel, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
+  window.__guildBoard = { S, render, refresh, lsGet, lsSet, boardBucket, boardList, jumpQuest, MemFS, PathMap, physical, useFS: async (fs, demo) => { S.fs = fs; S.conn = 'ok'; S.demo = !!demo; S.dataKey = ''; await refresh(true); } };
   if (params.has('demo')) {
     S.demo = true; S.fs = new PathMap(new MemFS(toPhysicalTree(demoTree(params.get('demo') || 'human')))); S.conn = 'ok'; await refresh(true); return;
   }

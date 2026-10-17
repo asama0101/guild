@@ -1785,9 +1785,9 @@ class BoardPathsTest(unittest.TestCase):
 
     def test_board_sends_the_date_inputs(self):
         for needle in ("type: 'due', goal: t.id, scheduled, due: d", "type: 'due', start: st, due: du", "function datesTab(", "function dateIssues(",
-                       "function dateRange(", "function qGanttModel(", "function questGantt(", "変更を送る（${n}件）", "'元に戻す'", "dateRange, qGanttModel"):
+                       "変更を送る（${n}件）", "'元に戻す'"):
             self.assertIn(needle, self.board)
-        for gone in ("function dueRow(", "function questDatesRow(", ".duerow", ".tag{"):
+        for gone in ("function dateRange(", "function qGanttModel(", "function questGantt(", "ganttbox", "svg.gantt", "function dueRow(", "function questDatesRow(", ".duerow", ".tag{"):
             self.assertNotIn(gone, self.board)
 
     def test_no_adventure_book_or_templates(self):
