@@ -1760,6 +1760,28 @@ function turnRow(q) {
   });
   return h('div', { class: 'tn' }, text, ...btns);
 }
+// 次の提案（司書が挙げた、関連してやるとよいこと）：「依頼にする」で新規依頼の下書きにする／「見送る」で隠す。見送りは、このブラウザが覚える
+const LS_FOLLOW = 'guild.followups.hidden';
+function followKey(q, f) { return `${q.id}:${f}`; }
+function followHidden() { const v = lsGet(LS_FOLLOW, []); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []); }
+function setFollowHidden(set) { lsSet(LS_FOLLOW, [...set].slice(-200)); render(); }
+function followupToRequest(q, f) {
+  S.form['new:text'] = `${f}\n\n（${q.id}「${q.title}」の続き${q.series ? `。関連：${q.series}` : ''}）`;
+  S.form['new:format'] = ''; openNew();
+}
+function followupList(c) {
+  const hidden = followHidden(), all = c.quests.flatMap((q) => (q.followups || []).map((f) => ({ q, f, k: followKey(q, f) })));
+  const shown = all.filter((x) => !hidden.has(x.k)), gone = all.filter((x) => hidden.has(x.k)), showGone = !!S.showHiddenFollow;
+  const row = (x, isHidden) => h('div', { class: 'tn' }, h('span', { class: 'tt' }, h('button', { type: 'button', class: 'linkbtn', style: 'font-weight:700', title: 'このクエストを開く', onclick: () => jumpQuest(x.q.id) }, `${x.q.id} ${x.q.title}`), '：', x.f),
+    h('span', { class: 'ta' }, isHidden
+      ? h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { const s2 = followHidden(); s2.delete(x.k); setFollowHidden(s2); } }, '戻す')
+      : [h('button', { type: 'button', class: 'btn sm go', onclick: () => followupToRequest(x.q, x.f) }, '依頼にする'),
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { const s2 = followHidden(); s2.add(x.k); setFollowHidden(s2); } }, '見送る')]));
+  const out = shown.length ? shown.map((x) => row(x, false)) : [h('p', { class: 'fine', style: 'margin:0' }, all.length ? '見送った提案だけです。' : 'いまは、提案はありません。')];
+  if (gone.length) out.push(h('p', { class: 'fine', style: 'margin:8px 0 0' }, `見送った提案 ${gone.length} 件　`, h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.showHiddenFollow = !showGone; render(); } }, showGone ? '隠す' : '表示する')));
+  if (gone.length && showGone) out.push(...gone.map((x) => row(x, true)));
+  return out;
+}
 function logTab() {
   const c = S.clog;
   const head = [h('h2', { class: 'h2' }, 'クエストログ'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼の進み・あなたの番・担当・止まっている理由を、事実だけでまとめた記録です。/guild:quest が、待機に入る直前と完了時に作ります。いまの状態は「クエスト掲示板」で見てください。')];
@@ -1775,7 +1797,7 @@ function logTab() {
     sec('進行中', open.length ? h('ul', null, open.map((q) => h('li', null, h('b', null, `${q.id} ${q.title}`), q.series ? `（${q.series}）` : '', `　${q.label}　${(q.goals || {}).done || 0}/${(q.goals || {}).total || 0}`,
       (q.active || []).length ? [h('br'), (q.active || []).map((a) => `${CLASS_NAMES[a.class] || a.class || '—'}：${a.id} ${a.title || ''}`).join('、')] : null))) : empty('進行中の依頼はありません。')),
     sec('止まっている理由', c.quests.some((q) => (q.blockers || []).length) ? h('ul', null, c.quests.flatMap((q) => (q.blockers || []).map((b) => h('li', null, `${q.id} ${b.goal} は、${(b.because || []).length ? b.because.join('、') + ' ができなかったため' : '前提が止まっているため'}、止まっています。`)))) : empty('止まっている目標はありません。')),
-    sec('次の提案', c.quests.some((q) => (q.followups || []).length) ? h('ul', null, c.quests.flatMap((q) => (q.followups || []).map((f) => h('li', null, `${q.id} ${q.title}：${f}`)))) : empty('いまは、提案はありません。')),
+    sec('次の提案', ...followupList(c)),
     sec('これまでの集計', h('p', { class: 'fine', style: 'margin:0' }, `依頼 ${st.quests || 0} 件、目標 ${st.todos || st.goals || 0} 件、完了 ${st.done || 0}、失敗 ${st.failed || 0}、不合格 ${st.rejected || 0} 回、もう一度 ${st.retries || 0} 回、計画の直し ${st.replans || 0} 回`)),
   ];
 }
@@ -2084,6 +2106,7 @@ function render() {
   const tops = KEEP_SCROLL.map((s) => { const e = document.querySelector(s); return e ? e.scrollTop : 0; });
   const tabs = [['board', 'クエスト掲示板'], ['log', 'クエストログ'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
   const body = { board: boardTab, log: logTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
+  app.style.minHeight = app.offsetHeight + 'px';  // 作り直す間に、ページが縮んで、スクロール位置が上へ丸められないように
   app.replaceChildren(h('div', { class: 'wrap wide' }, h('div', { class: 'stickyhead' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools())),
     h('div', { class: 'panel' }, connectBox(), aliveBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
@@ -2092,6 +2115,7 @@ function render() {
   document.documentElement.style.setProperty('--headh', (head && getComputedStyle(head).position === 'sticky' ? head.offsetHeight : 60) + 'px');  // 固定した見出しの高さ。その下に固定する部品が使う
   S.chromeSig = chromeSig();
   window.scrollTo(0, sy);
+  app.style.minHeight = '';
   KEEP_SCROLL.forEach((s, i) => { const e = document.querySelector(s); if (e && tops[i]) e.scrollTop = tops[i]; });
   if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus({ preventScroll: true }); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
   window.scrollTo(0, sy);

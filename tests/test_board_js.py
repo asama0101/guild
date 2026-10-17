@@ -186,3 +186,10 @@ class StickyHeaderAndStaticTabsTest(unittest.TestCase):
         card = BOARD[BOARD.index("function webCard(m)"):BOARD.index("function webTab()")]
         for needle in ("noteOf", "説明はまだありません", "AI の推測（事実ではありません）"):
             self.assertIn(needle, card, needle)
+
+
+class FollowupActionsTest(unittest.TestCase):
+    def test_followups_can_become_requests_or_be_dismissed(self):
+        for needle in ("function followupList(", "依頼にする", "見送る", "見送った提案", "'guild.followups.hidden'", "function followupToRequest("):
+            self.assertIn(needle, BOARD, needle)
+        self.assertIn("app.style.minHeight", BOARD)  # 作り直す間にページが縮まない

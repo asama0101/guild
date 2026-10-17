@@ -25,7 +25,9 @@ console.log(JSON.stringify([adviceLine(rep('もう一度 — 直せる')), advic
         self.assertEqual(node_eval(code), ["もう一度 — 直せる", "計画を直す — 分け方", "やめる — 取れない", "", "", ""])
 
     def log_text(self, clog, model=None):
-        src = "const CLASS_NAMES = { wizard: '魔法使い', alchemist: '錬金術師', adventurer: '冒険者' };\n" + "".join(extract(n) + "\n" for n in ("resultAsks", "turnRow", "logTab"))
+        stubs = "const LS_FOLLOW = 'x'; const lsGet = (k, d) => d; const lsSet = () => {}; const render = () => {}; const openNew = () => {}; const jumpQuest = () => {};\n"
+        src = stubs + "const CLASS_NAMES = { wizard: '魔法使い', alchemist: '錬金術師', adventurer: '冒険者' };\n" + "".join(
+            extract(n) + "\n" for n in ("followKey", "followHidden", "setFollowHidden", "followupToRequest", "followupList", "resultAsks", "turnRow", "logTab"))
         data = json.dumps(clog, ensure_ascii=False)
         return node_eval(FAKE + src + "\nconst S = { form: {}, model: " + json.dumps(model) + ", clog: " + data + " };\nconsole.log(JSON.stringify(text(logTab())));")
 
