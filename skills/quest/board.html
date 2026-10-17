@@ -156,6 +156,7 @@ select{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass)
 .chip{display:inline-block;padding:2px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);font-size:13px;word-break:break-all}
 .rhead{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
 .rbox pre{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0 0 8px}
+.md{font-size:14px;line-height:1.7}.md-h{margin:14px 0 6px}.md-p{margin:6px 0}.md-list{margin:6px 0;padding-left:22px}.md-code{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:10px;font-size:13px;margin:6px 0}.md-table{border-collapse:collapse;margin:8px 0}.md-table th,.md-table td{border:1px solid var(--line,#bbb);padding:4px 8px}.md-quote{margin:8px 0;padding:2px 12px;border-left:3px solid var(--line,#bbb);color:var(--sub)}.md-callout{margin:8px 0;padding:8px 12px;border-left:4px solid var(--brass,#b8860b);background:var(--surface2)}.md-frame{width:100%;height:60vh;border:1px solid var(--line,#bbb);background:#fff}.md-mermaid{overflow:auto}.md-mermaid svg{max-width:100%;height:auto}.wl{color:var(--sub)}.fdet summary{cursor:pointer}.flist{margin:0 0 6px;padding-left:20px}
 input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .connbox{margin-bottom:16px}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
@@ -474,7 +475,7 @@ async function loadAll() {
   }
   requests.sort((a, b) => a.id.localeCompare(b.id));
   const quests = [];
-  const delivFiles = (await S.fs.list('deliverables')).filter((x) => x.kind === 'file' && x.name.endsWith('.md')).map((x) => x.name).sort();
+  const delivFiles = (await S.fs.list('deliverables')).filter((x) => x.kind === 'file' && /\.(md|html|mmd)$/i.test(x.name)).map((x) => x.name).sort();
   for (const e of top) {
     if (e.kind !== 'dir' || !/^Q\d+$/.test(e.name)) continue;
     const q = e.name;
@@ -1933,12 +1934,155 @@ function helpGrid() {
       faq('依頼を取り消したい', '進行中なら、詳細の下の「この依頼を中止する」か、失敗の判断で選べます。受付待ちの依頼は、一覧の「取り消す」で取り消せます（', code('guild/.work/requests/'), ' の該当ファイルを削除しても同じです）。'))));
 }
 
+// ============================================================ 文書の整形表示（Markdown・HTML・Mermaid）と「ファイル」画面
+// 整形は、すべて DOM の文字ノードで組む（本文中の HTML・スクリプトは、ただの文字として出る）。HTML の納品物だけは、スクリプトを止めた枠（sandbox の iframe）で見せる。
+function mdInline(text) {
+  const out = []; let i = 0, m;
+  const re = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\s][^*\n]*\*)|(\[\[[^\]\n]+\]\])|(\[[^\]\n]+\]\([^)\s]+\))/g;
+  while ((m = re.exec(text))) {
+    if (m.index > i) out.push(text.slice(i, m.index));
+    const t = m[0];
+    if (m[1]) out.push(h('code', null, t.slice(1, -1)));
+    else if (m[2]) out.push(h('strong', null, t.slice(2, -2)));
+    else if (m[3]) out.push(h('em', null, t.slice(1, -1)));
+    else if (m[4]) out.push(h('span', { class: 'wl' }, t.slice(2, -2).split('|').pop()));
+    else { const mm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(t); out.push(/^https?:\/\//i.test(mm[2]) ? h('a', { href: mm[2], target: '_blank', rel: 'noopener noreferrer' }, mm[1]) : mm[1]); }
+    i = m.index + t.length;
+  }
+  if (i < text.length) out.push(text.slice(i));
+  return out;
+}
+function renderMarkdown(src) {
+  const text = String(src == null ? '' : src).replace(/\r\n?/g, '\n').replace(/^﻿?---\n[\s\S]*?\n---\n?/, '');
+  const lines = text.split('\n'), out = [];
+  const isFence = (l) => /^\s*(```|~~~)/.test(l), isHr = (l) => /^\s*([-*_])(\s*\1){2,}\s*$/.test(l), isQuote = (l) => /^\s*>/.test(l);
+  const isList = (l) => /^\s*([-*+]|\d+[.)])\s+/.test(l), isHead = (l) => /^#{1,6}\s+/.test(l);
+  const isTable = (k) => /^\s*\|.*\|\s*$/.test(lines[k] || '') && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[k + 1] || '');
+  const cells = (row) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((x) => x.trim());
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\s*$/.test(l)) { i++; continue; }
+    let m;
+    if (isFence(l)) {
+      m = /^\s*(```|~~~)\s*([A-Za-z0-9_-]*)/.exec(l); const fence = m[1], lang = m[2].toLowerCase(), body = []; i++;
+      while (i < lines.length && !lines[i].trim().startsWith(fence)) body.push(lines[i++]);
+      i++;
+      out.push(lang === 'mermaid' ? mermaidBlock(body.join('\n')) : h('pre', { class: 'md-code' }, body.join('\n')));
+    } else if (isHead(l)) {
+      m = /^(#{1,6})\s+(.*)$/.exec(l); out.push(h('h' + Math.min(6, m[1].length + 1), { class: 'md-h' }, mdInline(m[2].trim()))); i++;
+    } else if (isHr(l)) { out.push(h('hr')); i++; }
+    else if (isTable(i)) {
+      const head = cells(lines[i]); i += 2; const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]));
+      out.push(h('table', { class: 'md-table' }, h('thead', null, h('tr', null, head.map((c) => h('th', null, mdInline(c))))), h('tbody', null, rows.map((r) => h('tr', null, r.map((c) => h('td', null, mdInline(c))))))));
+    } else if (isQuote(l)) {
+      const q = []; while (i < lines.length && isQuote(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ''));
+      const co = /^\[!([A-Za-z]+)\]\s*(.*)$/.exec(q[0]);
+      out.push(co ? h('div', { class: 'md-callout' }, h('b', null, co[2] || co[1]), renderMarkdown(q.slice(1).join('\n'))) : h('blockquote', { class: 'md-quote' }, renderMarkdown(q.join('\n'))));
+    } else if (isList(l)) {
+      const base = /^(\s*)/.exec(l)[1].length, ordered = /^\s*\d/.test(l), items = [];
+      while (i < lines.length && !/^\s*$/.test(lines[i])) {
+        const mm = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(lines[i]), ind = /^(\s*)/.exec(lines[i])[1].length;
+        if (mm && ind === base) { items.push({ text: mm[3], sub: [] }); i++; }
+        else if (ind > base && items.length) { items[items.length - 1].sub.push(lines[i].slice(Math.min(ind, base + 2))); i++; }
+        else break;
+      }
+      out.push(h(ordered ? 'ol' : 'ul', { class: 'md-list' }, items.map((it) => h('li', null, mdInline(it.text), it.sub.length ? renderMarkdown(it.sub.join('\n')) : null))));
+    } else {
+      const p = [];
+      while (i < lines.length && !/^\s*$/.test(lines[i]) && (p.length === 0 || !(isFence(lines[i]) || isHead(lines[i]) || isHr(lines[i]) || isQuote(lines[i]) || isList(lines[i]) || isTable(i)))) p.push(lines[i++].trim());
+      out.push(h('p', { class: 'md-p' }, mdInline(p.join(' '))));
+    }
+  }
+  return out;
+}
+// Mermaid の図：まずソースを出し、描画できたら図に置き換える。描画の部品（mermaid.js）は、見るときにインターネット（CDN）から読み込む。読めないときは、ソースのまま
+const MERMAID_URL = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
+const mmCache = {}; let mmPromise = null, mmSeq = 0;
+function loadMermaid() {
+  if (!mmPromise) mmPromise = new Promise((res, rej) => {
+    if (window.mermaid) { res(window.mermaid); return; }
+    const s = document.createElement('script'); s.src = MERMAID_URL;
+    s.onload = () => { try { window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', flowchart: { htmlLabels: false } }); res(window.mermaid); } catch (e) { mmPromise = null; rej(e); } };
+    s.onerror = () => { mmPromise = null; rej(new Error('mermaid を読み込めませんでした')); };
+    document.head.appendChild(s);
+  });
+  return mmPromise;
+}
+function svgNode(svgText) {
+  const root = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
+  if (!root || root.nodeName === 'parsererror' || root.querySelector('parsererror')) throw new Error('図を読み取れませんでした');
+  return document.importNode(root, true);
+}
+function mermaidBlock(src) {
+  const box = h('div', { class: 'md-mermaid' });
+  const note = h('p', { class: 'fine', style: 'margin:0 0 4px' });
+  const showSource = (why) => { note.textContent = why; box.replaceChildren(h('pre', { class: 'md-code' }, src)); };
+  if (src in mmCache) { try { box.append(svgNode(mmCache[src])); return h('div', null, box); } catch (e) { delete mmCache[src]; } }
+  showSource('Mermaid の図：描画しています…（描画できないときは、ソースのまま表示します）');
+  loadMermaid().then((mm) => mm.render('mm' + (++mmSeq), src)).then((r) => { const n = svgNode(r.svg); mmCache[src] = r.svg; box.replaceChildren(n); note.remove(); })
+    .catch(() => showSource('Mermaid の図を描画できませんでした（通信が使えない、または記法の誤りです）。ソースを表示しています。'));
+  return h('div', null, note, box);
+}
+// ファイルの種類に応じた表示。.md は整形、.html は止めた枠、.mmd は図、ほかは文字のまま
+function docKind(path) { const e = (/\.([A-Za-z0-9]+)$/.exec(String(path)) || [])[1]; return e ? e.toLowerCase() : ''; }
+function docView(path, text, asSource) {
+  const k = docKind(path);
+  if (asSource || !['md', 'html', 'mmd'].includes(k)) return h('pre', null, text);
+  if (k === 'md') return h('div', { class: 'md' }, renderMarkdown(text));
+  if (k === 'mmd') return h('div', { class: 'md' }, mermaidBlock(text));
+  return h('div', { class: 'md' }, h('p', { class: 'fine', style: 'margin:0 0 4px' }, 'HTML の納品物です。スクリプトは動かしません。'), h('iframe', { class: 'md-frame', sandbox: '', srcdoc: text, title: 'HTML の納品物' }));
+}
+const TEXT_EXT = ['md', 'txt', 'csv', 'json', 'html', 'mmd', 'yaml', 'yml', 'xml', 'log', 'tsv'];
+function canOpen(path) { return TEXT_EXT.includes(docKind(path)); }
+// 「ファイル」画面：依頼別／種類別／検索。名前・題名・関連（series）で探す
+function filesModel(m) {
+  const lc = (x) => String(x || '').toLowerCase(), inputsHave = new Map((m.inputs || []).map((f) => [lc(f.name), f.name]));
+  const quests = m.quests.map((qd) => {
+    const p = qd.q.plan, used = (p && Array.isArray(p.inputs) ? p.inputs : []).map((x) => x && x.name).filter((n) => n && inputsHave.has(lc(n))).map((n) => inputsHave.get(lc(n)));
+    const reports = (qd.q.reports || []).map((n) => `${qd.id}/reports/${n}`);
+    const groups = [['納品物', (qd.q.published || []).map((n) => `deliverables/${n}`)], ['成果物', qd.q.output || []], ['報告', reports], ['使ったインプット', used.map((n) => `inputs/${n}`)]].filter(([, fs]) => fs.length);
+    return { id: qd.id, title: qd.title, series: p && p.series ? p.series : '', label: qd.label, groups };
+  });
+  const usedBy = (name) => quests.filter((x) => x.groups.some(([k, fs]) => k === '使ったインプット' && fs.includes(`inputs/${name}`))).map((x) => x.id);
+  const kinds = [['納品物', []], ['成果物', []], ['報告', []], ['書庫', []], ['インプット', []]];
+  const bucket = (k) => kinds.find(([n]) => n === k)[1];
+  for (const x of quests) for (const [k, fs] of x.groups) if (k !== '使ったインプット') for (const f of fs) bucket(k).push({ path: f, label: f.replace(/^.*\//, ''), by: x.id, title: x.title, series: x.series });
+  for (const e of m.archive || []) bucket('書庫').push({ path: `archive/${e.path}`, label: `${e.name || e.path}`, by: '', title: '', series: '' });
+  for (const f of m.inputs || []) bucket('インプット').push({ path: `inputs/${f.name}`, label: f.name, by: usedBy(f.name).join('、'), title: '', series: '' });
+  return { quests, kinds };
+}
+function fileRow(f, extra) {
+  return h('li', null, canOpen(f.path) ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f.path); } }, f.label) : h('span', null, f.label), extra ? h('span', { class: 'fine' }, ` ${extra}`) : null, ' ',
+    h('button', { type: 'button', class: 'linkbtn', onclick: () => copyPath(f.path) }, 'パスをコピー'));
+}
+const FVIEWS = [['quest', '依頼別'], ['kind', '種類別'], ['search', '検索']];
+function filesTab() {
+  const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
+  const fm = filesModel(m), view = S.fview || 'quest', q = (S.form['f:fs'] || '').trim().toLowerCase();
+  const head = [h('h2', { class: 'h2' }, 'ファイル'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '納品物・成果物・報告・書庫・インプットを、まとめて探せます。名前を押すと、整形して開きます（Markdown・HTML・Mermaid）。「パスをコピー」で、場所をチャットに貼れます。'),
+    h('div', { class: 'chipbar', role: 'group', 'aria-label': '見方' }, FVIEWS.map(([k, l]) => h('button', { type: 'button', 'aria-pressed': String(view === k), onclick: () => { S.fview = k; render(); } }, l))),
+    searchBox('f:fs', 'ファイル名・依頼の題名・関連で探す')];
+  const hitQ = (x) => hit(q, x.id, x.title, x.series);
+  if (view === 'quest') {
+    const list = fm.quests.filter((x) => x.groups.length && (!q || hitQ(x) || x.groups.some(([, fs]) => fs.some((f) => hit(q, f)))));
+    return [...head, list.length ? list.map((x) => h('details', { class: 'card fdet', open: !!q || S.sel === x.id }, h('summary', null, h('b', null, `${x.id}　${x.title}`), x.series ? h('span', { class: 'fine' }, `　関連：${x.series}`) : null, h('span', { class: 'fine' }, `　${x.label}`)),
+      x.groups.map(([k, fs]) => [h('p', { class: 'lbl', style: 'margin:8px 0 2px' }, k), h('ul', { class: 'flist' }, fs.filter((f) => !q || hitQ(x) || hit(q, f)).map((f) => fileRow({ path: f, label: f.replace(/^.*\//, '') })))]))) : h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'まだファイルはありません。')];
+  }
+  const sections = fm.kinds.map(([k, fs]) => [k, fs.filter((f) => !q || hit(q, f.label, f.by, f.title, f.series))]);
+  if (view === 'kind') return [...head, sections.map(([k, fs]) => h('section', { class: 'card', style: 'margin-bottom:12px' }, h('h3', null, `${k}（${fs.length}）`),
+    fs.length ? h('ul', { class: 'flist' }, fs.map((f) => fileRow(f, f.by ? (f.title ? `${f.by} ${f.title}` : `使った依頼：${f.by}`) : ''))) : h('p', { class: 'fine', style: 'margin:0' }, 'ありません。')))];
+  const all = sections.flatMap(([k, fs]) => fs.map((f) => ({ ...f, kind: k })));
+  return [...head, !q ? h('p', { class: 'sub' }, '探したい言葉を入れてください。') : all.length ? h('ul', { class: 'flist' }, all.map((f) => fileRow(f, `[${f.kind}]${f.by ? ' ' + f.by : ''}${f.title ? ' ' + f.title : ''}`))) : h('p', { class: 'sub' }, '見つかりませんでした。')];
+}
+
 function reader() {
   if (!S.reader) return null;
   return h('div', { class: 'reader', role: 'dialog', 'aria-label': '報告' }, h('div', { class: 'rbox' },
-    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '中身') }, '中身をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyPath(S.reader.path) }, 'パスをコピー'), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
+    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '中身') }, '中身をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyPath(S.reader.path) }, 'パスをコピー'), ['md', 'html', 'mmd'].includes(docKind(S.reader.path)) ? h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => { S.reader.source = !S.reader.source; render(); } }, S.reader.source ? '整形して見る' : 'ソースで見る') : null, h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
     S.toast ? h('p', { class: 'saved', role: 'status' }, S.toast) : null,
-    h('pre', null, S.reader.text)));
+    docView(S.reader.path, S.reader.text, S.reader.source)));
 }
 function fallbackBox() {
   if (!S.fallback) return null;
@@ -2034,8 +2178,8 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const tops = KEEP_SCROLL.map((s) => { const e = document.querySelector(s); return e ? e.scrollTop : 0; });
-  const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['log', 'クエストログ'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
-  const body = { board: boardTab, prog: progressTab, log: logTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
+  const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['log', 'クエストログ'], ['files', 'ファイル'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
+  const body = { board: boardTab, prog: progressTab, log: logTab, files: filesTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap wide' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), aliveBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
@@ -2060,7 +2204,7 @@ function obsidianTab() {
           h('li', null, '作業用のファイルは ', code('guild/.work/'), ' にあり、Obsidian には出ません（設定は要りません）。')),
         h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
       sec('ディレクトリ構成', pre(['guild/', '  board.html', '  archive/            書庫（用語名.md。種類は項目の type）', '    index.md          索引（役が最初に読む）',
-        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             依頼で使う資料（1つだけ置き、各クエストは名前で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、設定（config.json）、掟（codex/）、バックアップ'].join('\n'))),
+        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_題名.md／.html／.mmd と .prompt.md）', '  inputs/             依頼で使う資料（1つだけ置き、各クエストは名前で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、設定（config.json）、掟（codex/）、バックアップ'].join('\n'))),
       sec('納品物を見る', dl([['場所', h('span', null, code('deliverables/Q###_…'), '。全目標が済んで受け取りの確認の手紙が出た時に置かれます。Markdown 以外が要る部分は ', code('.prompt.md'), '（Claude Code に渡すプロンプト）です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
       sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'inputs: ["KGI定義.md"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[KGI]] のようにリンクします。'].join('\n')),
         dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止'], ['inputs', '関係する guild/inputs/ のファイル名（任意）。依頼文にこの項目の名前が出ると、受付係にそのファイルが勧められます']]),
@@ -2244,7 +2388,7 @@ function demoTree(scene) {
     deliverables: { 'Q001_report.md': T('見本'), 'Q001_スライド.prompt.md': T('---\ntype: prompt\n---\n# PowerPoint 5枚を作って…'), 'Q002_comparison.md': T('見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', start: null, due: null, inputs: [], files: [] }),
       rejected: { 'R20261009-090000.json': J({ type: 'request', text: '売上の資料をまとめてほしい', inputs: ['消えた資料.xlsx'], files: [] }), 'R20261009-090000.json.reason.txt': T('選んだインプットが guild/inputs/ にありません（削除された可能性があります）: 消えた資料.xlsx') } },
-    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: ['KPI.md'], codex_proposals: [{ id: 'K1', name: '出典なしの数字は不合格', text: '数字には、必ず出典を添える', quest: 'Q001' }], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/G1/digest.md', inputs: ['notes.txt'] }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { G1: { 'digest.md': T('- 見本') }, G3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
+    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: ['KPI.md'], codex_proposals: [{ id: 'K1', name: '出典なしの数字は不合格', text: '数字には、必ず出典を添える', quest: 'Q001' }], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/G1/digest.md', inputs: ['notes.txt'] }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { G1: { 'digest.md': T('- 見本') }, G3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く\n\n要点は **3 つ**です。詳しくは [[KGI定義]] を見てください。\n\n- 要点 1\n- 要点 2\n  - 補足\n\n| 項目 | 値 |\n|---|---|\n| 売上 | 100 |\n\n```mermaid\ngraph TD\n  A[依頼] --> B[納品]\n```\n') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'G1-appraiser.md': T('見本') }, output: { G3: { 'comparison.md': T('見本') } }, inbox: {} }
   };
 }
