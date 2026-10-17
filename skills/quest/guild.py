@@ -128,79 +128,16 @@ def save_json(path, plan):
 
 LOCK_TIMEOUT = 15  # ロックを待つ秒数。超えたらエラー（他人のロックは壊さない）
 LOCK_STALE = 60  # この秒数より古いロックは、落ちたプロセスの残りとみなして取り上げる
-
-
-def _unlink_quietly(path):
-    """OneDrive・ウイルス対策が掴んでいると PermissionError になる。数回やり直し、だめでも握りつぶす（ロックは古くなれば取り上げられる）。"""
-    for n in range(REPLACE_TRIES):
-        try:
-            Path(path).unlink(missing_ok=True)
-            return
-        except OSError:
-            time.sleep(0.05 * (n + 1))
+_unlink_quietly = webaccess.unlink_quietly  # ロックの作りは、フック（外部サイトの許可）と共通なので、webaccess.py にある
 
 
 def _steal_stale(lock):
-    """古いロックの取り上げ。取り上げ役を <lock>.steal の O_EXCL で 1 人に絞り、その中で古さを確かめ直してから消す
-    （他の人が取り上げて作り直した新しいロックを消さない）。"""
-    guard = Path(str(lock) + ".steal")
-    try:
-        os.close(os.open(guard, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-    except FileExistsError:
-        try:
-            if time.time() - guard.stat().st_mtime > LOCK_STALE:
-                _unlink_quietly(guard)  # 取り上げ役が落ちた残り
-        except OSError:
-            pass
-        return
-    except OSError:
-        return
-    try:
-        if time.time() - lock.stat().st_mtime > LOCK_STALE:
-            lock.unlink()
-    except OSError:
-        pass
-    finally:
-        _unlink_quietly(guard)
+    webaccess.steal_stale(lock, LOCK_STALE)
 
 
-@contextlib.contextmanager
 def plan_lock(path):
     """plan.json の読み→書きを 1 つずつにする排他ロック（<path>.lock を O_EXCL で作る）。load から save までを包む。"""
-    lock = Path(str(path) + ".lock")
-    deadline = time.monotonic() + LOCK_TIMEOUT
-    while True:
-        try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            try:
-                stale = time.time() - lock.stat().st_mtime > LOCK_STALE
-            except OSError:
-                continue  # 確かめている間に消えた。作り直しを試す
-            if stale:
-                _steal_stale(lock)
-                continue
-            if time.monotonic() > deadline:
-                raise GuildError(f"{lock.name} を他のプロセスが使っています。しばらくしてからもう一度実行してください")
-            time.sleep(0.05)
-            continue
-        except PermissionError:
-            if time.monotonic() > deadline:
-                raise GuildError(f"{lock.name} を作れません（権限）")
-            time.sleep(0.05)
-            continue
-        try:
-            os.write(fd, str(os.getpid()).encode())
-        except OSError:
-            os.close(fd)
-            _unlink_quietly(lock)
-            raise
-        os.close(fd)
-        break
-    try:
-        yield
-    finally:
-        _unlink_quietly(lock)
+    return webaccess.file_lock(path, GuildError, LOCK_TIMEOUT, LOCK_STALE)
 
 
 def load_transitions(path=None):
@@ -2326,7 +2263,7 @@ def main(argv):
             raise GuildError("plan.json の検査に失敗しました: " + " / ".join(errs))
         print(json.dumps(next_view(plan, Path(path).parent), ensure_ascii=False))
         return 0
-    except GuildError as e:
+    except (GuildError, webaccess.WebError) as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
 

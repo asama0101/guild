@@ -8,6 +8,7 @@
   notes    ドメインごとの一言の説明（{ドメイン: 文}）。ギルドマスターが web-describe で書く。AI の推測で、事実ではない
 依頼主の答えは guild/.work/web/inbox/ に JSON で届き、guild.py web-ingest が反映する。
 """
+import contextlib
 import datetime
 import json
 import os
@@ -54,6 +55,88 @@ def load(gdir):
 
 
 REPLACE_TRIES = 6  # Windows・OneDrive 配下で、置き換え先を他のプロセスが開いていると PermissionError になる。短い間隔で数回やり直す
+
+
+LOCK_TIMEOUT = 15  # ロックを待つ秒数。超えたらエラー（他人のロックは壊さない）
+LOCK_STALE = 60  # この秒数より古いロックは、落ちたプロセスの残りとみなして取り上げる
+
+
+def unlink_quietly(path):
+    """OneDrive・ウイルス対策が掴んでいると PermissionError になる。数回やり直し、だめでも握りつぶす（ロックは古くなれば取り上げられる）。"""
+    for n in range(REPLACE_TRIES):
+        try:
+            Path(path).unlink(missing_ok=True)
+            return
+        except OSError:
+            time.sleep(0.05 * (n + 1))
+
+
+def steal_stale(lock, stale=LOCK_STALE):
+    """古いロックの取り上げ。取り上げ役を <lock>.steal の O_EXCL で 1 人に絞り、その中で古さを確かめ直してから消す
+    （他の人が取り上げて作り直した新しいロックを消さない）。"""
+    guard = Path(str(lock) + ".steal")
+    try:
+        os.close(os.open(guard, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        try:
+            if time.time() - guard.stat().st_mtime > stale:
+                unlink_quietly(guard)  # 取り上げ役が落ちた残り
+        except OSError:
+            pass
+        return
+    except OSError:
+        return
+    try:
+        if time.time() - lock.stat().st_mtime > stale:
+            lock.unlink()
+    except OSError:
+        pass
+    finally:
+        unlink_quietly(guard)
+
+
+@contextlib.contextmanager
+def file_lock(path, error=None, timeout=None, stale=None):
+    """<path>.lock を O_EXCL で作る排他ロック。読み→書きを 1 つずつにする（plan.json も access.json も、これを使う）。
+    取れなければ error（なければ WebError）を投げる。"""
+    error = error or WebError
+    timeout = LOCK_TIMEOUT if timeout is None else timeout
+    stale = LOCK_STALE if stale is None else stale
+    lock = Path(str(path) + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                old = time.time() - lock.stat().st_mtime > stale
+            except OSError:
+                continue  # 確かめている間に消えた。作り直しを試す
+            if old:
+                steal_stale(lock, stale)
+                continue
+            if time.monotonic() > deadline:
+                raise error(f"{lock.name} を他のプロセスが使っています。しばらくしてからもう一度実行してください")
+            time.sleep(0.05)
+            continue
+        except PermissionError:
+            if time.monotonic() > deadline:
+                raise error(f"{lock.name} を作れません（権限）")
+            time.sleep(0.05)
+            continue
+        try:
+            os.write(fd, str(os.getpid()).encode())
+        except OSError:
+            os.close(fd)
+            unlink_quietly(lock)
+            raise
+        os.close(fd)
+        break
+    try:
+        yield
+    finally:
+        unlink_quietly(lock)
 
 
 def write_text_atomic(path, text):
@@ -111,7 +194,7 @@ def one_line(text, limit):
     return " ".join(str(text or "").split())[:limit]
 
 
-def gate(gdir, url, prompt=""):
+def gate(gdir, url, prompt="", lock_timeout=5):
     """URL を開いてよいか。(allow か deny, 魔法使いに返す理由) を返す。許可がなければ pending に積む。"""
     text = str(url).strip()
     if re.search(r"[\\\s\x00-\x1f\x7f]", text) or "@" in urlsplit(text).netloc:  # バックスラッシュ・空白・制御文字・ホスト部の @（ユーザー情報）：パーサによって、ホストの読みが変わる。開かない（パスの @ は、そのまま通す）
@@ -131,23 +214,27 @@ def gate(gdir, url, prompt=""):
     if covered(domain, data["denied"]):
         return "deny", f"依頼主が {domain} の取得を許可しませんでした。このドメインは開かずに進めてください。報告の「未確認」に「許可なし：{url}」と書いてください。"
     purpose = one_line(prompt, PURPOSE_MAX)
-    seen = [p for p in data["pending"] if isinstance(p, dict) and p.get("domain") == domain]
-    if seen:
-        changed = False
-        if url not in seen[0].setdefault("urls", []) and len(seen[0]["urls"]) < 5:
-            seen[0]["urls"].append(url)
-            changed = True
-        ps = seen[0].setdefault("purposes", [])
-        if purpose and purpose not in ps and len(ps) < PURPOSES_MAX:
-            ps.append(purpose)
-            changed = True
-        if changed:
+    with file_lock(access_path(gdir), timeout=lock_timeout):  # 並列の魔法使いが、同時に許可待ちを書いても、片方が消えない
+        data = load(gdir)  # ロックの中で読み直す
+        if covered(domain, data["allow"]) or covered(domain, data["once"]):
+            return "allow", ""
+        seen = [p for p in data["pending"] if isinstance(p, dict) and p.get("domain") == domain]
+        if seen:
+            changed = False
+            if url not in seen[0].setdefault("urls", []) and len(seen[0]["urls"]) < 5:
+                seen[0]["urls"].append(url)
+                changed = True
+            ps = seen[0].setdefault("purposes", [])
+            if purpose and purpose not in ps and len(ps) < PURPOSES_MAX:
+                ps.append(purpose)
+                changed = True
+            if changed:
+                save(gdir, data)
+        elif len(data["pending"]) < MAX_PENDING:
+            data["pending"].append({"domain": domain, "urls": [url], "purposes": [purpose] if purpose else [], "at": now()})
             save(gdir, data)
-    elif len(data["pending"]) < MAX_PENDING:
-        data["pending"].append({"domain": domain, "urls": [url], "purposes": [purpose] if purpose else [], "at": now()})
-        save(gdir, data)
-    else:
-        return "deny", (f"{domain} は、依頼主の許可がないため開けません。許可待ちの手紙がいっぱい（{MAX_PENDING} 件）で、この確認は積めませんでした。"
+        else:
+            return "deny", (f"{domain} は、依頼主の許可がないため開けません。許可待ちの手紙がいっぱい（{MAX_PENDING} 件）で、この確認は積めませんでした。"
                         f"今は開かずに進め、報告の「未確認」に「許可なし：{url}」と書いてください。")
     return "deny", (f"{domain} は、依頼主の許可がないため開けません。依頼主へは、ボードの手紙で確認を出します。"
                     f"今は開かずに、ほかの出典で進められる範囲で進めてください。報告の「未確認」に「許可待ち：{url}」と書いてください。")
@@ -181,6 +268,11 @@ def apply(data, msg):
 
 def ingest(gdir):
     """guild/.work/web/inbox/ の答えを反映する。反映できなかったものは rejected/ に理由つきで移す。"""
+    with file_lock(access_path(gdir)):
+        return _ingest(gdir)
+
+
+def _ingest(gdir):
     inbox = Path(gdir) / WORK / "web" / "inbox"
     report = {"applied": [], "rejected": []}
     if not inbox.is_dir():
@@ -214,6 +306,11 @@ def describe(gdir, mapping):
     """許可待ち・許可リスト・今回だけ許可のドメインに、一言の説明（AI の推測）を付ける。ほかのドメインは受け付けない。書いた数と、飛ばした理由を返す。"""
     if not isinstance(mapping, dict):
         raise WebError("descriptions は {ドメイン: 説明} の辞書にしてください")
+    with file_lock(access_path(gdir)):
+        return _describe(gdir, mapping)
+
+
+def _describe(gdir, mapping):
     data = load(gdir)
     waiting = {p.get("domain") for p in data["pending"] if isinstance(p, dict)} | set(data["allow"]) | set(data["once"])  # 許可待ち・許可リスト・今回だけ許可のドメイン
     written, skipped = [], []
@@ -233,6 +330,11 @@ def describe(gdir, mapping):
 
 def reset(gdir):
     """依頼の完了・中止で、「今回だけ」の許可と、許可しなかった記録を空にする。"""
+    with file_lock(access_path(gdir)):
+        return _reset(gdir)
+
+
+def _reset(gdir):
     data = load(gdir)
     cleared = {"once": data["once"], "denied": data["denied"]}
     data["once"], data["denied"] = [], []

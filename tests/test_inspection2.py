@@ -268,5 +268,31 @@ class UrlShapeTest(unittest.TestCase):
                 self.assertEqual(webaccess.gate(gdir, url, "p")[0], "allow", url)
 
 
+PENDING_WORKER = """
+import sys
+sys.path.insert(0, sys.argv[1])
+import webaccess
+for i in range(10):
+    webaccess.gate(sys.argv[2], "https://s%s-%d.example.com/x" % (sys.argv[3], i), "p")
+"""
+
+
+class WebLockTest(unittest.TestCase):
+    def test_parallel_gates_keep_every_pending_entry(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            gdir = Path(d) / "guild"
+            procs = [subprocess.Popen([sys.executable, "-I", "-c", PENDING_WORKER, str(ROOT / "skills" / "quest"), str(gdir), str(n)]) for n in range(3)]
+            self.assertEqual([p.wait() for p in procs], [0, 0, 0])
+            self.assertEqual(len(webaccess.pending(gdir)), 10 * 3)
+
+    def test_gate_denies_when_the_lock_cannot_be_taken(self):
+        with tempfile.TemporaryDirectory() as d:
+            gdir = Path(d) / "guild"
+            with webaccess.file_lock(webaccess.access_path(gdir)):
+                with self.assertRaises(webaccess.WebError):
+                    webaccess.gate(gdir, "https://new.example.org/", "p", lock_timeout=0.2)
+
+
 if __name__ == "__main__":
     unittest.main()
