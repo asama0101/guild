@@ -173,6 +173,19 @@ input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .wseg button:last-child{border-right:0}
 .wseg button[aria-pressed="true"]{background:var(--sel-bg);color:var(--ok);font-weight:700}
 .wseg button[aria-pressed="true"].deny{color:var(--ng,#a63d3d)}
+.dside{display:grid;grid-template-columns:190px minmax(0,1fr);gap:16px}
+@media (max-width:640px){.dside{grid-template-columns:1fr}}
+.dnav{display:flex;flex-direction:column;gap:4px;align-self:start}
+.dnav button{font:inherit;font-size:14px;text-align:left;display:flex;justify-content:space-between;gap:8px;min-height:36px;padding:7px 10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}
+.dnav button[aria-pressed="true"]{background:var(--sel-bg);border:2px solid var(--ok);padding:6px 9px;font-weight:700;color:var(--ok)}
+.dnav .n{font-weight:400;color:var(--sub);font-size:12px}
+.dnav .sep{height:1px;background:var(--line);margin:4px 0}
+.drow{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom:10px}
+.dseg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.dseg button{font:inherit;font-size:12px;padding:5px 10px;min-height:32px;border:0;border-right:1px solid var(--line);background:var(--surface);color:var(--sub);cursor:pointer}
+.dseg button:last-child{border-right:0}
+.dseg button[aria-pressed="true"]{background:var(--sel-bg);color:var(--ok);font-weight:700}
+.fname{min-width:0;word-break:break-all}
 .qa{margin:16px 0 4px;padding-top:6px;border-top:1px dashed var(--line)}
 .qa:first-of-type{border-top:0}
 
@@ -1701,23 +1714,7 @@ function searchBox(key, placeholder) {
 }
 const hit = (q, ...texts) => !q || texts.some((t) => String(t || '').toLowerCase().includes(q));
 
-function delivTab() {
-  const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
-  const q = (S.form['f:dl'] || '').trim().toLowerCase();
-  const done = m.quests.filter((x) => x.finished).filter((x) => { const d = deliverables(x); return hit(q, x.id, x.title, ...d.main, ...d.rest); });
-  const waiting = m.quests.filter((x) => x.allDone && !x.finished && x.q.plan && x.q.plan.status === 'active');
-  const out = [h('h2', { class: 'h2' }, '納品物'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '受け取った納品物（まとめた資料）の一覧です。ファイル名を押すと開き、文章とパスをコピーできます。'),
-    searchBox('f:dl', '依頼の名前やファイル名で探す')];
-  if (waiting.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, '受け取り待ち'), waiting.map((x) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(x.id) }, `${x.id} ${x.title.slice(0, 20)}`))));
-  if (!done.length) out.push(h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'まだ、受け取った納品物はありません。'));
-  for (const x of done) {
-    const acc = x.q.plan.history.find((e) => e.event === 'accepted');
-    out.push(h('article', { class: 'card', style: 'margin-bottom:12px' }, h('h3', null, `${x.id}　${x.title}`),
-      acc ? h('p', { class: 'fine', style: 'margin:0 0 6px' }, '受け取った日時：' + fmtTime(acc.t)) : null, deliverableBlock(x)));
-  }
-  return out;
-}
-
+// 「納品物」画面は、ファイル画面を統合した：左で種類（初めはすべて）、右で依頼別／種類別
 function sendArchive(obj, key) {
   return writeOrFallback(`archive/inbox/${nowName(obj.type, String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true); });
 }
@@ -2003,7 +2000,7 @@ function helpGrid() {
       faq('依頼を取り消したい', '進行中なら、詳細の下の「この依頼を中止する」か、失敗の判断で選べます。受付待ちの依頼は、一覧の「取り消す」で取り消せます（', code('guild/.work/requests/'), ' の該当ファイルを削除しても同じです）。'))));
 }
 
-// ============================================================ 文書の整形表示（Markdown・HTML・Mermaid）と「ファイル」画面
+// ============================================================ 文書の整形表示（Markdown・HTML・Mermaid）と「納品物」画面
 // 整形は、すべて DOM の文字ノードで組む（本文中の HTML・スクリプトは、ただの文字として出る）。HTML の納品物だけは、スクリプトを止めた枠（sandbox の iframe）で見せる。
 function mdInline(text) {
   const out = []; let i = 0, m;
@@ -2118,7 +2115,7 @@ function docView(path, text, asSource) {
 }
 const TEXT_EXT = ['md', 'txt', 'csv', 'json', 'html', 'mmd', 'yaml', 'yml', 'xml', 'log', 'tsv'];
 function canOpen(path) { return TEXT_EXT.includes(docKind(path)); }
-// 「ファイル」画面：依頼別／種類別／検索。名前・題名・関連（series）で探す
+// 「納品物」画面の元データ：依頼別／種類別。名前・題名・関連（series）で探す
 function filesModel(m) {
   const lc = (x) => String(x || '').toLowerCase(), inputsHave = new Map((m.inputs || []).map((f) => [lc(f.name), f.name]));
   const quests = m.quests.map((qd) => {
@@ -2136,27 +2133,45 @@ function filesModel(m) {
   return { quests, kinds };
 }
 function fileRow(f, extra) {
-  return h('li', null, canOpen(f.path) ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f.path); } }, f.label) : h('span', null, f.label), extra ? h('span', { class: 'fine' }, ` ${extra}`) : null, ' ',
-    h('button', { type: 'button', class: 'linkbtn', onclick: () => copyPath(f.path) }, 'パスをコピー'));
+  const prompt = /\.prompt\.md$/i.test(f.path), open = canOpen(f.path);
+  const copyBody = async () => { const t = await S.fs.readText(f.path); if (t == null) { S.toast = '読めませんでした'; render(); return; } copyText(prompt ? t.replace(/^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---\r?\n?/, '') : t, prompt ? 'プロンプト' : '文章'); };
+  return h('li', null, h('span', { class: 'fname' }, open ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f.path); } }, f.label) : h('span', null, f.label), extra ? h('span', { class: 'fine' }, ` ${extra}`) : null),
+    h('span', { class: 'acts' },
+      open ? h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f.label} を開く`, onclick: () => openFile(f.path) }, '開く') : null,
+      open ? h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f.label} の${prompt ? 'プロンプト' : '文章'}をコピー`, onclick: copyBody }, prompt ? 'プロンプトをコピー' : '文章をコピー') : null,
+      h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f.label} のパスをコピー`, onclick: () => copyPath(f.path) }, 'パスをコピー')));
 }
-const FVIEWS = [['quest', '依頼別'], ['kind', '種類別'], ['search', '検索']];
-function filesTab() {
+const FVIEWS = [['quest', '依頼別'], ['kind', '種類別']];
+const FKINDS = ['納品物', '成果物', '報告', '書庫', 'インプット'];
+function delivTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
-  const fm = filesModel(m), view = S.fview || 'quest', q = (S.form['f:fs'] || '').trim().toLowerCase();
-  const head = [h('h2', { class: 'h2' }, 'ファイル'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '納品物・成果物・報告・書庫・インプットを、まとめて探せます。名前を押すと、整形して開きます（Markdown・HTML・Mermaid）。「パスをコピー」で、場所をチャットに貼れます。'),
-    h('div', { class: 'chipbar', role: 'group', 'aria-label': '見方' }, FVIEWS.map(([k, l]) => h('button', { type: 'button', 'aria-pressed': String(view === k), onclick: () => { S.fview = k; render(); } }, l))),
-    searchBox('f:fs', 'ファイル名・依頼の題名・関連で探す')];
+  const fm = filesModel(m), view = S.fview === 'kind' ? 'kind' : 'quest', kind = FKINDS.includes(S.fkind) ? S.fkind : 'all', q = (S.form['f:fs'] || '').trim().toLowerCase();
   const hitQ = (x) => hit(q, x.id, x.title, x.series);
+  const count = (k) => fm.kinds.filter(([n]) => k === 'all' || n === k).reduce((a, [, fs]) => a + fs.length, 0);
+  const waiting = m.quests.filter((x) => x.allDone && !x.finished && x.q.plan && x.q.plan.status === 'active');
+  const navBtn = (k, label) => h('button', { type: 'button', 'aria-pressed': String(kind === k), onclick: () => { S.fkind = k; render(); } }, h('span', null, label), h('span', { class: 'n' }, String(count(k))));
+  const nav = h('div', { class: 'dnav', role: 'group', 'aria-label': '種類' }, navBtn('納品物', '納品物'), h('div', { class: 'sep' }), ['成果物', '報告', '書庫', 'インプット'].map((k) => navBtn(k, k)), h('div', { class: 'sep' }), navBtn('all', 'すべて'));
+  const seg = h('span', { class: 'dseg', role: 'group', 'aria-label': '並べ方' }, FVIEWS.map(([k, l]) => h('button', { type: 'button', 'aria-pressed': String(view === k), onclick: () => { S.fview = k; render(); } }, l)));
+  let body;
   if (view === 'quest') {
-    const list = fm.quests.filter((x) => x.groups.length && (!q || hitQ(x) || x.groups.some(([, fs]) => fs.some((f) => hit(q, f)))));
-    return [...head, list.length ? list.map((x) => h('details', { class: 'card fdet', open: !!q || S.sel === x.id }, h('summary', null, h('b', null, `${x.id}　${x.title}`), x.series ? h('span', { class: 'fine' }, `　関連：${x.series}`) : null, h('span', { class: 'fine' }, `　${x.label}`)),
-      x.groups.map(([k, fs]) => [h('p', { class: 'lbl', style: 'margin:8px 0 2px' }, k), h('ul', { class: 'flist' }, fs.filter((f) => !q || hitQ(x) || hit(q, f)).map((f) => fileRow({ path: f, label: f.replace(/^.*\//, '') })))]))) : h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'まだファイルはありません。')];
+    const want = (g) => kind === 'all' || g === kind || (kind === 'インプット' && g === '使ったインプット');
+    const cards = fm.quests.map((x) => ({ x, groups: x.groups.filter(([g]) => want(g)).map(([g, fs]) => [g, fs.filter((f) => !q || hitQ(x) || hit(q, f))]).filter(([, fs]) => fs.length) })).filter((c) => c.groups.length);
+    const lib = want('書庫') ? fm.kinds.find(([n]) => n === '書庫')[1].filter((f) => !q || hit(q, f.label)) : [];
+    body = [...cards.map(({ x, groups }) => {
+      const qd = m.quests.find((y) => y.id === x.id), acc = qd && qd.q.plan && qd.q.plan.history ? qd.q.plan.history.find((e) => e.event === 'accepted') : null;
+      return h('article', { class: 'card', style: 'margin-bottom:12px' }, h('h3', null, `${x.id}　${x.title}`),
+        h('p', { class: 'fine', style: 'margin:0 0 6px' }, [acc ? `受け取った日時：${fmtTime(acc.t)}` : x.label, x.series ? `　関連：${x.series}` : ''].join('')),
+        groups.map(([g, fs]) => [kind === 'all' || groups.length > 1 ? h('p', { class: 'lbl', style: 'margin:8px 0 2px' }, g) : null, h('ul', { class: 'flist' }, fs.map((f) => fileRow({ path: f, label: f.replace(/^.*\//, '') })))]));
+    }), lib.length ? h('article', { class: 'card', style: 'margin-bottom:12px' }, h('h3', null, '書庫'), h('ul', { class: 'flist' }, lib.map((f) => fileRow(f)))) : null];
+    if (!cards.length && !lib.length) body = [h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'ここには、まだありません。')];
+  } else {
+    const secs = fm.kinds.filter(([n]) => kind === 'all' || n === kind).map(([n, fs]) => [n, fs.filter((f) => !q || hit(q, f.label, f.by, f.title, f.series))]).filter(([, fs]) => fs.length);
+    body = secs.length ? secs.map(([n, fs]) => h('section', { class: 'card', style: 'margin-bottom:12px' }, h('h3', null, `${n}（${fs.length}）`),
+      h('ul', { class: 'flist' }, fs.map((f) => fileRow(f, f.by ? (f.title ? `${f.by} ${f.title}` : `使った依頼：${f.by}`) : ''))))) : [h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'ここには、まだありません。')];
   }
-  const sections = fm.kinds.map(([k, fs]) => [k, fs.filter((f) => !q || hit(q, f.label, f.by, f.title, f.series))]);
-  if (view === 'kind') return [...head, sections.map(([k, fs]) => h('section', { class: 'card', style: 'margin-bottom:12px' }, h('h3', null, `${k}（${fs.length}）`),
-    fs.length ? h('ul', { class: 'flist' }, fs.map((f) => fileRow(f, f.by ? (f.title ? `${f.by} ${f.title}` : `使った依頼：${f.by}`) : ''))) : h('p', { class: 'fine', style: 'margin:0' }, 'ありません。')))];
-  const all = sections.flatMap(([k, fs]) => fs.map((f) => ({ ...f, kind: k })));
-  return [...head, !q ? h('p', { class: 'sub' }, '探したい言葉を入れてください。') : all.length ? h('ul', { class: 'flist' }, all.map((f) => fileRow(f, `[${f.kind}]${f.by ? ' ' + f.by : ''}${f.title ? ' ' + f.title : ''}`))) : h('p', { class: 'sub' }, '見つかりませんでした。')];
+  return [h('h2', { class: 'h2' }, '納品物'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '納品物・成果物・報告・書庫・インプットを、まとめて探せます。名前を押すと、整形して開きます（Markdown・HTML・Mermaid）。「文章をコピー」「パスをコピー」で、チャットに貼れます。'),
+    waiting.length ? h('div', { class: 'attn', role: 'status' }, h('b', null, '受け取り待ち'), waiting.map((x) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(x.id) }, `${x.id} ${x.title.slice(0, 20)}`))) : null,
+    h('div', { class: 'dside' }, nav, h('div', null, h('div', { class: 'drow' }, searchBox('f:fs', 'ファイル名・依頼の題名・関連で探す'), seg), body))];
 }
 
 function reader() {
@@ -2260,8 +2275,8 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const tops = KEEP_SCROLL.map((s) => { const e = document.querySelector(s); return e ? e.scrollTop : 0; });
-  const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['log', 'クエストログ'], ['files', 'ファイル'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
-  const body = { board: boardTab, prog: progressTab, log: logTab, files: filesTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
+  const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['log', 'クエストログ'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
+  const body = { board: boardTab, prog: progressTab, log: logTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap wide' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), aliveBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));

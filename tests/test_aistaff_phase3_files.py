@@ -171,10 +171,12 @@ class FilesModelTest(unittest.TestCase):
 
 class WiringTest(unittest.TestCase):
     def test_tab_reader_and_deliverable_filter_are_wired(self):
-        for needle in ("['files', 'ファイル']", "files: filesTab", "docView(S.reader.path, S.reader.text, S.reader.source)", "ソースで見る",
+        for needle in ("deliv: delivTab", "FKINDS", "docView(S.reader.path, S.reader.text, S.reader.source)", "ソースで見る",
                        r"/\.(md|html|mmd)$/i.test(x.name)", "securityLevel: 'strict'", "mermaid@10.9.1", "sandbox: ''", "s.integrity = MERMAID_SRI", "s.crossOrigin = 'anonymous'",
                        "function cleanSvg(root)", "foreignObject", "const HTML_CSP"):
             self.assertIn(needle, BOARD, needle)
+        self.assertNotIn("filesTab", BOARD)
+        self.assertNotIn("['files', 'ファイル']", BOARD)
 
     def test_no_inner_html_is_used_for_documents(self):
         i, j = BOARD.index("function mdInline("), BOARD.index("function reader() {")
