@@ -148,3 +148,10 @@ class SelectOpenDefersRefreshTest(unittest.TestCase):
     def test_refresh_waits_while_a_select_is_open(self):
         for needle in ("ae.tagName === 'SELECT' && S.selAt", "addEventListener('focusin'", "S.selAt = 0"):
             self.assertIn(needle, BOARD, needle)
+
+
+class AllowListLinksTest(unittest.TestCase):
+    def test_allow_list_domains_are_links(self):
+        card = BOARD[BOARD.index("function webCard(m)"):BOARD.index("function webTab()")]
+        for needle in ("const site = (d) =>", "href: `https://${d}/`", "rel: 'noopener noreferrer'", "site(d)"):
+            self.assertIn(needle, card, needle)

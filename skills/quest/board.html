@@ -1676,11 +1676,12 @@ function webLetter(m) {
 function webCard(m) {
   const w = m.web, key = 'web:add';
   const inp = h('input', { type: 'text', id: key, placeholder: '例：go.jp', 'aria-label': '許可するドメイン' }); inp.value = S.form[key] || ''; bindKey(inp, key);
-  const row = (d) => h('li', null, code(d), ' ', h('button', { type: 'button', class: 'linkbtn', disabled: !!w.wait, onclick: () => sendWeb({ type: 'web', remove: [d] }, 'web:rm:' + d) }, '外す'));
+  const site = (d) => h('a', { href: `https://${d}/`, target: '_blank', rel: 'noopener noreferrer', title: 'どんなサイトか、新しいタブで確かめます' }, d);  // ドメインは guild.py が形を検査したものだけ
+  const row = (d) => h('li', null, site(d), ' ', h('button', { type: 'button', class: 'linkbtn', disabled: !!w.wait, onclick: () => sendWeb({ type: 'web', remove: [d] }, 'web:rm:' + d) }, '外す'));
   return h('section', { class: 'card' }, h('h3', null, `許可リスト（${w.allow.length}件）`),
-    h('p', { class: 'fine' }, '魔法使いが WebFetch で開けるサイトです。ドメインを許可すると、その下のサイト（www.go.jp など）も開けます。'),
+    h('p', { class: 'fine' }, '魔法使いが WebFetch で開けるサイトです。ドメインを許可すると、その下のサイト（www.go.jp など）も開けます。ドメイン名を押すと、新しいタブでサイトを開いて確かめられます。'),
     w.allow.length ? h('ul', { class: 'flist' }, w.allow.map(row)) : h('p', { class: 'fine' }, 'まだありません。'),
-    w.once.length ? h('p', { class: 'fine' }, '今回だけ許可：' + w.once.join('、')) : null,
+    w.once.length ? h('p', { class: 'fine' }, '今回だけ許可：', w.once.flatMap((d, i) => (i ? ['、', site(d)] : [site(d)]))) : null,
     h('div', { class: 'btns' }, inp, h('button', { type: 'button', class: 'btn', disabled: !!w.wait, onclick: () => { const v = (S.form[key] || '').trim(); if (v) { S.form[key] = ''; sendWeb({ type: 'web', add: [v] }, 'web:add:' + v); } } }, '追加')),
     w.wait ? h('p', { class: 'fine' }, '送った変更を反映するのを待っています。') : null);
 }
