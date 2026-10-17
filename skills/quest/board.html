@@ -1734,11 +1734,11 @@ function resultAsks(qid) {
   return qd ? qd.asks.filter((a) => a.kind === 'result' && !a.sent) : [];
 }
 function turnRow(q) {
-  const text = h('span', { class: 'tt' }, h('b', null, `${q.id} ${q.title}`), '：', q.needs.map((n) => n.text + (n.advice ? `（鑑定士のおすすめ：${n.advice.text}）` : '')).join('、'));
+  const text = h('span', { class: 'tt' }, h('button', { type: 'button', class: 'linkbtn', style: 'font-weight:700', title: 'このクエストを開く', onclick: () => jumpQuest(q.id) }, `${q.id} ${q.title}`), '：', q.needs.map((n) => n.text + (n.advice ? `（鑑定士のおすすめ：${n.advice.text}）` : '')).join('、'));
   const asks = resultAsks(q.id);
   const btns = asks.map((a) => {
     const t = a.goal, key = `${q.id}:${t.id}:result`, ask = S.form['log:ask'];
-    const body = t.title;  // コピーするのは、タスク名（目標の題名）だけ
+    const body = q.title;  // コピーするのは、クエストのタイトルだけ
     const go = (ok) => () => { S.form['log:ask'] = `${key}:${ok ? 'yes' : 'no'}`; render(); };
     if (ask && ask.startsWith(key + ':')) {
       const ok = ask.endsWith(':yes');
@@ -1747,7 +1747,7 @@ function turnRow(q) {
         h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.form['log:ask'] = ''; render(); } }, 'やめる'));
     }
     return h('span', { class: 'ta' }, asks.length > 1 ? h('span', { class: 'fine' }, t.id) : null,
-      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyText(body, 'タスク名') }, 'コピー'),
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyText(body, 'クエストのタイトル') }, 'コピー'),
       h('button', { type: 'button', class: 'btn sm go', onclick: go(true) }, 'できた'), h('button', { type: 'button', class: 'btn sm', onclick: go(false) }, 'できなかった'));
   });
   return h('div', { class: 'tn' }, text, ...btns);
