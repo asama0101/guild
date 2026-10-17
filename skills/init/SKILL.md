@@ -13,7 +13,7 @@ disable-model-invocation: true
 1. **Playwright MCP を確認する。** 冒険者（動的ページを読む役）が使うので、このセッションで使えるか確かめる。ツール一覧に `mcp__playwright__browser_navigate` があればよい（後から読み込む形式のツールなら、`ToolSearch` で `select:mcp__playwright__browser_navigate` を引く）。**なければ、次の警告を伝えて、ここで止める**（`guild/` は作らない。代わりの手段は使わない）。
 
    > Playwright MCP が見つかりません。guild の冒険者が使います。`playwright` という名前で導入・接続してから、`/guild:init` をもう一度実行してください。
-   > 導入の例：`claude mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated`
+   > 導入の例：`claude mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --output-dir "<OS の一時フォルダ>/guild-playwright" --output-max-size 50000000`（出力ファイルを、プロジェクト直下の `.playwright-mcp` に残さないため。一時フォルダは、Windows なら `%TEMP%`、macOS・Linux なら `/tmp`）
 
 2. **使える Python を探す。** 次の順に `--version` を実行し、出力が `Python 3.` で始まり、版の数字まで出たものを使う。
    - `py --version`
