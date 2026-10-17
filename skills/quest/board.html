@@ -206,7 +206,6 @@ textarea.need{border:2px solid var(--banner);background:#F6E4E1}
 .tn .ta .who{font-size:12px}
 .tn .ta input.logmemo{width:300px;flex:0 1 300px;min-width:0;min-height:34px;padding:4px 8px;font-size:13px}
 .tn .ta{flex-wrap:nowrap}
-.reqnote{font-size:10px;font-weight:700;color:var(--banner);margin:0 6px 0 -2px;white-space:nowrap;align-self:flex-end;padding-bottom:2px}
 .tn .tt{flex:1 1 200px}
 @media (max-width:760px){.tn .ta{flex-wrap:wrap}}
 
@@ -1793,7 +1792,7 @@ function turnRow(q) {
     }
     return h('span', { class: 'ta' }, asks.length > 1 ? h('span', { class: 'fine' }, t.id) : null,
       h('button', { type: 'button', class: 'btn ghost sm', onclick: () => copyText(body, 'クエストのタイトル') }, 'コピー'),
-      h('button', { type: 'button', class: 'btn sm go', onclick: go(true) }, 'できた'), h('span', { class: 'reqnote' }, 'メモ必須'), h('button', { type: 'button', class: 'btn sm', onclick: go(false) }, 'できなかった'));
+      h('button', { type: 'button', class: 'btn sm go', onclick: go(true) }, 'できた'), h('button', { type: 'button', class: 'btn sm', onclick: go(false) }, 'できなかった'));
   });
   return h('div', { class: 'tn' }, text, ...btns);
 }
@@ -1830,7 +1829,7 @@ function logTab() {
   const empty = (t) => h('p', { class: 'fine', style: 'margin:0' }, t);
   const st = c.stats || {};
   return [...head, h('p', { class: 'fine' }, `${when} 時点`),
-    sec(`あなたの番（${c.needs_total || 0} 件）`, turn.length ? turn.map((q) => turnRow(q)) : empty('いまは、あなたの番はありません。')),
+    sec(`あなたの番（${c.needs_total || 0} 件）`, turn.some((q) => resultAsks(q.id).length) ? h('p', { class: 'fine', style: 'margin:0 0 6px' }, '「できた」を送るときは、メモが必須です。') : null, turn.length ? turn.map((q) => turnRow(q)) : empty('いまは、あなたの番はありません。')),
     sec('進行中', open.length ? h('ul', null, open.map((q) => h('li', null, h('b', null, `${q.id} ${q.title}`), q.series ? `（${q.series}）` : '', `　${q.label}　${(q.goals || {}).done || 0}/${(q.goals || {}).total || 0}`,
       (q.active || []).length ? [h('br'), (q.active || []).map((a) => `${CLASS_NAMES[a.class] || a.class || '—'}：${a.id} ${a.title || ''}`).join('、')] : null))) : empty('進行中の依頼はありません。')),
     sec('止まっている理由', c.quests.some((q) => (q.blockers || []).length) ? h('ul', null, c.quests.flatMap((q) => (q.blockers || []).map((b) => h('li', null, `${q.id} ${b.goal} は、${(b.because || []).length ? b.because.join('、') + ' ができなかったため' : '前提が止まっているため'}、止まっています。`)))) : empty('止まっている目標はありません。')),
