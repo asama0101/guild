@@ -346,6 +346,13 @@ def sync(plan, tr):
 REOPEN_MAX = 1000
 
 
+def retire_draft(qdir):
+    """計画の見直しに入るとき、古い受付係の下書きを plan-draft.prev.json に退避する。残すと、受付係が書き直さなくても、古い下書きがそのまま採用される。"""
+    f = Path(qdir) / "reports" / "plan-draft.json"
+    if f.exists():
+        os.replace(f, f.with_name("plan-draft.prev.json"))
+
+
 def reset_archive_state(qdir):
     """再実行のとき、書庫の登録候補の確認の状態（archive.json）を、archive.prev.json に退避する。もう一度完了したときに、新しく確認するため。"""
     f = Path(qdir) / "archive.json"
@@ -501,6 +508,13 @@ def write_user_report(qdir, data):
     (rep / f"{data['goal']}-user.md").write_text(body, encoding="utf-8")
 
 
+def retire_after(qdir, after):
+    """下書きの退避は、計画の保存のあとにする（after があれば、そこへ積む）。"""
+    if qdir is not None:
+        job = lambda: retire_draft(qdir)
+        after.append(job) if after is not None else job()
+
+
 def apply_input(plan, data, tr, qdir=None, after=None):
     kind = data.get("type")
     tm = goal_map(plan)
@@ -520,6 +534,7 @@ def apply_input(plan, data, tr, qdir=None, after=None):
         plan["status"], plan["approved"] = "replan", False
         plan.pop("accepted", None)
         note(plan, event="reopen", comment=comment)
+        retire_after(qdir, after)
         return
     if kind == "approve":
         if plan.get("approved"):
@@ -556,6 +571,8 @@ def apply_input(plan, data, tr, qdir=None, after=None):
         if data["choice"] == "replan":
             plan["approved"] = False
         note(plan, event="decision", choice=data["choice"], comment=data.get("comment", ""))
+        if data["choice"] == "replan":
+            retire_after(qdir, after)
         return
     if kind == "due":
         apply_dates(plan, data)

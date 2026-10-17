@@ -73,5 +73,46 @@ class WebGateTest(unittest.TestCase):
             self.assertEqual(json.loads(out.stdout.decode("utf-8"))["hookSpecificOutput"]["permissionDecision"], "deny")
 
 
+class StaleDraftTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.q = Path(guild.new_quest(self.root)["dir"])
+        self.tr = guild.load_transitions()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def send(self, plan, obj):
+        guild.save_plan(self.q / "plan.json", plan)
+        (self.q / "inbox").mkdir(exist_ok=True)
+        (self.q / "inbox" / "x.json").write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+        p = guild.load_plan(self.q / "plan.json")
+        guild.ingest(self.q / "plan.json", p, self.tr, commit=lambda: guild.save_plan(self.q / "plan.json", p))
+
+    def goal(self):
+        return {"id": "G1", "title": "調べる", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": {k: k + " 十分に具体的" for k in guild.CRITERIA_KEYS}, "state": "done", "retries": 0}
+
+    def check(self, plan, obj):
+        draft = self.q / "reports" / "plan-draft.json"
+        draft.write_text(json.dumps({"goals": [self.goal()]}), encoding="utf-8")
+        self.send(plan, obj)
+        self.assertFalse(draft.exists())
+        self.assertTrue((self.q / "reports" / "plan-draft.prev.json").exists())
+        with self.assertRaises(guild.GuildError):  # 受付係が書き直していないので、古い下書きは採用されない
+            guild.adopt(self.q / "plan.json", self.tr)
+
+    def test_reopen_retires_the_old_draft(self):
+        plan = {"quest": "Q001", "title": "週報", "approved": True, "status": "active", "accepted": True, "goals": [self.goal()], "history": []}
+        self.check(plan, {"type": "reopen", "comment": "直したい"})
+
+    def test_replan_decision_retires_the_old_draft(self):
+        g = self.goal()
+        g["state"] = "failed"
+        plan = {"quest": "Q001", "title": "週報", "approved": True, "status": "active", "goals": [g], "history": []}
+        self.check(plan, {"type": "decision", "goal": "G1", "choice": "replan"})
+
+
 if __name__ == "__main__":
     unittest.main()
