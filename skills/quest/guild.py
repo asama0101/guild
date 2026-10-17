@@ -64,6 +64,7 @@ DEFAULT_FORMAT = "md"
 TITLE_HINT = 24  # 依頼のタイトルの目安（超えると警告）
 META_MAX = 80  # タイトル・series の上限（超えるとエラー）
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+GOAL_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,20}")
 
 
 def check_date(v, label):
@@ -277,6 +278,8 @@ def validate(plan, tr):
         errs.append("id が重複しているか、欠けています")
     for t in goals:
         i = t.get("id")
+        if not isinstance(i, str) or not GOAL_ID_RE.fullmatch(i):  # id はファイルのパスに使う（output/<id>・reports/<id>-…）。外へ出る形は通さない
+            errs.append(f"目標の id は、英数字・_・- の 20 字までにしてください: {i!r}")
         if t.get("kind") not in tr["kinds"]:
             errs.append(f"{i}: kind が不明です: {t.get('kind')}")
         if t.get("state") not in tr["states"]:
