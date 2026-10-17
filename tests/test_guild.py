@@ -2464,3 +2464,11 @@ class AppraiserNoteTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WebParentDecisionTest(unittest.TestCase):
+    def test_decision_on_parent_clears_children_pending(self):
+        data = {"allow": [], "once": [], "denied": [], "pending": [{"domain": "a.example.jp", "urls": []}, {"domain": "b.example.jp", "urls": []}, {"domain": "other.jp", "urls": []}, {"domain": "notexample.jp", "urls": []}]}
+        webaccess.apply(data, {"type": "web", "decisions": {"example.jp": "allow"}})
+        self.assertEqual(data["allow"], ["example.jp"])
+        self.assertEqual([p["domain"] for p in data["pending"]], ["other.jp", "notexample.jp"])

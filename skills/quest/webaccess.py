@@ -118,7 +118,7 @@ def apply(data, msg):
         d = check_domain(raw)
         if how not in DECISIONS:
             raise WebError(f"decisions の値は {'・'.join(DECISIONS)} のどれかにしてください: {how!r}")
-        data["pending"] = [p for p in data["pending"] if not (isinstance(p, dict) and p.get("domain") == d)]
+        data["pending"] = [p for p in data["pending"] if not (isinstance(p, dict) and isinstance(p.get("domain"), str) and (p["domain"] == d or p["domain"].endswith("." + d)))]  # 親ドメインへの答えは、その下の許可待ちもまとめて片付ける
         for key in ("allow", "once", "denied"):
             data[key] = [x for x in data[key] if x != d]
         data[{"allow": "allow", "once": "once", "deny": "denied"}[how]].append(d)

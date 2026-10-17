@@ -113,3 +113,12 @@ class VisibilityContractTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("node"), "node がありません")
+class ParentDomainTest(unittest.TestCase):
+    def test_parent_domain(self):
+        src = re.search(r"const SHARED_HOSTS = .*?\n", script()).group(0) + re.search(r"const SECOND_LEVEL = .*?\n", script()).group(0) + extract("parentDomain")
+        cases = ["www.e-stat.go.jp", "www3.boj.or.jp", "ja.wikipedia.org", "example.com", "alice.github.io", "x.y.alice.github.io", "github.io", "a.b.co.uk"]
+        out = node_eval(src + f"console.log(JSON.stringify({json.dumps(cases)}.map(parentDomain)))")
+        self.assertEqual(out, ["e-stat.go.jp", "boj.or.jp", "wikipedia.org", "example.com", "alice.github.io", "alice.github.io", "github.io", "b.co.uk"])

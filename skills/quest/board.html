@@ -162,6 +162,17 @@ select{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass)
 input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .connbox{margin-bottom:16px}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.wsum{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;cursor:pointer;padding:8px 0}
+.wnm{flex:1 1 180px;min-width:0;word-break:break-all}
+.wbadge{font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--sub);margin-left:6px}
+.wkids{padding:2px 0 8px 18px;font-size:13px}
+.wkid{display:flex;flex-wrap:wrap;gap:2px 10px;padding:2px 0;word-break:break-all}
+.wflt{width:100%;max-width:320px;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:4px;margin:0 0 8px}
+.wseg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;flex:none}
+.wseg button{font:inherit;font-size:12px;padding:5px 10px;min-height:32px;border:0;border-right:1px solid var(--line);background:var(--surface);color:var(--sub);cursor:pointer}
+.wseg button:last-child{border-right:0}
+.wseg button[aria-pressed="true"]{background:var(--sel-bg);color:var(--ok);font-weight:700}
+.wseg button[aria-pressed="true"].deny{color:var(--ng,#a63d3d)}
 .qa{margin:16px 0 4px;padding-top:6px;border-top:1px dashed var(--line)}
 .qa:first-of-type{border-top:0}
 
@@ -1596,6 +1607,21 @@ function hiddenBar(m, L, i, go) {
 function sendWeb(obj, key) {
   return writeOrFallback(`web/inbox/${nowName('web', String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true); });
 }
+// 許可の手紙は、親ドメインごとに 1 行にまとめる。決めた答えは親ドメインに対して送り、許可リストにはその下の子ドメインも入る
+const SHARED_HOSTS = ['github.io', 'gitlab.io', 'blogspot.com', 'wordpress.com', 'netlify.app', 'vercel.app', 'pages.dev', 'herokuapp.com', 'web.app', 'firebaseapp.com', 'appspot.com', 'cloudfront.net', 'azurewebsites.net', 'notion.site', 'amazonaws.com', 'workers.dev', 'onrender.com', 'fly.dev'];
+const SECOND_LEVEL = ['co', 'or', 'ne', 'go', 'ac', 'ad', 'ed', 'gr', 'lg', 'com', 'org', 'net', 'gov', 'edu'];
+function parentDomain(d) {
+  const l = String(d).split('.');
+  for (const sfx of SHARED_HOSTS) if (d === sfx || d.endsWith('.' + sfx)) { const n = sfx.split('.').length + 1; return l.length <= n ? d : l.slice(-n).join('.'); } // 共有ホスティングは、全体を許してしまわないよう、利用者ごとの名前までを親にする
+  if (l.length >= 3 && l[l.length - 1].length === 2 && SECOND_LEVEL.includes(l[l.length - 2])) return l.slice(-3).join('.');
+  return l.length >= 2 ? l.slice(-2).join('.') : d;
+}
+function webGroups(pending) {
+  const m = new Map();
+  pending.forEach((x) => { const p = parentDomain(x.domain); if (!m.has(p)) m.set(p, []); m.get(p).push(x); });
+  return Array.from(m, ([p, items]) => ({ p, items }));
+}
+const WEB_LAB = { allow: '許可リスト', once: '今回だけ', deny: '許可しない' };
 function webLetter(m) {
   const w = m.web;
   if (!w.pending.length) return null;
@@ -1603,24 +1629,32 @@ function webLetter(m) {
   if (w.wait) return h('section', { class: 'letter sentbox' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '送信済み'),
     h('h3', null, '外部サイトを開く許可の答えを送りました'),
     h('p', null, '/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。'));
+  const groups = webGroups(w.pending), fk = 'f:webflt';
+  const cur = (p) => S.form[`${k}:${p}`] || 'deny';
+  const count = { allow: 0, once: 0, deny: 0 };
+  groups.forEach((g) => { count[cur(g.p)]++; });
+  const q = (S.form[fk] || '').trim().toLowerCase();
+  const shown = groups.filter((g) => !q || g.p.includes(q) || g.items.some((x) => x.domain.includes(q)));
+  const ext = (u, label) => h('a', { href: u, target: '_blank', rel: 'noopener noreferrer', title: 'どんなサイトか、新しいタブで確かめます' }, label);
+  const safe = (u) => /^https?:\/\//i.test(u);
+  const seg = (g) => h('span', { class: 'wseg', role: 'group', 'aria-label': `${g.p} の選択` },
+    ['allow', 'once', 'deny'].map((v) => h('button', { type: 'button', class: v, 'aria-pressed': String(cur(g.p) === v), onclick: (e) => { e.stopPropagation(); S.form[`${k}:${g.p}`] = v; render(); } }, WEB_LAB[v])));
+  const flt = h('input', { type: 'search', class: 'wflt', placeholder: 'ドメインで絞り込む', 'aria-label': 'ドメインで絞り込む' }); flt.value = S.form[fk] || ''; bindKey(flt, fk);
   return h('section', { class: 'letter danger', 'aria-label': '外部サイトを開く許可' }, seal('外', 'ng'),
     h('div', { class: 'kick' }, 'お願い：外部サイトを開く許可'), h('h3', null, '魔法使いが、許可のないサイトを開こうとして止められました'),
-    h('p', null, '許可したサイトだけ、魔法使いは読めます。サイトごとに選んでください。「許可しない」を選ぶと、魔法使いはそのサイトを開かずに進め、報告の「未確認」に書きます。'),
+    h('p', null, '許可したサイトだけ、魔法使いは読めます。親ドメインを許可すると、その下のサイトも開けます。「許可しない」を選ぶと、魔法使いはそのサイトを開かずに進め、報告の「未確認」に書きます。'),
     h('div', { class: 'btns', role: 'group', 'aria-label': '全部まとめて選ぶ' }, h('span', { class: 'fine' }, '全部まとめて：'),
       [['allow', '全部 許可リストに加える'], ['once', '全部 今回だけ許可'], ['deny', '全部 許可しない']].map(([v, t]) =>
-        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { w.pending.forEach((x) => { S.form[`${k}:${x.domain}`] = v; }); render(); } }, t))),
-    w.pending.map((x, i) => {
-      const ck = `${k}:${x.domain}`;
-      const safe = (u) => /^https?:\/\//i.test(u);
-      const ext = (u, label) => h('a', { href: u, target: '_blank', rel: 'noopener noreferrer', title: 'どんなサイトか、新しいタブで確かめます' }, label);
-      return h('div', { class: 'qa' },
-        h('span', { class: 'lbl' }, `${i + 1}. ${x.domain}`, '　', ext(`https://${x.domain}/`, 'サイトを確かめる ↗')),
-        (x.urls || []).slice(0, 3).map((u) => h('p', { class: 'fine', style: 'margin:0 0 2px;word-break:break-all' }, safe(u) ? ext(u, u) : u)),
-        radio(ck + 'r', ck, 'allow', '許可リストに加える', `${x.domain} と、その下のサイトを、今後の依頼でも自動で開けるようにします。`, '', 'deny'),
-        radio(ck + 'r', ck, 'once', '今回だけ許可', '依頼が完了か中止になるまで、開けるようにします。', '', 'deny'),
-        radio(ck + 'r', ck, 'deny', '許可しない', '', '', 'deny'));
-    }),
-    h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendWeb({ type: 'web', decisions: Object.fromEntries(w.pending.map((x) => [x.domain, S.form[`${k}:${x.domain}`] || 'deny'])) }, k) }, '選んだとおりに送る')),
+        h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { groups.forEach((g) => { S.form[`${k}:${g.p}`] = v; }); render(); } }, t))),
+    h('p', { class: 'fine', 'aria-live': 'polite', style: 'margin:6px 0' }, `親ドメイン ${groups.length} 件（開こうとしたサイト ${w.pending.length} 件）　許可リスト ${count.allow}・今回だけ ${count.once}・許可しない ${count.deny}`),
+    groups.length > 6 ? flt : null,
+    shown.map((g) => keepOpen(`web:g:${g.p}`, h('summary', { class: 'wsum' },
+      h('span', { class: 'wnm' }, code(g.p), h('span', { class: 'wbadge' }, `${g.items.length} 件`)), seg(g)),
+      h('div', { class: 'wkids' },
+        h('div', null, ext(`https://${g.p}/`, 'サイトを確かめる ↗')),
+        g.items.map((x) => h('div', { class: 'wkid' }, code(x.domain), (x.urls || []).slice(0, 3).map((u) => (safe(u) ? ext(u, u.replace(/^https?:\/\/[^/]+/i, '') || '/') : h('span', null, u)))))))),
+    shown.length ? null : h('p', { class: 'fine' }, '見つかりませんでした。'),
+    h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendWeb({ type: 'web', decisions: Object.fromEntries(groups.map((g) => [g.p, cur(g.p)])) }, k) }, '選んだとおりに送る')),
     sentNote(k));
 }
 function webCard(m) {
