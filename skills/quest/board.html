@@ -479,7 +479,7 @@ const HANDOFF = '送りました。/guild:quest が動いていれば、すぐ�
 const S = {
   fs: null, conn: 'none', connMsg: '', demo: false,
   composing: false, lastInput: 0, confirm: {},
-  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', open目標: null, rcache: {}, kn: { cur: null },
+  tab: 'board', sel: null, listOpen: true, pane: 'list', bfilter: 'all', showClosed: false, newOpen: false, dtab: 'way', open目標: null, rcache: {}, qcache: {}, kn: { cur: null },
   data: null, dataKey: '', form: {}, files: {}, open: {}, sent: {}, toast: '', fallback: null, reader: null, busy: false
 };
 
@@ -511,6 +511,11 @@ async function loadAll() {
   for (const e of top) {
     if (e.kind !== 'dir' || !/^Q\d+$/.test(e.name)) continue;
     const q = e.name;
+    // 完了・中止して、書庫の確認も済んだ依頼は、もう変わらない。plan.json・archive.json の更新時刻が同じで、届いた入力もなければ、前の読み取りを使う（毎回、全部の依頼を読み直さない）
+    const files = await S.fs.list(q), mt = (n) => (files.find((x) => x.kind === 'file' && x.name === n) || {}).mtime || 0;
+    const ckey = `${mt('plan.json')}:${mt('archive.json')}`, hit = S.qcache[q];
+    const incoming = (await S.fs.list(`${q}/inbox`)).some((f) => f.kind === 'file' && f.name.endsWith('.json'));
+    if (hit && hit.key === ckey && mt('plan.json') && !incoming) { quests.push({ ...hit.entry, published: delivFiles.filter((n) => n.startsWith(q + '_')) }); continue; }
     const plan = await readJSON(`${q}/plan.json`);
     const request = await readJSON(`${q}/request.json`);
     const draft = !plan || plan.status === 'replan' ? await readJSON(`${q}/reports/plan-draft.json`) : null;  // 計画がないとき、と、計画を直し中のとき（受付係の質問は、plan-draft.json の questions に出る）
@@ -525,7 +530,9 @@ async function loadAll() {
     }
     const archive = await readJSON(`${q}/archive.json`);
     const overall = reports.includes(OVERALL_REPORT) ? ((await S.fs.readText(`${q}/reports/${OVERALL_REPORT}`)) || '').replace(/^\uFEFF/, '') : null;
-    quests.push({ id: q, plan, request, draft, reports, output, overall, inbox, archive, published: delivFiles.filter((n) => n.startsWith(q + '_')) });
+    const entry = { id: q, plan, request, draft, reports, output, overall, inbox, archive, published: delivFiles.filter((n) => n.startsWith(q + '_')) };
+    quests.push(entry);
+    if (plan && (plan.accepted || plan.status === 'aborted') && archive && archive.status === 'done') S.qcache[q] = { key: ckey, entry }; else delete S.qcache[q];
   }
   quests.sort((a, b) => b.id.localeCompare(a.id));
   const archive = [];

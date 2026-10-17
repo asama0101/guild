@@ -1404,11 +1404,10 @@ def arrivals(root):
     if wdir.is_dir():
         for q in sorted(wdir.glob("Q[0-9]*")):
             inbox = q / "inbox"
-            if is_legacy_plan(q / "plan.json"):
-                continue  # 旧形式の依頼は、取り込めない（待機が空回りしないよう、届いたものに数えない）
-            if inbox.is_dir():
-                for f in sorted(inbox.glob("*.json")):
-                    out.append({"kind": "inbox", "quest": q.name, "file": f.name})
+            files = sorted(inbox.glob("*.json")) if inbox.is_dir() else []
+            if not files or is_legacy_plan(q / "plan.json"):
+                continue  # 旧形式の依頼は、取り込めない（待機が空回りしないよう、届いたものに数えない）。届いていない依頼の plan.json は、毎秒は読まない
+            out.extend({"kind": "inbox", "quest": q.name, "file": f.name} for f in files)
         req = wdir / "requests"
         if req.is_dir():
             for f in sorted(req.glob("R*.json")):

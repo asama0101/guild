@@ -13,6 +13,8 @@ QUEST = str(ROOT / "skills" / "quest")
 HOOKS = str(ROOT / "hooks")
 sys.path.insert(0, QUEST)
 import guild  # noqa: E402
+sys.path.insert(0, str(ROOT / "tests"))
+from test_board_js import extract, node_eval  # noqa: E402
 
 CRIT = {"viewpoint": "a", "pass_line": "b", "check": "c"}
 
@@ -147,6 +149,70 @@ class ArchiveDecideTest(unittest.TestCase):
                 guild.write_entry(adir, {"type": "term", "name": "用語", "summary": "説明", "confidence": "guess"})
                 guild.rebuild_index(adir)
             self.assertEqual(len(w.call_args_list), 2)
+
+
+class ArrivalsCostTest(unittest.TestCase):
+    def test_quests_without_incoming_files_are_not_parsed(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            quiet, busy = Path(guild.new_quest(root)["dir"]), Path(guild.new_quest(root)["dir"])
+            (busy / "inbox" / "a.json").write_text("{}", encoding="utf-8")
+            seen = []
+            with mock.patch.object(guild, "is_legacy_plan", lambda p: seen.append(Path(p).parent.name) or False):
+                got = guild.arrivals(root)
+            self.assertEqual(seen, [busy.name])
+            self.assertEqual([x["quest"] for x in got if x["kind"] == "inbox"], [busy.name])
+
+
+LOAD_JS = r"""
+const calls = { read: {} };
+const files = JSON.parse(process.argv[2]);
+const kids = (p) => { const pre = p ? p + '/' : '', seen = new Map();
+  for (const k of Object.keys(files)) if (k.startsWith(pre)) { const rest = k.slice(pre.length), n = rest.split('/')[0]; seen.set(n, rest.includes('/') ? 'dir' : 'file'); }
+  return [...seen].map(([name, kind]) => kind === 'file' ? { name, kind, mtime: 1000 } : { name, kind }); };
+const S = { qcache: {}, fs: {
+  list: async (p) => kids(p === '.work' ? '' : p),
+  readText: async (p) => { calls.read[p] = (calls.read[p] || 0) + 1; return p in files ? files[p] : null; } } };
+const parseJSON = JSON.parse, parseEntry = () => null;
+const OVERALL_REPORT = 'overall-receptionist.md';
+""" + "async " + extract("readJSON") + "\nasync " + extract("listFilesDeep") + "\nasync " + extract("loadAll") + r"""
+(async () => {
+  await loadAll();
+  const first = Object.keys(calls.read).filter((k) => k.startsWith('Q001/')).length;
+  calls.read = {};
+  await loadAll();
+  const second = Object.keys(calls.read).filter((k) => k.startsWith('Q001/')).length;
+  console.log(JSON.stringify({ first, second }));
+})();
+"""
+
+
+@unittest.skipUnless(__import__("shutil").which("node"), "node がありません")
+class BoardLoadCostTest(unittest.TestCase):
+    def run_load(self, files):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "t.js"
+            f.write_text(LOAD_JS, encoding="utf-8")
+            r = subprocess.run(["node", str(f), json.dumps(files)], capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            return json.loads(r.stdout)
+
+    def test_closed_quest_is_not_read_again(self):
+        files = {"config.json": "{}", "Q001/plan.json": json.dumps({"accepted": True, "goals": []}), "Q001/request.json": "{}",
+                 "Q001/archive.json": json.dumps({"status": "done"}), "Q001/reports/a.md": "x"}
+        got = self.run_load(files)
+        self.assertGreater(got["first"], 0)
+        self.assertEqual(got["second"], 0)
+
+    def test_open_quest_is_read_every_time(self):
+        files = {"config.json": "{}", "Q001/plan.json": json.dumps({"approved": True, "goals": []}), "Q001/request.json": "{}"}
+        self.assertGreater(self.run_load(files)["second"], 0)
+
+    def test_closed_quest_is_read_again_when_an_input_arrives(self):
+        files = {"config.json": "{}", "Q001/plan.json": json.dumps({"accepted": True, "goals": []}), "Q001/request.json": "{}",
+                 "Q001/archive.json": json.dumps({"status": "done"}), "Q001/inbox/x.json": json.dumps({"type": "reopen"})}
+        self.assertGreater(self.run_load(files)["second"], 0)
 
 
 if __name__ == "__main__":
