@@ -246,7 +246,15 @@ svg.humbars{min-width:0;max-width:100%}
 .dtabs .n{margin-left:6px;font-size:12px;font-weight:400}
 .dpanel{background:var(--paper);border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;padding:14px 16px 18px}
 .td{border:1px solid var(--line);border-left:6px solid var(--brass);border-radius:3px;background:var(--surface);margin-bottom:6px}
+.td.auto{border-left:4px solid var(--stop-line)}
+.td.me{border-left:8px solid var(--banner);border-color:var(--banner);background:#F6E4E1}
 .td.over{border-left-color:var(--ng)}
+.td.done{opacity:.6}
+.who{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:1px 9px;border-radius:4px;white-space:nowrap}
+.who.me{background:var(--banner);color:var(--on)}
+.who.auto{background:var(--stop-bg);color:var(--stop);border:1px solid var(--line)}
+.who svg{width:13px;height:13px;flex:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
 .td.open{border-color:var(--brass)}
 .tdrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto 18px;gap:4px 12px;align-items:center;width:100%;box-sizing:border-box;padding:8px 12px;border:0;background:transparent;text-align:left;font:inherit;font-size:13.5px;color:inherit;cursor:pointer}
 .tdt{min-width:0}.tdt .kind{display:block;font-size:12px}.tdt b{display:block;overflow:hidden;text-overflow:ellipsis}
@@ -953,12 +961,20 @@ function reportLine(qd, r) {
         h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${r.name} のパスをコピー`, onclick: () => copyPath(rel) }, 'パスをコピー'))),
     txt === null ? h('p', { class: 'fine', style: 'margin:2px 0 0' }, '読み込み中…') : lines.length ? h('p', { class: 'repx' }, lines.join(' ／ ')) : null);
 }
+// 誰の作業か：あなたが実行（人のアイコン）／ギルドが自動（歯車の円）。道のりの行の色帯と、バッジで見分ける
+const WHO_SVG = { me: [['circle', { cx: 8, cy: 5, r: 3 }], ['path', { d: 'M2 14c0-3.3 2.7-5 6-5s6 1.7 6 5z' }]], auto: [['circle', { cx: 8, cy: 8, r: 5.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8 }], ['circle', { cx: 8, cy: 8, r: 1.8 }]] };
+function whoBadge(t) {
+  const me = t.kind === 'human', ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
+  for (const [tag, a] of WHO_SVG[me ? 'me' : 'auto']) { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); if (!a.fill) e.setAttribute('fill', 'currentColor'); svg.append(e); }
+  return h('span', { class: `who ${me ? 'me' : 'auto'}` }, svg, me ? 'あなたが実行' : t.confirm ? 'ギルドが自動（実行前に確認）' : 'ギルドが自動');
+}
 function goalRow(qd, t) {
   const key = `${qd.id}:${t.id}`, open = S.openGoal === key, over = overdue(t, Date.now()), warns = dateIssues(qd.q.plan, t).concat(flowIssues(qd.q.plan, t)), reps = open ? reportsOf(qd, t.id) : [];
-  return h('div', { class: 'td' + (open ? ' open' : '') + (over ? ' over' : '') },
+  return h('div', { class: 'td ' + (t.kind === 'human' ? 'me' : 'auto') + (open ? ' open' : '') + (over ? ' over' : '') + (t.state === 'done' ? ' done' : '') },
     h('button', { type: 'button', class: 'tdrow', 'aria-expanded': String(open), 'aria-controls': `td-${key}`, 'data-key': 'td:' + key, onclick: () => { S.openGoal = open ? null : key; render(); } },
       h('span', { class: 'tid' }, t.id),
-      h('span', { class: 'tdt' }, h('span', { class: 'kind' }, t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動（実行前に確認）' : '自動'), h('b', null, t.title)),
+      h('span', { class: 'tdt' }, h('span', { class: 'kind' }, whoBadge(t)), h('b', null, t.title)),
       h('span', { class: 'tdd' }, '予定 ', t.scheduled || '—'),
       h('span', { class: 'tdd' + (over ? ' late' : '') }, '締切 ', t.due || '—'),
       h('span', { class: 'tds' }, stampEl(t.stamp, t.cls)), h('span', { class: 'caret', 'aria-hidden': 'true' }, open ? '▲' : '▼')),
@@ -974,7 +990,7 @@ function wayTab(qd) {
   if (!qd.goals.length) return h('p', { class: 'sub' }, '目標はありません。');
   const cur = qd.goals.find((t) => S.openGoal === `${qd.id}:${t.id}`);
   return h('div', { class: 'waygrid' },
-    h('div', { class: 'waylist' }, h('p', { class: 'fine', style: 'margin:0 0 6px' }, '行を開くと、合格基準と報告が読めます。日付を直すときは「日付」タブへ。'), qd.goals.map((t) => goalRow(qd, t))),
+    h('div', { class: 'waylist' }, h('p', { class: 'fine', style: 'margin:0 0 6px' }, '行を開くと、合格基準と報告が読めます。日付を直すときは「日付」タブへ。'), h('p', { class: 'legend', style: 'margin:0 0 8px' }, whoBadge({ kind: 'human' }), h('span', { class: 'fine' }, 'ギルドは、あなたの結果を待ちます　'), whoBadge({ kind: 'auto' }), h('span', { class: 'fine' }, 'ギルドが役を呼んで進めます')), qd.goals.map((t) => goalRow(qd, t))),
     h('aside', { class: 'critside', 'aria-label': '選んだ目標の合格基準' },
       cur ? [h('b', null, `${cur.id} の合格基準`), critList(cur)] : h('p', { class: 'fine', style: 'margin:0' }, '行を開くと、ここに合格基準が出ます。')));
 }

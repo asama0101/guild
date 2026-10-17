@@ -155,3 +155,13 @@ class AllowListLinksTest(unittest.TestCase):
         card = BOARD[BOARD.index("function webCard(m)"):BOARD.index("function webTab()")]
         for needle in ("const site = (d) =>", "href: `https://${d}/`", "rel: 'noopener noreferrer'", "site(d)"):
             self.assertIn(needle, card, needle)
+
+
+class WhoBadgeTest(unittest.TestCase):
+    def test_goal_rows_tell_human_from_auto(self):
+        row = BOARD[BOARD.index("function goalRow("):BOARD.index("function goalRow(") + 900]
+        for needle in ("t.kind === 'human' ? 'me' : 'auto'", "whoBadge(t)"):
+            self.assertIn(needle, row, needle)
+        badge = BOARD[BOARD.index("function whoBadge("):BOARD.index("function goalRow(")]
+        for needle in ("あなたが実行", "ギルドが自動（実行前に確認）"):
+            self.assertIn(needle, badge, needle)
