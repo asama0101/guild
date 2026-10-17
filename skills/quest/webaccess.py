@@ -116,6 +116,12 @@ def gate(gdir, url, prompt=""):
     domain = domain_of(url)
     if domain is None:
         return "deny", f"http(s) の URL ではないため開けません: {url}"
+    try:
+        domain = domain.encode("idna").decode("ascii")  # 日本語ドメインは punycode にそろえる（許可の答えは、この形でしか受け付けない）
+    except UnicodeError:
+        return "deny", f"ホスト名を読めないため開けません: {url}"
+    if not DOMAIN_RE.match(domain):  # IP・localhost・イントラの短い名前は、許可の答えを受け付けられない。手紙に積まず、開かない
+        return "deny", f"{domain} は、ドメイン名ではない（IP アドレス・localhost など）ため開けません。今は開かずに進め、報告の「未確認」に「許可なし：{url}」と書いてください。"
     data = load(gdir)
     if covered(domain, data["allow"]) or covered(domain, data["once"]):
         return "allow", ""

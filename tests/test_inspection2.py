@@ -136,5 +136,26 @@ class ResultInputTest(unittest.TestCase):
             self.assertEqual(guild.load_plan(q / "plan.json")["goals"][0]["state"], "review")
 
 
+class WebHostTest(unittest.TestCase):
+    def test_hosts_that_cannot_be_answered_are_denied_without_a_letter(self):
+        with tempfile.TemporaryDirectory() as d:
+            gdir = Path(d) / "guild"
+            for url in ("http://127.0.0.1/x", "http://localhost/", "http://[::1]/", "http://intranet/"):
+                verdict, _ = webaccess.gate(gdir, url, "p")
+                self.assertEqual(verdict, "deny", url)
+            self.assertEqual(webaccess.pending(gdir), [])
+
+    def test_japanese_domain_is_queued_as_punycode_and_can_be_answered(self):
+        with tempfile.TemporaryDirectory() as d:
+            gdir = Path(d) / "guild"
+            webaccess.gate(gdir, "https://例え.jp/a", "p")
+            dom = webaccess.pending(gdir)[0]["domain"]
+            self.assertTrue(dom.startswith("xn--"), dom)
+            data = webaccess.load(gdir)
+            webaccess.apply(data, {"type": "web", "decisions": {dom: "allow"}})
+            webaccess.save(gdir, data)
+            self.assertEqual(webaccess.gate(gdir, "https://例え.jp/b", "p")[0], "allow")
+
+
 if __name__ == "__main__":
     unittest.main()
