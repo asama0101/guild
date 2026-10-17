@@ -122,3 +122,13 @@ class ParentDomainTest(unittest.TestCase):
         cases = ["www.e-stat.go.jp", "www3.boj.or.jp", "ja.wikipedia.org", "example.com", "alice.github.io", "x.y.alice.github.io", "github.io", "a.b.co.uk"]
         out = node_eval(src + f"console.log(JSON.stringify({json.dumps(cases)}.map(parentDomain)))")
         self.assertEqual(out, ["e-stat.go.jp", "boj.or.jp", "wikipedia.org", "example.com", "alice.github.io", "alice.github.io", "github.io", "b.co.uk"])
+
+
+class PressingDefersRefreshTest(unittest.TestCase):
+    def test_refresh_waits_while_a_button_is_held(self):
+        self.assertIn("isPressing() ||", BOARD)
+        for needle in ("addEventListener('pointerdown'", "addEventListener('pointerup', released", "S.pressAt = 0"):
+            self.assertIn(needle, BOARD, needle)
+
+    def test_skill_limits_parallel_roles_so_arrivals_are_taken_sooner(self):
+        self.assertIn("一度に 3 つまで", (ROOT / "skills" / "quest" / "SKILL.md").read_text(encoding="utf-8"))

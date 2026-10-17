@@ -1540,7 +1540,7 @@ function questRow(qd) {
 }
 function requestRow(r) {
   return h('div', { class: 'qli req' }, h('span', { class: 'id' }, '受付'), h('span', { class: 'tt', title: r.text }, r.text.split('\n')[0].slice(0, 80)), h('span', { class: 'st' }, stampEl('受付待ち', 'sd-wait sm')),
-    h('span', { class: 'pg' }, '/guild:quest が受け付けます'), h('span', { class: 'du' }, cancelCell(r)));
+    h('span', { class: 'pg', title: '/guild:quest が、役の作業が終わるごとに受け付けます。作業中は、終わるまで数分かかることがあります' }, '/guild:quest が受け付けます'), h('span', { class: 'du' }, cancelCell(r)));
 }
 function questListPane(m, L) {
   const reqs = L.f === 'all' || L.f === 'run' ? m.requests.filter((r) => hit(L.q, r.id, r.text)) : [];
@@ -1700,7 +1700,7 @@ function boardTab() {
   if (m && m.needs.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, `あなたの番が${m.needs.length}件あります`),
     m.needs.map((n) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(n.q) }, n.text)), notifyButton()));
   if (m) { const wl = webLetter(m); if (wl) out.push(wl); }
-  if (S.newSaved) out.push(h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。一覧の先頭に「受付待ち」で入っています。/guild:quest が動いていれば、すぐ受け付けます。動いていなければ、チャットで /guild:quest と送ってください。`));
+  if (S.newSaved) out.push(h('p', { class: 'saved', role: 'status' }, `依頼 ${S.newSaved} を預かりました。一覧の先頭に「受付待ち」で入っています。/guild:quest が待っていれば、すぐ受け付けます。役が作業中のときは、その作業が終わるまで数分かかることがあります。/guild:quest が動いていなければ、チャットで /guild:quest と送ってください。`));
   if (m && m.rejectedRequests.length) out.push(h('div', { class: 'card', role: 'status', style: 'margin-bottom:12px' }, h('b', null, '受け付けられなかった依頼（新しい5件まで）'),
     h('ul', { style: 'margin:6px 0 0' }, m.rejectedRequests.map((r) => h('li', { class: 'fine' }, code(r.id), '「', r.text.split('\n')[0].slice(0, 40), '」：', r.reason, ' ',
       h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.form['new:text'] = r.text; S.form['new:inputs'] = []; openNew(); } }, '出し直す')))),
@@ -2362,6 +2362,8 @@ async function openReport(q, path) {
 }
 
 // ============================================================ つなぐ・更新
+// ボタンを押している最中（押してから離すまで）は、画面を作り直さない。作り直すと、押した部品が消えて、クリックが無効になる
+function isPressing() { return !!S.pressAt && Date.now() - S.pressAt < 5000; }  // 離したのが取れなかったときのため、5 秒で解く
 function isEditing() {
   if (S.composing) return true;
   const ae = document.activeElement;
@@ -2378,7 +2380,7 @@ async function refresh(force) {
     updateAlive();
     // 入力中（変換中を含む）は画面を作り直さない。作り直すと、変換が確定せず、位置も動く。入力が止まった次の更新で反映する
     // 資料を開いている間も作り直さない（読んでいる位置が上に戻ってしまう）。閉じたあとの次の更新で反映する
-    if (!force && key !== S.dataKey && (isEditing() || S.reader || S.fallback)) return;
+    if (!force && key !== S.dataKey && (isEditing() || isPressing() || S.reader || S.fallback)) return;
     if (force || key !== S.dataKey) {
       const prevNeeds = S.model ? S.model.needs.length : null;
       S.dataKey = key; S.model = buildModel(raw); S.rcache = {}; notifyNew(prevNeeds);  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
@@ -2513,6 +2515,9 @@ async function start() {
       if (perm === 'granted') await useHandle(handle); else { S.conn = 'need-permission'; render(); }
     }
   } catch (e) { S.connMsg = `前に選んだフォルダを読み出せませんでした（${e.name || 'エラー'}：${e.message || e}）。`; render(); }
+  document.addEventListener('pointerdown', () => { S.pressAt = Date.now(); }, true);
+  const released = () => { if (!S.pressAt) return; S.pressAt = 0; setTimeout(() => refresh(false), 120); };  // クリックの処理が済んでから、止めていた更新を反映する
+  document.addEventListener('pointerup', released, true); document.addEventListener('pointercancel', released, true);
   setInterval(() => { if (!document.hidden) refresh(false); }, 3000);
 }
 start();
