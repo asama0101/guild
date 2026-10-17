@@ -567,6 +567,8 @@ def apply_input(plan, data, tr, qdir=None, after=None):
         note(plan, event="accepted")
         return
     if kind == "decision" and data.get("choice") in ("abort", "replan"):
+        if data["choice"] == "replan" and plan.get("accepted"):
+            raise GuildError("受け取り済みの依頼は、reopen（修正して再実行）で直します")  # accepted が残ったまま見直しに入ると、完了扱いのまま prev/ が消える
         plan["status"] = "aborted" if data["choice"] == "abort" else "replan"
         if data["choice"] == "replan":
             plan["approved"] = False

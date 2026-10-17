@@ -39,5 +39,19 @@ console.log(JSON.stringify([
         self.assertEqual(node_eval(code), [True, False, False, True, False, 1])
 
 
+class ReplanAcceptedTest(unittest.TestCase):
+    def test_accepted_quest_cannot_take_a_replan_decision(self):
+        plan = {"approved": True, "status": "active", "accepted": True, "goals": [goal("G1", "done")], "history": []}
+        with self.assertRaises(guild.GuildError):
+            guild.apply_input(plan, {"type": "decision", "goal": "G1", "choice": "replan"}, TR)
+        self.assertTrue(plan["accepted"])
+        self.assertEqual(plan["status"], "active")
+
+    def test_replan_before_accepting_still_works(self):
+        plan = {"approved": True, "status": "active", "goals": [goal("G1", "done")], "history": []}
+        guild.apply_input(plan, {"type": "decision", "goal": "G1", "choice": "replan"}, TR)
+        self.assertEqual((plan["status"], plan["approved"]), ("replan", False))
+
+
 if __name__ == "__main__":
     unittest.main()
