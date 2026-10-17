@@ -253,5 +253,20 @@ class SmallFixesTest(unittest.TestCase):
             self.assertIn("いっぱい", why)
 
 
+class UrlShapeTest(unittest.TestCase):
+    def test_ambiguous_urls_are_denied_without_a_letter(self):
+        with tempfile.TemporaryDirectory() as d:
+            gdir = Path(d) / "guild"
+            data = webaccess.load(gdir)
+            data["allow"] += ["good.example", "medium.com"]
+            webaccess.save(gdir, data)
+            for url in ("http://evil.example\\@good.example/", "https://user:pw@good.example/", "https://good.example/a b", "https://good.example/\x00",
+                        "https://good.example\\evil.example/"):
+                self.assertEqual(webaccess.gate(gdir, url, "p")[0], "deny", repr(url))
+            self.assertEqual(webaccess.pending(gdir), [])
+            for url in ("https://www.good.example/a?x=1#y", "https://medium.com/@someone/post"):  # パスの @ は普通にある
+                self.assertEqual(webaccess.gate(gdir, url, "p")[0], "allow", url)
+
+
 if __name__ == "__main__":
     unittest.main()

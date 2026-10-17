@@ -113,6 +113,9 @@ def one_line(text, limit):
 
 def gate(gdir, url, prompt=""):
     """URL を開いてよいか。(allow か deny, 魔法使いに返す理由) を返す。許可がなければ pending に積む。"""
+    text = str(url).strip()
+    if re.search(r"[\\\s\x00-\x1f\x7f]", text) or "@" in urlsplit(text).netloc:  # バックスラッシュ・空白・制御文字・ホスト部の @（ユーザー情報）：パーサによって、ホストの読みが変わる。開かない（パスの @ は、そのまま通す）
+        return "deny", f"URL に、読み方が分かれる文字（バックスラッシュ、空白、制御文字、ホスト部の @）があるため開けません: {url!r}。URL を直して、もう一度試してください。"
     domain = domain_of(url)
     if domain is None:
         return "deny", f"http(s) の URL ではないため開けません: {url}"
