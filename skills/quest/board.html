@@ -154,7 +154,9 @@ select{font:inherit;font-size:14px;min-height:42px;border:1px solid var(--brass)
 .fld.wide{grid-column:1/-1}
 .filebtn:focus-within .btn{outline:3px solid var(--brass);outline-offset:1px}
 .chip{display:inline-block;padding:2px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);font-size:13px;word-break:break-all}
-.rhead{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.rhead{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.rhead>span{display:flex;flex-wrap:wrap;gap:6px}
+.rhead>span>.btn{margin-right:0!important}
 .rbox pre{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0 0 8px}
 .md{font-size:14px;line-height:1.7}.md-h{margin:14px 0 6px}.md-p{margin:6px 0}.md-list{margin:6px 0;padding-left:22px}.md-code{white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:10px;font-size:13px;margin:6px 0}.md-table{border-collapse:collapse;margin:8px 0}.md-table th,.md-table td{border:1px solid var(--line,#bbb);padding:4px 8px}.md-quote{margin:8px 0;padding:2px 12px;border-left:3px solid var(--line,#bbb);color:var(--sub)}.md-callout{margin:8px 0;padding:8px 12px;border-left:4px solid var(--brass,#b8860b);background:var(--surface2)}.md-frame{width:100%;height:60vh;border:1px solid var(--line,#bbb);background:#fff}.md-mermaid{overflow:auto}.md-mermaid svg{max-width:100%;height:auto}.wl{color:var(--sub)}.fdet summary{cursor:pointer}.flist{margin:0 0 6px;padding-left:20px}
 input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
@@ -683,7 +685,7 @@ function deliverables(qd) {
   const main = (qd.q.published || []).map((n) => 'deliverables/' + n);
   return { main, rest: qd.q.output };
 }
-function fileRow(f, label) {
+function letterFileRow(f, label) {
   return h('li', null, h('a', { href: '#', onclick: (e) => { e.preventDefault(); openFile(f); } }, label || f.replace(/^(Q\d+\/output\/|deliverables\/)/, '')),
     h('span', { class: 'acts' },
       h('button', { type: 'button', class: 'btn ghost sm', 'aria-label': `${f} を開く`, onclick: () => openFile(f) }, '開く'),
@@ -707,11 +709,11 @@ function promptRow(f) {
 function deliverableBlock(qd) {
   const d = deliverables(qd), docs = d.main.filter((f) => !isPrompt(f)), prompts = d.main.filter(isPrompt);
   return [
-    docs.length ? h('ul', { class: 'flist' }, docs.map((f) => fileRow(f))) : (prompts.length ? null : h('p', null, qd.allDone ? '納品物はまだ置かれていません（全目標が済むと guild.py が deliverables/ に置きます）。' : '納品物のファイルはありません（報告だけです）。')),
+    docs.length ? h('ul', { class: 'flist' }, docs.map((f) => letterFileRow(f))) : (prompts.length ? null : h('p', null, qd.allDone ? '納品物はまだ置かれていません（全目標が済むと guild.py が deliverables/ に置きます）。' : '納品物のファイルはありません（報告だけです）。')),
     prompts.length ? [h('p', { class: 'fine', style: 'margin:8px 0 4px' }, 'PowerPoint・Excel など Markdown 以外が要る部分は、Claude Code に渡すプロンプトにしてあります。「プロンプトをコピー」で貼り付けて、Claude Code に作らせてください。'),
       h('ul', { class: 'flist' }, prompts.map(promptRow))] : null,
     h('p', { class: 'fine', style: 'margin:0 0 8px' }, '納品物は ', code('guild/deliverables/'), ' にもあります（Obsidian で読めます）。「パスをコピー」は、フルパスでコピーします。'),
-    d.rest.length ? keepOpen('rest:' + qd.id, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map((f) => fileRow(f)))) : null];
+    d.rest.length ? keepOpen('rest:' + qd.id, h('summary', null, `途中の資料（材料）を見る（${d.rest.length}件）`), h('ul', { class: 'flist' }, d.rest.map((f) => letterFileRow(f)))) : null];
 }
 function fileField(key, label, multiple) {
   const inp = h('input', { type: 'file', 'aria-label': label }); if (multiple) inp.multiple = true;
@@ -883,7 +885,7 @@ function infoLetter(qd) {
     const part = partialOutputs(qd);
     return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, part.length ? '中止（一部の成果物あり）' : '中止'), h('h3', null, 'この依頼は中止されました'),
       part.length
-        ? [h('p', null, '合格した目標の成果物です。納品物ではなく、途中までのものです（未鑑定・不合格のものは含みません）。'), h('ul', { class: 'flist' }, part.map((f) => fileRow(f)))]
+        ? [h('p', null, '合格した目標の成果物です。納品物ではなく、途中までのものです（未鑑定・不合格のものは含みません）。'), h('ul', { class: 'flist' }, part.map((f) => letterFileRow(f)))]
         : h('p', null, '合格した目標の成果物はありません。途中のファイルは ', code(`.work/${qd.id}/output/`), ' に残っていることがあります。'));
   }
   if (qd.info === 'finished') {
@@ -1670,7 +1672,7 @@ function delivTab() {
   const q = (S.form['f:dl'] || '').trim().toLowerCase();
   const done = m.quests.filter((x) => x.finished).filter((x) => { const d = deliverables(x); return hit(q, x.id, x.title, ...d.main, ...d.rest); });
   const waiting = m.quests.filter((x) => x.allDone && !x.finished && x.q.plan && x.q.plan.status === 'active');
-  const out = [h('h2', { class: 'h2' }, '納品物'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '受け取った納品物（まとめた資料）の一覧です。ファイル名を押すと開き、中身とパスをコピーできます。'),
+  const out = [h('h2', { class: 'h2' }, '納品物'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '受け取った納品物（まとめた資料）の一覧です。ファイル名を押すと開き、文章とパスをコピーできます。'),
     searchBox('f:dl', '依頼の名前やファイル名で探す')];
   if (waiting.length) out.push(h('div', { class: 'attn', role: 'status' }, h('b', null, '受け取り待ち'), waiting.map((x) => h('button', { type: 'button', class: 'linkbtn', onclick: () => jumpQuest(x.id) }, `${x.id} ${x.title.slice(0, 20)}`))));
   if (!done.length) out.push(h('p', { class: 'sub' }, q ? '見つかりませんでした。' : 'まだ、受け取った納品物はありません。'));
@@ -2126,7 +2128,7 @@ function filesTab() {
 function reader() {
   if (!S.reader) return null;
   return h('div', { class: 'reader', role: 'dialog', 'aria-label': '報告' }, h('div', { class: 'rbox' },
-    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '中身') }, '中身をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyPath(S.reader.path) }, 'パスをコピー'), ['md', 'html', 'mmd'].includes(docKind(S.reader.path)) ? h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => { S.reader.source = !S.reader.source; render(); } }, S.reader.source ? '整形して見る' : 'ソースで見る') : null, h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
+    h('div', { class: 'rhead' }, h('b', null, S.reader.path), h('span', null, h('button', { type: 'button', class: 'btn go', style: 'min-height:36px;margin-right:6px', onclick: () => copyText(S.reader.text, '文章') }, '文章をコピー'), h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => copyPath(S.reader.path) }, 'パスをコピー'), ['md', 'html', 'mmd'].includes(docKind(S.reader.path)) ? h('button', { type: 'button', class: 'btn', style: 'min-height:36px;margin-right:6px', onclick: () => { S.reader.source = !S.reader.source; render(); } }, S.reader.source ? '整形して見る' : 'ソースで見る') : null, h('button', { type: 'button', class: 'btn ghost', style: 'min-height:36px', onclick: () => { S.reader = null; S.toast = ''; render(); } }, '閉じる'))),
     S.toast ? h('p', { class: 'saved', role: 'status' }, S.toast) : null,
     docView(S.reader.path, S.reader.text, S.reader.source)));
 }
@@ -2318,7 +2320,7 @@ function copyPath(rel) {
   return copyText(p.text, p.full ? 'フルパス' : 'パス（フルパスにするには、チャットで /guild:init をもう一度実行してください）');
 }
 async function copyText(text, what) {
-  try { await navigator.clipboard.writeText(text); S.toast = `${what || '中身'}をコピーしました。`; } catch (e) { S.toast = 'コピーできませんでした。選択してコピーしてください。'; }
+  try { await navigator.clipboard.writeText(text); S.toast = `${what || '文章'}をコピーしました。`; } catch (e) { S.toast = 'コピーできませんでした。選択してコピーしてください。'; }
   render();
 }
 async function openReport(q, path) {

@@ -36,6 +36,13 @@ class PlanBriefContractTest(unittest.TestCase):
             self.assertIn(key, body)
 
 
+class NoDuplicateFunctionTest(unittest.TestCase):
+    def test_no_duplicate_top_level_function(self):
+        names = re.findall(r"^(?:async )?function (\w+)\(", script(), re.M)
+        dup = sorted({n for n in names if names.count(n) > 1})
+        self.assertEqual(dup, [], f"同名の function 宣言があります（後ろが前を上書きします）: {dup}")
+
+
 def extract(name):
     """board.html のスクリプトから、トップレベルの function <name> を、波括弧の対応で切り出す。"""
     src = script()
