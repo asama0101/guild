@@ -1778,9 +1778,9 @@ class BoardPathsTest(unittest.TestCase):
         self.assertNotIn("guild/${path}", self.board)
         self.assertNotIn("guild/${qid}", self.board)
 
-    def test_progress_tab_exists(self):
-        for needle in ("['prog', 'クエスト進捗']", "function scheduleModel(", "function progressTab(", "function ganttSvg(", "function humanBars("):
-            self.assertIn(needle, self.board)
+    def test_progress_tab_is_gone(self):
+        for gone in ("['prog', 'クエスト進捗']", "function scheduleModel(", "function progressTab(", "function ganttSvg(", "function humanBars(", "function progPicker(", "showInProgress", "S.prog", "'guild.progress.sel'"):
+            self.assertNotIn(gone, self.board)
         self.assertNotIn("<script src", self.board)  # 外部ライブラリを使わない
 
     def test_board_sends_the_date_inputs(self):
@@ -1837,13 +1837,6 @@ class BoardPathsTest(unittest.TestCase):
         quest = (ROOT / "skills" / "quest" / "SKILL.md").read_text(encoding="utf-8")
         for needle in ("pause-clear <root>", "pause-status <root>", "`pause`"):
             self.assertIn(needle, quest)
-
-    def test_progress_filter(self):
-        for needle in ("function scheduleModel(quests, includeClosed, ids)", "function progCandidates(", "function progEffective(", "function progQuick(",
-                       "function progPicker(", "function showInProgress(", "'guild.progress.sel'", "'aria-haspopup': 'listbox'", "role: 'listbox'",
-                       "'aria-multiselectable': 'true'", "表示中の全部を選ぶ", "選択を解除", "進行中だけ", "自分の番だけ", "期限が近い5件", "進捗で見る",
-                       ".pgh{position:sticky", "progCandidates, progEffective, progQuick, showInProgress"):
-            self.assertIn(needle, self.board)
 
     def test_help_and_archive_inputs(self):
         for needle in ("sec('クエスト掲示板の使い方'", "S.form['a:inputs']", "inputs, summary,", 'inputs: ["KGI定義.md"]', "（guild/inputs/ にありません）",
@@ -1906,7 +1899,7 @@ class DocsContractTest(unittest.TestCase):
 
     def test_readme_matches_the_new_layout(self):
         s = self.read("README.md")
-        for needle in ("deliverables/", "inputs/", ".work/", "クエスト進捗", "Playwright MCP"):
+        for needle in ("deliverables/", "inputs/", ".work/", "Playwright MCP"):
             self.assertIn(needle, s)
         self.assertNotIn(".mcp.json", s)
 
@@ -1958,13 +1951,13 @@ class DocsContractTest(unittest.TestCase):
 
     def test_readme_lists_the_seven_tabs_and_no_adventure_book(self):
         readme = self.read("README.md")
-        for tab in ("クエスト掲示板", "クエスト進捗", "納品物", "書庫", "外部サイト", "Obsidian", "ヘルプ"):
+        for tab in ("クエスト掲示板", "納品物", "書庫", "外部サイト", "Obsidian", "ヘルプ"):
             self.assertIn(tab, readme)
         self.assertNotIn("冒険の書", readme)
         board = self.read("docs", "board-design.md")
         self.assertNotIn("冒険の書", board)
-        for key in ("guild.board.listOpen", "guild.progress.sel"):
-            self.assertIn(key, board)
+        self.assertIn("guild.board.listOpen", board)
+        self.assertNotIn("guild.progress.sel", board)
 
     def test_no_stale_terms_in_live_docs(self):
         files = [self.read("README.md"), self.read("skills", "quest", "SKILL.md"), self.read("skills", "init", "SKILL.md")]
