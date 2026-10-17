@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -112,6 +113,40 @@ class StaleDraftTest(unittest.TestCase):
         g["state"] = "failed"
         plan = {"quest": "Q001", "title": "週報", "approved": True, "status": "active", "goals": [g], "history": []}
         self.check(plan, {"type": "decision", "goal": "G1", "choice": "replan"})
+
+
+class ArchiveDecideTest(unittest.TestCase):
+    def test_retry_after_a_crash_does_not_duplicate_entries(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            q = Path(guild.new_quest(root)["dir"])
+            cands = [{"id": f"C{i}", "type": "term", "name": f"用語{i}", "summary": "説明", "confidence": "guess", "body": "本文"} for i in (1, 2)]
+            guild.save_plan(q / "archive.json", {"status": "proposed", "candidates": cands, "registered": [], "codex_proposals": [], "decided": {}})
+            answer = {"type": "archive", "decisions": {"C1": "register", "C2": "register"}}
+            real, calls = guild.apply_candidate, []
+
+            def flaky(*a, **k):
+                calls.append(1)
+                if len(calls) == 2:
+                    raise OSError("同期中")
+                return real(*a, **k)
+
+            with mock.patch.object(guild, "apply_candidate", flaky):
+                with self.assertRaises(OSError):
+                    guild.archive_decide(q, answer)
+            guild.archive_decide(q, answer)
+            names = sorted(p.name for p in (root / "guild" / "archive").glob("*.md") if p.name != "index.md")
+            self.assertEqual(names, ["用語1.md", "用語2.md"])
+            self.assertEqual(guild.archive_state(q), "done")
+
+    def test_entries_and_index_are_written_atomically(self):
+        with tempfile.TemporaryDirectory() as d:
+            adir = Path(d)
+            with mock.patch.object(guild, "write_text_atomic", wraps=guild.write_text_atomic) as w:
+                guild.write_entry(adir, {"type": "term", "name": "用語", "summary": "説明", "confidence": "guess"})
+                guild.rebuild_index(adir)
+            self.assertEqual(len(w.call_args_list), 2)
 
 
 if __name__ == "__main__":

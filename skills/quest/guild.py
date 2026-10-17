@@ -1792,7 +1792,7 @@ def write_entry(adir, e, path=None):
         path = cand.name
     target = adir / path
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(entry_text(e), encoding="utf-8")
+    write_text_atomic(target, entry_text(e))  # 途中で切れても、半分の項目を残さない
     return path
 
 
@@ -1846,7 +1846,7 @@ def rebuild_index(adir):
                      e.get("summary", ""), "、".join(e["inputs"]), f"[[{rel[:-3]}]]"]
             out.append("| " + " | ".join(c.replace("|", "／") for c in cells) + " |")
         out.append("")
-    (adir / "index.md").write_text("\n".join(out), encoding="utf-8")
+    write_text_atomic(adir / "index.md", "\n".join(out))
 
 
 def apply_candidate(adir, c, quest):
@@ -1997,11 +1997,14 @@ def archive_decide(qdir, data):
         raise GuildError("codex は {提案の id: adopt か skip} にしてください")
     adir = gdir_of(qdir) / "archive"
     for c in state["candidates"]:
+        if c["id"] in state["decided"]:
+            continue  # 前回、途中で落ちたときに、済んだ候補。もう一度書かない（同じ項目が -2 で増えるため）
         if decisions.get(c["id"]) == "register":
             state["registered"].append(apply_candidate(adir, c, qdir.name))
             state["decided"][c["id"]] = "register"
         else:
             state["decided"][c["id"]] = "skip"
+        save_plan(state_path, state)  # 1 件ごとに残す
     for k in state.get("codex_proposals", []):  # 掟への追記は、依頼主が採用したものだけ（既定は採用しない）
         if codex.get(k["id"]) == "adopt":
             append_codex(gdir_of(qdir), k)
