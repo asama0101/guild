@@ -168,6 +168,7 @@ input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .wbadge{font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--sub);margin-left:6px}
 .wkids{padding:2px 0 8px 18px;font-size:13px}
 .wkid{display:flex;flex-wrap:wrap;gap:2px 10px;padding:2px 0;word-break:break-all}
+.rerun{display:inline-block;font-size:11px;font-weight:700;color:var(--banner);border:1px solid var(--banner);border-radius:3px;padding:0 5px;margin-left:6px;white-space:nowrap;vertical-align:middle}
 .wlist{list-style:none;margin:0 0 6px;padding:0}
 .wlist li{display:block;padding:6px 0;border-bottom:1px dashed var(--line);word-break:break-all}
 .wlist .wnote{margin:2px 0 0}
@@ -683,6 +684,10 @@ function askText(x, a) {
 
 // ============================================================ 描画（部品）
 function stampEl(label, cls) { return h('span', { class: `stamp ${cls}` }, label); }
+// 再実行の印：合格・待機などの状態は変わらないので、やり直した回数を別に出す。目標＝不合格でのやり直しと、もう一度の判断。依頼＝完了・中止からの「修正して再実行」
+function rerunsOf(plan, t) { return plan && Array.isArray(plan.history) ? plan.history.filter((e) => e && e.id === t.id && (e.event === 'retry' || (e.event === 'rejected' && e.to !== 'failed'))).length : 0; }
+function reopensOf(plan) { return plan && Array.isArray(plan.history) ? plan.history.filter((e) => e && e.event === 'reopen').length : 0; }
+function rerunMark(n, what) { return n > 0 ? h('span', { class: 'rerun', title: `${what}（${n}回）` }, `↻ 再実行 ${n}`) : null; }
 
 function sentNote(key) {
   return S.sent[key] ? h('p', { class: 'saved', role: 'status' }, HANDOFF) : null;
@@ -980,7 +985,7 @@ function goalRow(qd, t) {
       h('span', { class: 'tdt' }, h('span', { class: 'kind' }, whoBadge(t)), h('b', null, t.title)),
       h('span', { class: 'tdd' }, '予定 ', t.scheduled || '—'),
       h('span', { class: 'tdd' + (over ? ' late' : '') }, '締切 ', t.due || '—'),
-      h('span', { class: 'tds' }, stampEl(t.stamp, t.cls)), h('span', { class: 'caret', 'aria-hidden': 'true' }, open ? '▲' : '▼')),
+      h('span', { class: 'tds' }, stampEl(t.stamp, t.cls), rerunMark(rerunsOf(qd.q.plan, t), '不合格やもう一度の判断で、この目標をやり直しました')), h('span', { class: 'caret', 'aria-hidden': 'true' }, open ? '▲' : '▼')),
     warns.length ? h('p', { class: 'tdwarn' }, warns.join(' ')) : null,
     open ? h('div', { class: 'tdbody', id: `td-${key}` },
       h('div', { class: 'tdcrit' }, h('b', { class: 'cap' }, '合格基準'), critList(t)),
@@ -1008,7 +1013,7 @@ function datesTab(qd) {
   const qbox = h('div', { class: 'dtq' }, h('b', null, '依頼の日付'), h('label', null, '開始日 ', qs), h('label', null, '締切 ', qdue), qwarn);
   const rows = qd.goals.map((t) => {
     const sch = mk(`${t.id}:scheduled`, t.scheduled, `${t.id} の予定日`), due = mk(`${t.id}:due`, t.due, `${t.id} の締切`), warn = h('span', { class: 'dtw' });
-    const tr = h('div', { class: 'dtr', role: 'row' }, h('b', { class: 'tid', role: 'cell' }, t.id), h('span', { role: 'cell', class: 'dtt' }, t.title, ' ', stampEl(t.stamp, t.cls + ' sm')),
+    const tr = h('div', { class: 'dtr', role: 'row' }, h('b', { class: 'tid', role: 'cell' }, t.id), h('span', { role: 'cell', class: 'dtt' }, t.title, ' ', stampEl(t.stamp, t.cls + ' sm'), rerunMark(rerunsOf(qd.q.plan, t), '不合格やもう一度の判断で、この目標をやり直しました')),
       h('span', { role: 'cell' }, sch), h('span', { role: 'cell' }, due), h('span', { role: 'cell' }, warn));
     return { t, sch, due, warn, tr };
   });
@@ -1364,7 +1369,7 @@ function questRow(qd) {
   const p = qd.q.plan, due = p && okDate(p.due) ? p.due : null, late = !!due && due < localToday() && boardBucket(qd) !== 'done';
   const pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
   return h('button', { type: 'button', class: 'qli', 'aria-current': S.sel === qd.id ? 'true' : 'false', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => selectQuest(qd.id) },
-    h('span', { class: 'id' }, qd.id), h('span', { class: 'tt', title: qd.title }, qd.title), h('span', { class: 'st' }, stampEl(qd.label, qd.cls + ' sm')),
+    h('span', { class: 'id' }, qd.id), h('span', { class: 'tt', title: qd.title }, qd.title), h('span', { class: 'st' }, stampEl(qd.label, qd.cls + ' sm'), rerunMark(reopensOf(qd.q.plan), '完了・中止から、修正して再実行しました')),
     h('span', { class: 'pg' }, h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { style: `width:${pct}%` })), qd.total ? `${qd.done}/${qd.total}` : '—'),
     h('span', { class: 'du' + (late ? ' late' : '') }, due ? `締切 ${shortDate(due)}` : ''));
 }
@@ -1405,7 +1410,7 @@ function questPanel(m, L) {
   const p = qd.q.plan, pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
   return h('section', { class: 'qpanel', 'aria-label': `${qd.id} の詳細` }, tool,
     h('header', { class: 'qhead' },
-      h('div', { class: 'qhl' }, h('span', { class: 'tid' }, qd.id), stampEl(qd.label, qd.cls)),
+      h('div', { class: 'qhl' }, h('span', { class: 'tid' }, qd.id), stampEl(qd.label, qd.cls), rerunMark(reopensOf(qd.q.plan), '完了・中止から、修正して再実行しました')),
       h('h3', null, qd.title),
       p && p.series ? h('p', { class: 'fine', style: 'margin:0 0 4px' }, `関連：${p.series}`) : null,
       metaEditor(qd),
@@ -1858,7 +1863,7 @@ function helpGrid() {
       ['インプット', 'このクエストが使うファイルです。「外す」「追加」「既存から選ぶ」で直せます（承認の前でも後でも）。']])),
     sec('スキルの使い方（チャットで使う）', dl([['/guild:init', 'プロジェクトのフォルダで、最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。何度実行しても、依頼や書庫の項目は消えません。プラグインを更新したあとにもう一度実行すると、この画面が最新になります。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。質問・承認・確認は、チャットではなく、この画面の「手紙」で聞きます。動いている間は、この画面での答えを待ち続け、届くとすぐ取り込みます。'], ['止まったとき', 'しばらく動きがなければ、チャットで /guild:quest と送ってください。保存済みの答えや依頼を読み取って、続きから進めます。']])),
     sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（クエスト掲示板の一覧で使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', '目標ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全目標が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
-      h('p', { class: 'fine', style: 'margin:0 0 6px' }, '目標の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の目標が終わるのを待っています。'], ['作業中', 'sd-run', '魔法使い・錬金術師・冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう目標です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の目標ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
+      h('p', { class: 'fine', style: 'margin:0 0 6px' }, '「↻ 再実行 N」の赤い枠の印は、やり直した回数です。目標では、不合格やもう一度の判断でやり直した回数。依頼では、完了・中止から「修正して再実行」した回数です。状態の印（合格など）は、やり直しても変わらないので、別に出します。'), h('p', { class: 'fine', style: 'margin:0 0 6px' }, '目標の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の目標が終わるのを待っています。'], ['作業中', 'sd-run', '魔法使い・錬金術師・冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう目標です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の目標ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
     sec('言葉の説明', dl([['目標', '依頼を分けた、ひとつひとつの作業。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['インプット', '依頼で使う資料（guild/inputs/ に1つだけ置き、各クエストは名前で参照）。あなたが「＋ 新規」で選んだものが「指定」、受付係が依頼文と書庫をもとに理由つきで選んだものが「自動」です。受付係が迷ったものは「候補」になります。'], ['書庫の紐づけ', '書庫の項目に「インプット」を書いておくと、依頼文にその項目の名前・別名が出てきたとき、受付係にそのファイルが勧められます（確認済み・出典ありの項目の、3文字以上の語だけ）。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
     sec('困ったとき', h('div', { class: 'faq' },
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),

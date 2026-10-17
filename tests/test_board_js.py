@@ -201,3 +201,19 @@ class LogYesNeedsMemoTest(unittest.TestCase):
         for needle in ("class: 'logmemo'", "メモ必須", "メモ（必須）", "if (ok && !note)", "メモを書いてください", "e.key === 'Enter'", "note, files: []"):
             self.assertIn(needle, row, needle)
         self.assertIn("「できた」を送るときは、メモが必須です。", BOARD)  # 押す前に分かるように、見出しの下に 1 行
+
+
+@unittest.skipUnless(shutil.which("node"), "node がありません")
+class RerunMarkTest(unittest.TestCase):
+    def test_counts_reruns_of_a_goal_and_reopens_of_a_quest(self):
+        code = extract("rerunsOf") + "\n" + extract("reopensOf") + "\n" + r"""
+const plan = { history: [
+  { id: 'G1', event: 'rejected', from: 'review', to: 'running' }, { id: 'G1', event: 'rejected', from: 'review', to: 'waiting_user' },
+  { id: 'G1', event: 'rejected', from: 'review', to: 'failed' }, { id: 'G1', event: 'retry', from: 'failed', to: 'running' },
+  { id: 'G2', event: 'rejected', from: 'review', to: 'running' }, { event: 'reopen', comment: 'x' }, { event: 'reopen', comment: 'y' }] };
+console.log(JSON.stringify([rerunsOf(plan, { id: 'G1' }), rerunsOf(plan, { id: 'G2' }), rerunsOf(plan, { id: 'G9' }), rerunsOf(null, { id: 'G1' }), reopensOf(plan), reopensOf({}), reopensOf(null)]));"""
+        self.assertEqual(node_eval(code), [3, 1, 0, 0, 2, 0, 0])
+
+    def test_marks_are_shown_on_rows_headers_and_goal_lists(self):
+        for needle in ("rerunMark(rerunsOf(qd.q.plan, t)", "rerunMark(reopensOf(qd.q.plan)", ".rerun{"):
+            self.assertIn(needle, BOARD, needle)
