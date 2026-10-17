@@ -574,6 +574,9 @@ function derive(q) {
   const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 80)) || q.id;
   const d = { id: q.id, title, asks: [], info: null, goals: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q, inputs: planList(p, 'inputs'), candidates: planList(p, 'candidates') };
   const inboxHas = (type, goal, choice) => q.inbox.some((x) => x.type === type && (goal == null || x.goal === goal) && (choice == null || x.choice === choice));
+  if (p && !Array.isArray(p.goals)) {  // 旧形式（todos）の依頼。読めないので、描かずに知らせる
+    d.label = '旧形式'; d.cls = 'sd-wait'; d.info = 'legacy'; return d;
+  }
   if (!p) {
     const qs = q.draft && Array.isArray(q.draft.questions) ? q.draft.questions : [];
     if (qs.length) {
@@ -844,6 +847,7 @@ function letterFor(qd, a) {
 }
 
 function infoLetter(qd) {
+  if (qd.info === 'legacy') return h('section', { class: 'letter' }, seal('旧'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '旧形式の依頼'), h('h3', null, 'この依頼は、この版では読めません'), h('p', null, '以前の版で作られた依頼です（計画が Todo の形式）。この版は「目標」を使うため、引き継げません。この依頼のフォルダは、そのまま残してかまいません。必要なら、依頼をもう一度出し直してください。'));
   if (qd.info === 'decomposing') return h('section', { class: 'letter' }, seal('分'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '分解中'), h('h3', null, '依頼を受け付けました'), h('p', null, '受付係が道のりを描いています。まだ計画はありません。進まないときは、チャットで ', code('/guild:quest'), ' と送ってください。'));
   if (qd.info === 'replan') return h('section', { class: 'letter' }, seal('直'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '計画を直しています'), h('h3', null, '計画の作り直しを待っています'), h('p', null, '/guild:quest が動いていれば、受付係がすぐ作り直します。動いていなければ、チャットで ', code('/guild:quest'), ' と送ってください。'));
   if (qd.info === 'aborted') {
@@ -893,9 +897,9 @@ function reportLine(qd, r) {
     txt === null ? h('p', { class: 'fine', style: 'margin:2px 0 0' }, '読み込み中…') : lines.length ? h('p', { class: 'repx' }, lines.join(' ／ ')) : null);
 }
 function goalRow(qd, t) {
-  const key = `${qd.id}:${t.id}`, open = S.open目標 === key, over = overdue(t, Date.now()), warns = dateIssues(qd.q.plan, t).concat(flowIssues(qd.q.plan, t)), reps = open ? reportsOf(qd, t.id) : [];
+  const key = `${qd.id}:${t.id}`, open = S.openGoal === key, over = overdue(t, Date.now()), warns = dateIssues(qd.q.plan, t).concat(flowIssues(qd.q.plan, t)), reps = open ? reportsOf(qd, t.id) : [];
   return h('div', { class: 'td' + (open ? ' open' : '') + (over ? ' over' : '') },
-    h('button', { type: 'button', class: 'tdrow', 'aria-expanded': String(open), 'aria-controls': `td-${key}`, 'data-key': 'td:' + key, onclick: () => { S.open目標 = open ? null : key; render(); } },
+    h('button', { type: 'button', class: 'tdrow', 'aria-expanded': String(open), 'aria-controls': `td-${key}`, 'data-key': 'td:' + key, onclick: () => { S.openGoal = open ? null : key; render(); } },
       h('span', { class: 'tid' }, t.id),
       h('span', { class: 'tdt' }, h('span', { class: 'kind' }, t.kind === 'human' ? 'あなたの実行' : t.confirm ? '自動（実行前に確認）' : '自動'), h('b', null, t.title)),
       h('span', { class: 'tdd' }, '予定 ', t.scheduled || '—'),
@@ -911,7 +915,7 @@ function goalRow(qd, t) {
 }
 function wayTab(qd) {
   if (!qd.goals.length) return h('p', { class: 'sub' }, '目標はありません。');
-  const cur = qd.goals.find((t) => S.open目標 === `${qd.id}:${t.id}`);
+  const cur = qd.goals.find((t) => S.openGoal === `${qd.id}:${t.id}`);
   return h('div', { class: 'waygrid' },
     h('div', { class: 'waylist' }, h('p', { class: 'fine', style: 'margin:0 0 6px' }, '行を開くと、合格基準と報告が読めます。日付を直すときは「日付」タブへ。'), qd.goals.map((t) => goalRow(qd, t))),
     h('aside', { class: 'critside', 'aria-label': '選んだ目標の合格基準' },
@@ -1430,7 +1434,7 @@ function boardList(m) {
   return { q, f, counts, open, closed, nav: S.showClosed ? [...open, ...closed] : open };
 }
 function selectQuest(id) {
-  S.sel = id; S.pane = 'detail'; S.open目標 = null; render();
+  S.sel = id; S.pane = 'detail'; S.openGoal = null; render();
   const el = document.querySelector('.qpanel'), bar = document.querySelector('.tabs');
   if (el) { const top = el.getBoundingClientRect().top - (bar ? bar.offsetHeight : 0) - 8; if (top < 0 || top > window.innerHeight * 0.6) window.scrollTo(0, window.scrollY + top); }
 }

@@ -89,7 +89,7 @@ class EvidenceGateTest(unittest.TestCase):
         self.assertEqual(run("advance", self.path, "G1", "passed")[0], 0)
 
     def test_report_verdict_must_be_passed(self):
-        for word in ("rejected", "needs_scout"):
+        for word in ("rejected", "needs_adventurer"):
             self.report.write_text("## 判定" + chr(10) + word + chr(10), encoding="utf-8")
             code, _, err = run("advance", self.path, "G1", "passed")
             self.assertEqual(code, 1, word)

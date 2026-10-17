@@ -48,6 +48,22 @@ class LegacyFormatTest(unittest.TestCase):
         write(root / "guild" / ".work" / "Q001" / "plan.json", {"quest": "Q001", "todos": []})
         self.assertEqual(guild.stats(root)["total"]["quests"], 0)
 
+    def test_arrivals_ignore_the_inbox_of_a_legacy_quest(self):
+        root = Path(self.tmp.name) / "proj"
+        q = root / "guild" / ".work" / "Q001"
+        write(q / "plan.json", {"quest": "Q001", "todos": []})
+        write(q / "inbox" / "a.json", {"type": "decision", "choice": "abort"})
+        q2 = root / "guild" / ".work" / "Q002"
+        write(q2 / "plan.json", {"quest": "Q002", "goals": []})
+        write(q2 / "inbox" / "b.json", {"type": "approve"})
+        self.assertEqual([a["quest"] for a in guild.arrivals(root) if a["kind"] == "inbox"], ["Q002"])
+
+    def test_board_does_not_break_on_a_legacy_plan(self):
+        board = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
+        self.assertIn("p && !Array.isArray(p.goals)", board)
+        self.assertIn("qd.info === 'legacy'", board)
+        self.assertNotIn("S.open目標", board)
+
 
 CRIT = {"viewpoint": "v", "pass_line": "p", "check": "c"}
 

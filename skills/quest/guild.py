@@ -90,6 +90,15 @@ def load_json(path):
 LEGACY_MSG = "旧形式の計画です（todos）。この版は「目標（goals）」を使うので、読めません。この依頼は中止して、もう一度出し直してください"
 
 
+def is_legacy_plan(path):
+    """旧形式（todos）の plan.json か。読めない・ないものは False。"""
+    try:
+        plan = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(plan, dict) and "todos" in plan and "goals" not in plan
+
+
 def load_plan(path):
     """plan.json を読む。旧形式（todos）は、分かるエラーで止める（自動の移行はしない）。"""
     plan = load_json(path)
@@ -1116,6 +1125,8 @@ def arrivals(root):
     if wdir.is_dir():
         for q in sorted(wdir.glob("Q[0-9]*")):
             inbox = q / "inbox"
+            if is_legacy_plan(q / "plan.json"):
+                continue  # 旧形式の依頼は、取り込めない（待機が空回りしないよう、届いたものに数えない）
             if inbox.is_dir():
                 for f in sorted(inbox.glob("*.json")):
                     out.append({"kind": "inbox", "quest": q.name, "file": f.name})
