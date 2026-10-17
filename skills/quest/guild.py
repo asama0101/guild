@@ -1225,6 +1225,130 @@ def wait_for(root, seconds, interval=1.0):
         time.sleep(interval)
 
 
+CLOG = "clog.json"  # guild/.work/clog.json：クエストログ（待機の直前と完了時に、guild.py digest が作る。LLM は使わない）
+ADVICE_ACTIONS = (("もう一度", "retry"), ("計画を直す", "replan"), ("やめる", "drop"))
+MAX_FOLLOWUPS = 3
+FOLLOWUP_MAX = 80
+
+
+def section_of(text, title):
+    """Markdown の「## <title>」の節の本文（次の「## 」まで）を返す。なければ空。"""
+    lines, out, on = str(text).replace("\r\n", "\n").split("\n"), [], False
+    for l in lines:
+        if l.startswith("## "):
+            if on:
+                break
+            on = l[3:].strip() == title
+        elif on:
+            out.append(l)
+    return "\n".join(out).strip()
+
+
+def advice_of(qdir, goal_id):
+    """鑑定士の報告（reports/<id>-appraiser.md）の「勧める対応」。1 行目が もう一度／計画を直す／やめる で始まるものだけ返す。
+    返り値は {"action": retry|replan|drop, "text": 1 行} か None。"""
+    f = Path(qdir) / "reports" / f"{goal_id}-appraiser.md"
+    try:
+        body = section_of(f.read_text(encoding="utf-8"), "勧める対応")
+    except OSError:
+        return None
+    first = one_line(body.split("\n")[0]) if body else ""
+    for head, action in ADVICE_ACTIONS:
+        if first.startswith(head):
+            return {"action": action, "text": first}
+    return None
+
+
+def quest_digest(qdir):
+    """依頼 1 件の、クエストログの記録。plan.json などの状態だけから、決まった形で作る。"""
+    qdir = Path(qdir)
+    qid = qdir.name
+    plan_path = qdir / "plan.json"
+    req = {}
+    try:
+        req = load_json(qdir / "request.json") if (qdir / "request.json").exists() else {}
+    except GuildError:
+        pass
+    title = str((req.get("text") or "")).strip().split("\n")[0][:24] or qid
+    if is_legacy_plan(plan_path):
+        return {"id": qid, "title": title, "series": None, "label": "旧形式", "legacy": True, "goals": {}, "active": [], "needs": [], "blockers": [], "followups": []}
+    if not plan_path.exists():
+        qs = []
+        try:
+            d = qdir / "reports" / "plan-draft.json"
+            qs = load_json(d).get("questions") if d.exists() else []
+        except (GuildError, AttributeError):
+            qs = []
+        needs = [{"kind": "questions", "text": "質問への回答"}] if qs and not any((qdir / "inbox").glob("*answers*")) else []
+        return {"id": qid, "title": title, "series": None, "label": "質問あり" if needs else "分解中", "goals": {}, "active": [],
+                "needs": needs, "blockers": [], "followups": []}
+    plan = load_plan(plan_path)
+    goals = plan.get("goals", [])
+    by = {g["id"]: g for g in goals}
+    counts = {"total": len(goals), "done": sum(g["state"] == "done" for g in goals), "failed": sum(g["state"] == "failed" for g in goals),
+              "skipped": sum(g["state"] == "skipped" for g in goals)}
+    status = plan.get("status", "active")
+    active = [{"id": g["id"], "title": g.get("title"), "class": g.get("class"), "state": g["state"]} for g in goals if g["state"] in ("running", "review")]
+    needs, blockers = [], []
+    if not plan.get("approved") and status == "active":
+        needs.append({"kind": "approve", "text": "計画の承認"})
+    for g in goals:
+        if g["state"] == "awaiting_confirm":
+            needs.append({"kind": "confirm", "goal": g["id"], "text": f"{g['id']} の実行前の確認"})
+        elif g["state"] == "waiting_user":
+            needs.append({"kind": "result", "goal": g["id"], "text": f"{g['id']}（あなたの実行）"})
+        elif g["state"] == "failed":
+            n = {"kind": "decision", "goal": g["id"], "text": f"{g['id']} の失敗の判断"}
+            adv = advice_of(qdir, g["id"])
+            if adv:
+                n["advice"] = adv
+            needs.append(n)
+        elif g["state"] == "blocked":
+            roots = sorted({d for d in g.get("deps", []) if by.get(d, {}).get("state") == "failed"})
+            blockers.append({"goal": g["id"], "because": roots})
+    view = next_view(plan, qdir)
+    if view["awaiting_accept"]:
+        needs.append({"kind": "accept", "text": "受け取りの確認"})
+    follow = []
+    try:
+        arch = load_json(qdir / "archive.json") if (qdir / "archive.json").exists() else {}
+    except GuildError:
+        arch = {}
+    if arch.get("status") == "proposed":
+        needs.append({"kind": "archive", "text": "書庫の登録候補の確認"})
+    if isinstance(arch.get("followups"), list):
+        follow = [str(x) for x in arch["followups"]]
+    if status == "aborted":
+        label = "中止"
+    elif view["complete"]:
+        label = "完了"
+    elif needs:
+        label = "あなたの番"
+    elif plan.get("status") == "replan":
+        label = "計画を直し中"
+    else:
+        label = "進行中"
+    return {"id": qid, "title": str(plan.get("title") or title), "series": plan.get("series"), "label": label, "goals": counts,
+            "active": active, "needs": needs, "blockers": blockers, "followups": follow}
+
+
+def digest(root):
+    """クエストログ（guild/.work/clog.json）を作る。依頼ごとの進み・あなたの番・担当の職業・止まっている理由・次の提案と、効果の集計。"""
+    wd = work_dir(Path(root) / "guild")
+    quests = []
+    if wd.is_dir():
+        for q in sorted(wd.glob("Q[0-9]*")):
+            if q.is_dir():
+                try:
+                    quests.append(quest_digest(q))
+                except (GuildError, KeyError, TypeError, AttributeError):
+                    continue  # 壊れた依頼は、ログから外す（ほかの依頼は出す）
+    out = {"t": now(), "quests": quests, "needs_total": sum(len(q["needs"]) for q in quests), "stats": stats(root)["total"]}
+    if wd.is_dir():
+        save_plan(wd / CLOG, out)
+    return out
+
+
 def stats(root):
     """効果の測定：依頼ごとの目標数・完了・失敗・やめた数・不合格（rejected）の回数・もう一度やる（retry）の回数・計画の直し（replan）の回数を、
     plan.json の history から数える。壊れた計画は読み飛ばす。"""
@@ -1523,6 +1647,18 @@ def codex_proposals(cands, quest):
     return out
 
 
+def clean_followups(raw):
+    """司書の「次の提案」（関連してやるとよいこと）。文字列の配列で、3 件まで、1 件 80 字まで。形の誤りは捨てる（依頼にはしない）。"""
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for x in raw:
+        t = one_line(x) if isinstance(x, str) else ""
+        if t:
+            out.append(t[:FOLLOWUP_MAX])
+    return out[:MAX_FOLLOWUPS]
+
+
 def archive_propose(qdir):
     """司書の候補を検査する。心得と、確度が出典あり（sourced）で食い違いのないものは、そのまま書庫に登録する。
     推測・既存との食い違い・確度を下げる更新は、依頼主の確認待ち（archive.json）。同名・別名は更新の候補にする。
@@ -1532,6 +1668,7 @@ def archive_propose(qdir):
     init_archive(adir)
     draft = qdir / "reports" / "archive-draft.json"
     cands = load_json(draft).get("candidates", []) if draft.exists() else []
+    followups = clean_followups(load_json(draft).get("followups") if draft.exists() else None)
     if not isinstance(cands, list) or len(cands) > MAX_CANDIDATES:
         raise GuildError(f"candidates は {MAX_CANDIDATES} 件までの配列にしてください")
     ids = [c.get("id") if isinstance(c, dict) else None for c in cands]
@@ -1552,10 +1689,10 @@ def archive_propose(qdir):
     rebuild_index(adir)
     proposals = codex_proposals(cands, qdir.name)
     state = {"status": "proposed" if pending or proposals else "done", "candidates": pending, "registered": registered,
-             "codex_proposals": proposals, "decided": {}}
+             "codex_proposals": proposals, "followups": followups, "decided": {}}
     save_plan(qdir / "archive.json", state)
     return {"status": state["status"], "registered": registered, "pending": [c["id"] for c in pending],
-            "codex_proposals": [k["id"] for k in proposals], "experience": apply_experience(qdir)}
+            "codex_proposals": [k["id"] for k in proposals], "followups": followups, "experience": apply_experience(qdir)}
 
 
 def archive_decide(qdir, data):
@@ -1766,7 +1903,7 @@ def mutate_plan(cmd, path, argv):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear", "stats"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear", "stats", "digest"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
@@ -1800,10 +1937,17 @@ def main(argv):
         if cmd == "stats":
             print(json.dumps(stats(path), ensure_ascii=False))
             return 0
+        if cmd == "digest":
+            print(json.dumps(digest(path), ensure_ascii=False))
+            return 0
         if cmd in ("wait", "arrivals", "answers"):
             if cmd == "arrivals":
                 beat(path, "working")
             if cmd == "wait":
+                try:
+                    digest(path)  # 待機に入る直前に、クエストログを更新する（失敗しても、待機は止めない）
+                except (GuildError, OSError):
+                    pass
                 result = wait_for(path, float(argv[3]) if len(argv) > 3 else 540)
             elif cmd == "arrivals":
                 result = arrivals(path)

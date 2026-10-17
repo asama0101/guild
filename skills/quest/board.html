@@ -400,7 +400,7 @@ class MemFS {
 
 // 論理パス（画面の中で使う Q001/… requests/… web/… archive/inbox/…）を、guild/ の中の物理パスに写す。
 // 機械用のファイルは guild/.work/ にある（Obsidian に出ない）。archive/ の項目、deliverables/、inputs/ はそのまま。
-const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web|codex|experience)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json'], [/^heartbeat\.json$/, '.work/heartbeat.json'], [/^config\.json$/, '.work/config.json']];
+const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web|codex|experience)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json'], [/^heartbeat\.json$/, '.work/heartbeat.json'], [/^config\.json$/, '.work/config.json'], [/^clog\.json$/, '.work/clog.json']];
 function physical(p) { for (const [re, to] of PHYS) if (re.test(p)) return p.replace(re, to); return p; }
 class PathMap {
   constructor(fs) { this.fs = fs; }
@@ -730,12 +730,19 @@ function reportSection(text, title) {
   return m && m[1].trim() ? m[1] : null;
 }
 // 失敗の判断の手紙に出す、鑑定士の指摘（reports/<目標>-appraiser.md の「## 指摘」の節の、空でない最初の6行。節がなければ報告の冒頭6行）。報告がなければ出さない
+// 鑑定士の「勧める対応」（1 行目が もう一度／計画を直す／やめる で始まるものだけ。なければ空）
+function adviceLine(txt) {
+  const first = excerpt(reportSection(txt, '勧める対応') || '', 1)[0] || '';
+  return ['もう一度', '計画を直す', 'やめる'].some((w) => first.startsWith(w)) ? first : '';
+}
 function appraiserNote(qd, t) {
   const name = `${t.id}-appraiser.md`;
   if (!qd.q.reports.includes(name)) return null;
   const txt = reportText(qd.id, name), lines = txt ? excerpt(reportSection(txt, '指摘') || txt, 6) : [];
+  const advice = txt ? adviceLine(txt) : '';
   return h('div', { class: 'apnote', role: 'note', 'aria-label': '鑑定士の指摘' },
     h('div', null, h('b', null, '鑑定士の指摘'), '　', h('a', { href: '#', onclick: (e) => { e.preventDefault(); openReport(qd.id, `reports/${name}`); } }, name)),
+    advice ? h('p', { class: 'advice', style: 'margin:6px 0 0' }, h('b', null, '鑑定士のおすすめ：'), advice) : null,
     txt === null ? h('p', { class: 'fine', style: 'margin:4px 0 0' }, '読み込み中…')
       : lines.length ? h('ul', null, lines.map((l) => h('li', null, l))) : h('p', { class: 'fine', style: 'margin:4px 0 0' }, '報告を読めませんでした。ファイル名を押して開いてください。'));
 }
@@ -850,6 +857,11 @@ function letterFor(qd, a) {
     } }, 'この方針で進める')), sentNote(k));
 }
 
+// 次の提案（司書が挙げた、関連してやるとよいこと。依頼にはなりません）
+function followupBox(qd) {
+  const f = qd.q.archive && Array.isArray(qd.q.archive.followups) ? qd.q.archive.followups : [];
+  return f.length ? h('div', { class: 'qa', style: 'margin-top:10px' }, h('span', { class: 'lbl' }, '次の提案（依頼にはなりません。やるなら、新しく依頼してください）'), h('ul', null, f.map((x) => h('li', null, x)))) : null;
+}
 function infoLetter(qd) {
   if (qd.info === 'legacy') return h('section', { class: 'letter' }, seal('旧'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '旧形式の依頼'), h('h3', null, 'この依頼は、この版では読めません'), h('p', null, '以前の版で作られた依頼です（計画が Todo の形式）。この版は「目標」を使うため、引き継げません。この依頼のフォルダは、そのまま残してかまいません。必要なら、依頼をもう一度出し直してください。'));
   if (qd.info === 'decomposing') return h('section', { class: 'letter' }, seal('分'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '分解中'), h('h3', null, '依頼を受け付けました'), h('p', null, '受付係が道のりを描いています。まだ計画はありません。進まないときは、チャットで ', code('/guild:quest'), ' と送ってください。'));
@@ -864,7 +876,8 @@ function infoLetter(qd) {
   if (qd.info === 'finished') {
     return h('section', { class: 'letter done', 'aria-label': '完了' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '依頼が完了しました'), h('h3', null, '納品物をお渡しします'),
       deliverableBlock(qd),
-      qd.q.archive && qd.q.archive.status === 'done' && (qd.q.archive.registered || []).length ? h('p', { class: 'fine', style: 'margin:0' }, `書庫に ${qd.q.archive.registered.length} 件を登録しました。次の依頼で役に立てます。`) : null);
+      qd.q.archive && qd.q.archive.status === 'done' && (qd.q.archive.registered || []).length ? h('p', { class: 'fine', style: 'margin:0' }, `書庫に ${qd.q.archive.registered.length} 件を登録しました。次の依頼で役に立てます。`) : null,
+      followupBox(qd));
   }
   return null;
 }
@@ -1835,6 +1848,27 @@ const ROLE_MODELS = {
   appraiser: ['鑑定士', 'sonnet'],
   librarian: ['司書', 'sonnet']
 };
+// ---- クエストログ：guild.py digest が、待機の直前と完了時に作る記録（機械で作るので、事実だけ）
+const CLASS_NAMES = { wizard: '魔法使い', alchemist: '錬金術師', adventurer: '冒険者' };
+function logTab() {
+  const c = S.clog;
+  const head = [h('h2', { class: 'h2' }, 'クエストログ'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼の進み・あなたの番・担当・止まっている理由を、事実だけでまとめた記録です。/guild:quest が、待機に入る直前と完了時に作ります。いまの状態は「クエスト掲示板」で見てください。')];
+  if (!c || !Array.isArray(c.quests)) return [...head, h('p', { class: 'fine' }, 'まだクエストログがありません。/guild:quest を動かすと、待機の直前に作られます。')];
+  const when = Number.isNaN(Date.parse(c.t)) ? '' : new Date(c.t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const open = c.quests.filter((q) => !['完了', '中止', '旧形式'].includes(q.label));
+  const turn = open.filter((q) => (q.needs || []).length);
+  const sec = (t, ...ch) => h('section', { class: 'card' }, h('h3', null, t), ...ch);
+  const empty = (t) => h('p', { class: 'fine', style: 'margin:0' }, t);
+  const st = c.stats || {};
+  return [...head, h('p', { class: 'fine' }, `${when} 時点`),
+    sec(`あなたの番（${c.needs_total || 0} 件）`, turn.length ? h('ul', null, turn.map((q) => h('li', null, h('b', null, `${q.id} ${q.title}`), '：', q.needs.map((n) => n.text + (n.advice ? `（鑑定士のおすすめ：${n.advice.text}）` : '')).join('、')))) : empty('いまは、あなたの番はありません。')),
+    sec('進行中', open.length ? h('ul', null, open.map((q) => h('li', null, h('b', null, `${q.id} ${q.title}`), q.series ? `（${q.series}）` : '', `　${q.label}　${(q.goals || {}).done || 0}/${(q.goals || {}).total || 0}`,
+      (q.active || []).length ? [h('br'), (q.active || []).map((a) => `${CLASS_NAMES[a.class] || a.class || '—'}：${a.id} ${a.title || ''}`).join('、')] : null))) : empty('進行中の依頼はありません。')),
+    sec('止まっている理由', c.quests.some((q) => (q.blockers || []).length) ? h('ul', null, c.quests.flatMap((q) => (q.blockers || []).map((b) => h('li', null, `${q.id} ${b.goal} は、${(b.because || []).length ? b.because.join('、') + ' ができなかったため' : '前提が止まっているため'}、止まっています。`)))) : empty('止まっている目標はありません。')),
+    sec('次の提案', c.quests.some((q) => (q.followups || []).length) ? h('ul', null, c.quests.flatMap((q) => (q.followups || []).map((f) => h('li', null, `${q.id} ${q.title}：${f}`)))) : empty('いまは、提案はありません。')),
+    sec('これまでの集計', h('p', { class: 'fine', style: 'margin:0' }, `依頼 ${st.quests || 0} 件、目標 ${st.todos || st.goals || 0} 件、完了 ${st.done || 0}、失敗 ${st.failed || 0}、不合格 ${st.rejected || 0} 回、もう一度 ${st.retries || 0} 回、計画の直し ${st.replans || 0} 回`)),
+  ];
+}
 function helpTab() { return [...flowCards(), helpGrid()]; }
 function helpGrid() {
   const sec = (t, ...c) => h('section', { class: 'card' }, h('h3', null, t), ...c);
@@ -1972,8 +2006,8 @@ function render() {
   // 最初の描画は、いつも一番上から（ブラウザが前回のスクロール位置を戻さないようにする）
   const sy = S.rendered ? window.scrollY : 0; S.rendered = true;
   const tops = KEEP_SCROLL.map((s) => { const e = document.querySelector(s); return e ? e.scrollTop : 0; });
-  const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
-  const body = { board: boardTab, prog: progressTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
+  const tabs = [['board', 'クエスト掲示板'], ['prog', 'クエスト進捗'], ['log', 'クエストログ'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
+  const body = { board: boardTab, prog: progressTab, log: logTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
   app.replaceChildren(h('div', { class: 'wrap wide' }, banner(),
     h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
     h('div', { class: 'panel' }, connectBox(), aliveBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
@@ -2086,6 +2120,7 @@ async function refresh(force) {
   S.busy = true;
   try {
     const raw = await loadAll(); const key = JSON.stringify(raw);
+    try { const cl = await S.fs.readText('clog.json'); S.clog = cl ? JSON.parse(cl) : null; } catch (e) { S.clog = null; }
     try { const hb = await S.fs.readText('heartbeat.json'); S.hb = hb ? JSON.parse(hb) : null; } catch (e) { S.hb = null; }
     updateAlive();
     // 入力中（変換中を含む）は画面を作り直さない。作り直すと、変換が確定せず、位置も動く。入力が止まった次の更新で反映する

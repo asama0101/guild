@@ -187,6 +187,7 @@
 | `pause <root>` | 「ギルドを閉める」。`guild/.work/pause.json`（`{"type": "pause", "created": …}`）を書く。ボードの「ギルドを閉める」と `/guild:close` が使う。`guild/` がなければエラー。依頼は中止にならない |
 | `pause-status <root>` | pause.json があるか（`paused`）。中身は見ず、壊れていても「あり」。ギルドマスターが周回の頭で見る。あれば、新しい役を呼ばず、実行中の役が終わるのを待って止まる |
 | `pause-clear <root>` | pause.json を消す（`cleared`）。`/guild:quest` の起動時（ギルドを開ける）。なくても何も起きない |
+| `digest <root>` | クエストログ（`guild/.work/clog.json`）を作る。依頼ごとの進み・あなたの番・担当の職業（実行中の目標の `class`）・止まっている理由・次の提案と、`stats` の集計を、`plan.json` などの状態だけから機械で作る（LLM は使わない）。`wait` は、待機に入る直前に自動で実行する。失敗の判断には、鑑定士の「勧める対応」（`reports/<id>-appraiser.md` の「## 勧める対応」の 1 行目が もう一度／計画を直す／やめる）を添える |
 | `stats <root>` | 効果の測定。依頼ごとの目標数・完了・失敗・やめた数と、不合格（`rejected`）・もう一度やる（`retry`）・計画の直し（`replanned`）の回数を `history` から数え、合計と「目標あたりの不合格回数」（`rejected_per_goal`）を返す。壊れた `plan.json` は読み飛ばす。計画の質を上げる施策が効いたかを見るための数 |
 
 イベント: `deps_done`（`sync` が送る）、`submitted`（実行結果が出た／依頼主が入力した）、`passed`、`rejected`。ほかに `dep_failed`・`unblock`・`confirmed`・`declined`・`reported_failed`・`skip`・`retry`。
