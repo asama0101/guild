@@ -171,3 +171,18 @@ class ResultLetterRequiresRecordTest(unittest.TestCase):
     def test_yes_without_memo_or_attachment_is_stopped_before_sending(self):
         for needle in ("鑑定士が確かめること", "!(S.form[key + ':memo'] || '').trim() && !files.length", "S.form[key + ':err']", "textarea(memo, { id: k + 'memo', class: 'need' })"):
             self.assertIn(needle, BOARD, needle)
+
+
+class StickyHeaderAndStaticTabsTest(unittest.TestCase):
+    def test_header_and_tabs_are_one_sticky_block(self):
+        for needle in (".stickyhead{position:sticky;top:0", "h('div', { class: 'stickyhead' }, banner(),", "--headh", "calc(var(--headh,70px)"):
+            self.assertIn(needle, BOARD, needle)
+
+    def test_reading_tabs_are_not_rebuilt_by_quest_updates(self):
+        for needle in ("const staticTab = S.tab === 'help' || S.tab === 'obs';", "if (!force && staticTab && chromeSig() === S.chromeSig) return;", "S.chromeSig = chromeSig();"):
+            self.assertIn(needle, BOARD, needle)
+
+    def test_allow_list_shows_notes(self):
+        card = BOARD[BOARD.index("function webCard(m)"):BOARD.index("function webTab()")]
+        for needle in ("noteOf", "説明はまだありません", "AI の推測（事実ではありません）"):
+            self.assertIn(needle, card, needle)

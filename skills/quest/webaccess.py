@@ -177,17 +177,17 @@ def ingest(gdir):
 
 
 def describe(gdir, mapping):
-    """許可待ちのドメインに、一言の説明（AI の推測）を付ける。許可待ちにないドメインは受け付けない。書いた数と、飛ばした理由を返す。"""
+    """許可待ち・許可リスト・今回だけ許可のドメインに、一言の説明（AI の推測）を付ける。ほかのドメインは受け付けない。書いた数と、飛ばした理由を返す。"""
     if not isinstance(mapping, dict):
         raise WebError("descriptions は {ドメイン: 説明} の辞書にしてください")
     data = load(gdir)
-    waiting = {p.get("domain") for p in data["pending"] if isinstance(p, dict)}
+    waiting = {p.get("domain") for p in data["pending"] if isinstance(p, dict)} | set(data["allow"]) | set(data["once"])  # 許可待ち・許可リスト・今回だけ許可のドメイン
     written, skipped = [], []
     for raw, text in mapping.items():
         d = check_domain(raw)
         t = one_line(text, NOTE_MAX)
         if d not in waiting:
-            skipped.append({"domain": d, "reason": "許可待ちにありません"})
+            skipped.append({"domain": d, "reason": "許可待ち・許可リスト・今回だけ許可のどれにもありません"})
         elif not t:
             skipped.append({"domain": d, "reason": "説明が空です"})
         else:

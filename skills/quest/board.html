@@ -15,11 +15,13 @@ body{margin:0;background:var(--bg)}
 .plaque .sub2{font-size:13px;color:var(--banner-sub)}
 .conn{margin-left:auto;font-size:13px;color:var(--banner-sub);display:flex;gap:8px;align-items:center}
 .conn i{width:8px;height:8px;border-radius:50%;background:var(--dot);display:inline-block}
-.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:14px;border-bottom:2px solid var(--brass);position:sticky;top:0;z-index:20;background:var(--bg);padding-top:8px}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:14px;border-bottom:2px solid var(--brass);background:var(--bg);padding-top:8px}
+.stickyhead{position:sticky;top:0;z-index:25;background:var(--bg);padding-top:6px}
+@media (max-width:700px),(max-height:640px){.stickyhead{position:static}}  /* 狭い・低い画面では、固定すると本文が見えなくなる */
 .tabs .tools{margin-left:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-bottom:4px}
 .tabs .tools button{margin-bottom:0;min-height:38px;padding:4px 14px;border:1px solid var(--brass);border-radius:6px;background:var(--surface);color:var(--ink)}
 .tabs .tools button.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
-.quick{scroll-margin-top:70px}
+.quick{scroll-margin-top:calc(var(--headh,70px) + 8px)}
 .tabs button{font:inherit;font-weight:700;min-height:44px;padding:6px 22px;border:1px solid var(--brass);border-bottom:0;border-radius:6px 6px 0 0;background:var(--banner);color:var(--banner-ink);cursor:pointer;margin-bottom:-2px}
 .tabs button.on{background:var(--paper);color:var(--ink);border-color:var(--line)}
 .panel{background:var(--paper);border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;padding:22px 26px 30px}
@@ -166,6 +168,9 @@ input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .wbadge{font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--sub);margin-left:6px}
 .wkids{padding:2px 0 8px 18px;font-size:13px}
 .wkid{display:flex;flex-wrap:wrap;gap:2px 10px;padding:2px 0;word-break:break-all}
+.wlist{list-style:none;margin:0 0 6px;padding:0}
+.wlist li{display:block;padding:6px 0;border-bottom:1px dashed var(--line);word-break:break-all}
+.wlist .wnote{margin:2px 0 0}
 .wnote{flex-basis:100%;font-size:12px;color:var(--sub);padding-left:2px}
 .wflt{width:100%;max-width:320px;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:4px;margin:0 0 8px}
 .wseg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;flex:none}
@@ -205,7 +210,7 @@ textarea.need{border:2px solid var(--banner);background:#F6E4E1}
 .qb{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:18px;align-items:start}
 .qb.nolist{grid-template-columns:minmax(0,1fr)}
 .qb.nolist .qlist{display:none}
-.qlist{display:flex;flex-direction:column;gap:10px;min-width:0;position:sticky;top:70px;max-height:calc(100vh - 90px)}
+.qlist{display:flex;flex-direction:column;gap:10px;min-width:0;position:sticky;top:calc(var(--headh,70px) + 8px);max-height:calc(100vh - var(--headh,70px) - 24px)}
 .qlhead{display:flex;align-items:center;gap:10px}
 .qsearch{width:100%;box-sizing:border-box;min-height:40px;padding:6px 12px;font:inherit;font-size:14px;border:1px solid var(--brass);border-radius:4px;background:var(--surface);color:var(--ink)}
 .chipbar{display:flex;flex-wrap:wrap;gap:6px}
@@ -281,7 +286,7 @@ textarea.need{border:2px solid var(--banner);background:#F6E4E1}
 .apnote ul{margin:4px 0 0;padding-left:20px}
 @container (min-width:860px){
   .waygrid{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:16px;align-items:start}
-  .critside{display:block;position:sticky;top:80px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-size:13.5px}
+  .critside{display:block;position:sticky;top:calc(var(--headh,70px) + 10px);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-size:13.5px}
   .td .tdcrit{display:none}
 }
 @media (max-width:620px){.tdrow{grid-template-columns:auto minmax(0,1fr) auto 18px}.tdrow .tdd{display:none}}
@@ -1310,8 +1315,8 @@ function boardList(m) {
 }
 function selectQuest(id) {
   S.sel = id; S.pane = 'detail'; S.openGoal = null; render();
-  const el = document.querySelector('.qpanel'), bar = document.querySelector('.tabs');
-  if (el) { const top = el.getBoundingClientRect().top - (bar ? bar.offsetHeight : 0) - 8; if (top < 0 || top > window.innerHeight * 0.6) window.scrollTo(0, window.scrollY + top); }
+  const el = document.querySelector('.qpanel'), bar = document.querySelector('.stickyhead');
+  if (el) { const top = el.getBoundingClientRect().top - (bar && getComputedStyle(bar).position === 'sticky' ? bar.offsetHeight : 0) - 8; if (top < 0 || top > window.innerHeight * 0.6) window.scrollTo(0, window.scrollY + top); }
 }
 // 「あなたの番」の帯・納品物タブなどから、その依頼を開く。一覧で見えないとき（区分・検索・畳んだ完了）は、見えるように戻す
 function jumpQuest(id) {
@@ -1476,11 +1481,14 @@ function webCard(m) {
   const w = m.web, key = 'web:add';
   const inp = h('input', { type: 'text', id: key, placeholder: '例：go.jp', 'aria-label': '許可するドメイン' }); inp.value = S.form[key] || ''; bindKey(inp, key);
   const site = (d) => h('a', { href: `https://${d}/`, target: '_blank', rel: 'noopener noreferrer', title: 'どんなサイトか、新しいタブで確かめます' }, d);  // ドメインは guild.py が形を検査したものだけ
-  const row = (d) => h('li', null, site(d), ' ', h('button', { type: 'button', class: 'linkbtn', disabled: !!w.wait, onclick: () => sendWeb({ type: 'web', remove: [d] }, 'web:rm:' + d) }, '外す'));
+  const notes = w.notes || {};
+  const noteOf = (d) => notes[d] || (Object.keys(notes).find((k) => k.endsWith('.' + d)) ? notes[Object.keys(notes).find((k) => k.endsWith('.' + d))] : '');  // 許可が親ドメインでも、その下のサイトの説明を出す
+  const note = (d) => (noteOf(d) ? h('div', { class: 'wnote' }, h('b', null, 'AI の推測（事実ではありません）：'), noteOf(d)) : h('div', { class: 'wnote' }, '説明はまだありません（ギルドマスターが、次の機会に書きます）'));
+  const row = (d) => h('li', null, site(d), ' ', h('button', { type: 'button', class: 'linkbtn', disabled: !!w.wait, onclick: () => sendWeb({ type: 'web', remove: [d] }, 'web:rm:' + d) }, '外す'), note(d));
   return h('section', { class: 'card' }, h('h3', null, `許可リスト（${w.allow.length}件）`),
     h('p', { class: 'fine' }, '魔法使いが WebFetch で開けるサイトです。ドメインを許可すると、その下のサイト（www.go.jp など）も開けます。ドメイン名を押すと、新しいタブでサイトを開いて確かめられます。'),
-    w.allow.length ? h('ul', { class: 'flist' }, w.allow.map(row)) : h('p', { class: 'fine' }, 'まだありません。'),
-    w.once.length ? h('p', { class: 'fine' }, '今回だけ許可：', w.once.flatMap((d, i) => (i ? ['、', site(d)] : [site(d)]))) : null,
+    w.allow.length ? h('ul', { class: 'wlist' }, w.allow.map(row)) : h('p', { class: 'fine' }, 'まだありません。'),
+    w.once.length ? h('div', null, h('p', { class: 'fine', style: 'margin:8px 0 0' }, '今回だけ許可：'), h('ul', { class: 'wlist' }, w.once.map((d) => h('li', null, site(d), note(d))))) : null,
     h('div', { class: 'btns' }, inp, h('button', { type: 'button', class: 'btn', disabled: !!w.wait, onclick: () => { const v = (S.form[key] || '').trim(); if (v) { S.form[key] = ''; sendWeb({ type: 'web', add: [v] }, 'web:add:' + v); } } }, '追加')),
     w.wait ? h('p', { class: 'fine' }, '送った変更を反映するのを待っています。') : null);
 }
@@ -2076,10 +2084,13 @@ function render() {
   const tops = KEEP_SCROLL.map((s) => { const e = document.querySelector(s); return e ? e.scrollTop : 0; });
   const tabs = [['board', 'クエスト掲示板'], ['log', 'クエストログ'], ['deliv', '納品物'], ['know', '書庫'],['web', S.model && S.model.web.pending.length && !S.model.web.wait ? `外部サイト（${S.model.web.pending.length}）` : '外部サイト'], ['obs', 'Obsidian'], ['help', 'ヘルプ']];
   const body = { board: boardTab, log: logTab, deliv: delivTab, know: knowTab, web: webTab, obs: obsidianTab, help: helpTab }[S.tab]();
-  app.replaceChildren(h('div', { class: 'wrap wide' }, banner(),
-    h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools()),
+  app.replaceChildren(h('div', { class: 'wrap wide' }, h('div', { class: 'stickyhead' }, banner(),
+    h('nav', { class: 'tabs', 'aria-label': 'ページ' }, tabs.map(([k, l]) => h('button', { type: 'button', class: S.tab === k ? 'on' : '', onclick: () => { S.tab = k; render(); } }, l)), stickyTools())),
     h('div', { class: 'panel' }, connectBox(), aliveBox(), pauseBox(), body)), ...[newDialog(), reader(), fallbackBox(), toastBox()].filter(Boolean));
   keepToast(); updateAlive(); updateTitle();
+  const head = document.querySelector('.stickyhead');
+  document.documentElement.style.setProperty('--headh', (head && getComputedStyle(head).position === 'sticky' ? head.offsetHeight : 60) + 'px');  // 固定した見出しの高さ。その下に固定する部品が使う
+  S.chromeSig = chromeSig();
   window.scrollTo(0, sy);
   KEEP_SCROLL.forEach((s, i) => { const e = document.querySelector(s); if (e && tops[i]) e.scrollTop = tops[i]; });
   if (fk) { const el = app.querySelector(`[data-key="${CSS.escape(fk)}"]`); if (el && el.type !== 'radio') { el.focus({ preventScroll: true }); if (ss && el.setSelectionRange) try { el.setSelectionRange(ss[0], ss[1]); } catch (e) { /* 種類による */ } } }
@@ -2186,6 +2197,7 @@ async function openReport(q, path) {
 // ============================================================ つなぐ・更新
 // ボタンを押している最中（押してから離すまで）は、画面を作り直さない。作り直すと、押した部品が消えて、クリックが無効になる
 function isPressing() { return !!S.pressAt && Date.now() - S.pressAt < 5000; }  // 離したのが取れなかったときのため、5 秒で解く
+const chromeSig = () => (S.model ? `${S.model.needs.length}:${S.model.web.pending.length}:${S.model.paused ? 1 : 0}` : '');
 function isEditing() {
   if (S.composing) return true;
   const ae = document.activeElement;
@@ -2205,9 +2217,11 @@ async function refresh(force) {
     // 資料を開いている間も作り直さない（読んでいる位置が上に戻ってしまう）。閉じたあとの次の更新で反映する
     if (!force && key !== S.dataKey && (isEditing() || isPressing() || S.reader || S.fallback)) return;
     if (force || key !== S.dataKey) {
+      const staticTab = S.tab === 'help' || S.tab === 'obs';
       S.dataKey = key; S.model = buildModel(raw); S.rcache = {};  // 報告は書き換わる（やり直しで鑑定士の報告が変わる）。開いている分だけ読み直す
       const ids = S.model.quests.map((x) => x.id);
       if (!S.sel || !ids.includes(S.sel)) { const first = S.model.quests.find((x) => x.asks.some((a) => !a.sent)) || S.model.quests[0]; S.sel = first ? first.id : null; }
+      if (!force && staticTab && chromeSig() === S.chromeSig) return;  // 読み物の画面は、見出しの件数が同じなら作り直さない
       render();
     }
   } catch (e) { S.connMsg = `読み込めませんでした（${e.name || 'エラー'}：${e.message || e}）。`; S.conn = 'error'; render(); }

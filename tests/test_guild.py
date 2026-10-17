@@ -2506,3 +2506,17 @@ class WebDescribeTest(unittest.TestCase):
         webaccess.save(self.gdir, data)
         webaccess.reset(self.gdir)
         self.assertEqual(webaccess.load(self.gdir)["notes"], {})
+
+
+class WebDescribeAllowedTest(unittest.TestCase):
+    def test_describe_accepts_allow_and_once_domains(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            guild.init_guild(root)
+            g = root / "guild"
+            data = webaccess.load(g)
+            data["allow"], data["once"] = ["go.jp"], ["wikipedia.org"]
+            webaccess.save(g, data)
+            r = webaccess.describe(g, {"go.jp": "日本の政府ドメイン", "wikipedia.org": "百科事典", "x.jp": "だれ"})
+            self.assertEqual(sorted(r["written"]), ["go.jp", "wikipedia.org"])
+            self.assertEqual([s["domain"] for s in r["skipped"]], ["x.jp"])
