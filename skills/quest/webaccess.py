@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -52,12 +53,30 @@ def load(gdir):
     return data
 
 
+REPLACE_TRIES = 6  # Windows・OneDrive 配下で、置き換え先を他のプロセスが開いていると PermissionError になる。短い間隔で数回やり直す
+
+
+def write_text_atomic(path, text):
+    """テキストを原子的に書く。tmp 名にプロセス番号を付け、並列で書いても tmp が衝突しない（フックと guild.py は別プロセス）。"""
+    tmp = Path(f"{path}.{os.getpid()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    try:
+        for n in range(REPLACE_TRIES):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if n == REPLACE_TRIES - 1:
+                    raise
+                time.sleep(0.05 * (n + 1))
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def save(gdir, data):
     p = access_path(gdir)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = Path(str(p) + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, p)
+    write_text_atomic(p, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
 
 
 def domain_of(url):

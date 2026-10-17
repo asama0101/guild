@@ -40,7 +40,10 @@ def main():
     tool_input = data.get("tool_input")
     url = tool_input.get("url", "") if isinstance(tool_input, dict) else ""
     prompt = tool_input.get("prompt", "") if isinstance(tool_input, dict) else ""  # 魔法使いが、そのページから取りたい内容（手紙に「目的」として出す）
-    verdict, reason = webaccess.gate(gdir, url, prompt)
+    try:
+        verdict, reason = webaccess.gate(gdir, url, prompt)
+    except Exception as e:  # 門番が落ちると、止めない扱いになる。魔法使いの取得は、開かない側に倒す
+        verdict, reason = "deny", f"許可の確認に失敗したため開けません（{type(e).__name__}）。今は開かずに進め、報告の「未確認」に「確認失敗：{url}」と書いてください。"
     if verdict == "deny":
         sys.stdout.reconfigure(encoding="utf-8")
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}, ensure_ascii=False))

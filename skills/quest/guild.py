@@ -115,29 +115,13 @@ def load_plan(path):
     return plan
 
 
-REPLACE_TRIES = 6  # Windows・OneDrive 配下で、置き換え先を他のプロセスが開いていると PermissionError になる。短い間隔で数回やり直す
+REPLACE_TRIES = webaccess.REPLACE_TRIES
+write_text_atomic = webaccess.write_text_atomic  # フック（別プロセス）も使うので、webaccess.py に置く
 
 
 def save_plan(path, plan):
     """JSON を原子的に書く。tmp 名にプロセス番号を付け、並列で書いても tmp が衝突しない。"""
     write_text_atomic(path, json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
-
-
-def write_text_atomic(path, text):
-    """テキストを原子的に書く（save_plan と同じ作り）。"""
-    tmp = Path(f"{path}.{os.getpid()}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    try:
-        for n in range(REPLACE_TRIES):
-            try:
-                os.replace(tmp, path)
-                return
-            except PermissionError:
-                if n == REPLACE_TRIES - 1:
-                    raise
-                time.sleep(0.05 * (n + 1))
-    finally:
-        tmp.unlink(missing_ok=True)
 
 
 LOCK_TIMEOUT = 15  # ロックを待つ秒数。超えたらエラー（他人のロックは壊さない）
