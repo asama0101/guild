@@ -223,3 +223,9 @@ class AutoRefreshDoesNotFlickerTest(unittest.TestCase):
     def test_auto_render_is_skipped_when_the_page_would_look_the_same(self):
         for needle in ("function domSig(nodes)", "function render(opts)", "if (opts && opts.auto && domSig(built) === domSig(Array.from(app.childNodes))) return;", "render({ auto: !force })"):
             self.assertIn(needle, BOARD, needle)
+
+
+class PendingAbortFeedbackTest(unittest.TestCase):
+    def test_abort_and_reopen_show_a_waiting_mark_and_a_sent_note(self):
+        for needle in ("function pendingMark(", "'中止待ち'", "'再実行待ち'", "中止を送りました。/guild:quest が読み取ると、中止になります", "pendingMark(qd), rerunMark("):
+            self.assertIn(needle, BOARD, needle)

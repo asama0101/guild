@@ -615,6 +615,8 @@ function derive(q) {
   const title = (p && p.title) || (q.request && String(q.request.text || '').split('\n')[0].slice(0, 24)) || q.id;
   const d = { id: q.id, title, asks: [], info: null, goals: [], done: 0, total: 0, finished: false, label: '', cls: '', me: '—', q, inputs: planList(p, 'inputs'), candidates: planList(p, 'candidates') };
   const inboxHas = (type, goal, choice) => q.inbox.some((x) => x.type === type && (goal == null || x.goal === goal) && (choice == null || x.choice === choice));
+  // 送ったが、/guild:quest がまだ読み取っていない中止・再実行。状態の印は変わらないので、「待ち」の印を別に出す
+  d.pending = p && p.status !== 'aborted' && inboxHas('decision', null, 'abort') ? '中止待ち' : (p && inboxHas('reopen') && (p.accepted || p.status === 'aborted') ? '再実行待ち' : '');
   if (p && !Array.isArray(p.goals)) {  // 旧形式（todos）の依頼。読めないので、描かずに知らせる
     d.label = '旧形式'; d.cls = 'sd-wait'; d.info = 'legacy'; return d;
   }
@@ -688,6 +690,7 @@ function stampEl(label, cls) { return h('span', { class: `stamp ${cls}` }, label
 // 再実行の印：合格・待機などの状態は変わらないので、やり直した回数を別に出す。目標＝不合格でのやり直しと、もう一度の判断。依頼＝完了・中止からの「修正して再実行」
 function rerunsOf(plan, t) { return plan && Array.isArray(plan.history) ? plan.history.filter((e) => e && e.id === t.id && (e.event === 'retry' || (e.event === 'rejected' && e.to !== 'failed'))).length : 0; }
 function reopensOf(plan) { return plan && Array.isArray(plan.history) ? plan.history.filter((e) => e && e.event === 'reopen').length : 0; }
+function pendingMark(qd) { return qd.pending ? h('span', { class: 'stamp sd-wait sm', title: '送りました。/guild:quest が読み取ると、反映されます' }, qd.pending) : null; }
 function rerunMark(n, what) { return n > 0 ? h('span', { class: 'rerun', title: `${what}（${n}回）` }, `↻ 再実行 ${n}`) : null; }
 
 function sentNote(key) {
@@ -1181,7 +1184,8 @@ function detailTabs(qd) {
 
 function abortBlock(qd) {
   const p = qd.q.plan, key = qd.id + ':abort';
-  if (!p || qd.finished || p.status === 'aborted' || S.sent[key] || qd.q.inbox.some((x) => x.type === 'decision' && x.choice === 'abort')) return null;
+  if (!p || qd.finished || p.status === 'aborted') return null;
+  if (S.sent[key] || qd.q.inbox.some((x) => x.type === 'decision' && x.choice === 'abort')) return h('p', { class: 'saved', role: 'status', style: 'margin-top:16px' }, '中止を送りました。/guild:quest が読み取ると、中止になります（待機中なら、すぐです。動いていなければ、チャットで /guild:quest と送ってください）。');
   if (!S.confirm[key]) return h('div', { class: 'btns', style: 'margin-top:16px' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => { S.confirm[key] = true; render(); } }, 'この依頼を中止する'));
   return h('section', { class: 'letter danger', 'aria-label': '中止の確認', style: 'margin-top:16px' }, seal('止', 'ng'),
     h('div', { class: 'kick' }, '中止の確認'), h('h3', null, `${qd.id} を中止しますか`),
@@ -1370,7 +1374,7 @@ function questRow(qd) {
   const p = qd.q.plan, due = p && okDate(p.due) ? p.due : null, late = !!due && due < localToday() && boardBucket(qd) !== 'done';
   const pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
   return h('button', { type: 'button', class: 'qli', 'aria-current': S.sel === qd.id ? 'true' : 'false', 'data-q': qd.id, 'data-key': 'q:' + qd.id, onclick: () => selectQuest(qd.id) },
-    h('span', { class: 'id' }, qd.id), h('span', { class: 'tt', title: qd.title }, qd.title), h('span', { class: 'st' }, stampEl(qd.label, qd.cls + ' sm'), rerunMark(reopensOf(qd.q.plan), '完了・中止から、修正して再実行しました')),
+    h('span', { class: 'id' }, qd.id), h('span', { class: 'tt', title: qd.title }, qd.title), h('span', { class: 'st' }, stampEl(qd.label, qd.cls + ' sm'), pendingMark(qd), rerunMark(reopensOf(qd.q.plan), '完了・中止から、修正して再実行しました')),
     h('span', { class: 'pg' }, h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { style: `width:${pct}%` })), qd.total ? `${qd.done}/${qd.total}` : '—'),
     h('span', { class: 'du' + (late ? ' late' : '') }, due ? `締切 ${shortDate(due)}` : ''));
 }
@@ -1411,7 +1415,7 @@ function questPanel(m, L) {
   const p = qd.q.plan, pct = qd.total ? Math.round(qd.done / qd.total * 100) : 0;
   return h('section', { class: 'qpanel', 'aria-label': `${qd.id} の詳細` }, tool,
     h('header', { class: 'qhead' },
-      h('div', { class: 'qhl' }, h('span', { class: 'tid' }, qd.id), stampEl(qd.label, qd.cls), rerunMark(reopensOf(qd.q.plan), '完了・中止から、修正して再実行しました')),
+      h('div', { class: 'qhl' }, h('span', { class: 'tid' }, qd.id), stampEl(qd.label, qd.cls), pendingMark(qd), rerunMark(reopensOf(qd.q.plan), '完了・中止から、修正して再実行しました')),
       h('h3', null, qd.title),
       p && p.series ? h('p', { class: 'fine', style: 'margin:0 0 4px' }, `関連：${p.series}`) : null,
       metaEditor(qd),
