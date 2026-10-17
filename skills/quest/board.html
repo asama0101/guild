@@ -400,7 +400,7 @@ class MemFS {
 
 // 論理パス（画面の中で使う Q001/… requests/… web/… archive/inbox/…）を、guild/ の中の物理パスに写す。
 // 機械用のファイルは guild/.work/ にある（Obsidian に出ない）。archive/ の項目、deliverables/、inputs/ はそのまま。
-const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json'], [/^heartbeat\.json$/, '.work/heartbeat.json']];
+const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json'], [/^heartbeat\.json$/, '.work/heartbeat.json'], [/^config\.json$/, '.work/config.json']];
 function physical(p) { for (const [re, to] of PHYS) if (re.test(p)) return p.replace(re, to); return p; }
 class PathMap {
   constructor(fs) { this.fs = fs; }
@@ -512,7 +512,7 @@ async function loadAll() {
     const id = f.name.replace(/\.json\.reason\.txt$/, ''), r = await readJSON(`requests/rejected/${id}.json`);
     rejectedRequests.push({ id, text: (r && r.text) || '', reason: (await S.fs.readText(`requests/rejected/${f.name}`)) || '' });
   }
-  // 冒険者の WebFetch の許可（フックと guild.py が書く）。答えの JSON が web/inbox/ に残っている間は「送信済み」
+  // 魔法使いの WebFetch の許可（フックと guild.py が書く）。答えの JSON が web/inbox/ に残っている間は「送信済み」
   const wa = (await readJSON('web/access.json')) || {};
   const webList = (k) => (Array.isArray(wa[k]) ? wa[k] : []);
   const webWait = (await S.fs.list('web/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
@@ -745,7 +745,7 @@ function letterFor(qd, a) {
   if (a.kind === 'questions') {
     return h('section', { class: 'letter', 'aria-label': '質問' }, seal('問'),
       h('div', { class: 'kick' }, '聞きたいことがあります'), h('h3', null, '依頼の内容で、確かめたいことがあります'),
-      h('p', null, '答えると、地図師が計画を描きます。選べるものは選び、ほかにあれば書いてください。'),
+      h('p', null, '答えると、受付係が計画を描きます。選べるものは選び、ほかにあれば書いてください。'),
       a.qs.map((x, i) => h('div', { class: 'qa' },
         h('span', { class: 'lbl' }, `${i + 1}. ${x.text}`),
         x.multi ? h('p', { class: 'fine', style: 'margin:0 0 4px' }, 'あてはまるものを、いくつでも選べます。') : null,
@@ -790,7 +790,7 @@ function letterFor(qd, a) {
   if (a.kind === 'approve') {
     return h('section', { class: 'letter', 'aria-label': '計画の承認' }, seal('印'),
       h('div', { class: 'kick' }, 'お願い：承認'), h('h3', null, 'この計画で進めてよいですか'),
-      h('p', null, `地図師が、依頼を ${qd.total} つの目標に分けました。下の「道のり」タブで目標と合格基準を確かめて、承認してください。日付は「日付」タブで直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
+      h('p', null, `受付係が、依頼を ${qd.total} つの目標に分けました。下の「道のり」タブで目標と合格基準を確かめて、承認してください。日付は「日付」タブで直せます。承認はこの1回だけです。このあとは、確認の印がある操作の前と、失敗したときだけお聞きします。`),
       planBriefBlock(qd.q.plan),
       h('span', { class: 'lbl' }, `使うインプット（${qd.inputs.length}件。外す・候補の追加は、承認の前でもできます）`), inputsBlock(qd),
       h('label', { class: 'lbl', for: k + 'fix' }, '直してほしいこと（直す場合だけ）'),
@@ -844,8 +844,8 @@ function letterFor(qd, a) {
 }
 
 function infoLetter(qd) {
-  if (qd.info === 'decomposing') return h('section', { class: 'letter' }, seal('分'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '分解中'), h('h3', null, '依頼を受け付けました'), h('p', null, '地図師が道のりを描いています。まだ計画はありません。進まないときは、チャットで ', code('/guild:quest'), ' と送ってください。'));
-  if (qd.info === 'replan') return h('section', { class: 'letter' }, seal('直'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '計画を直しています'), h('h3', null, '計画の作り直しを待っています'), h('p', null, '/guild:quest が動いていれば、地図師がすぐ作り直します。動いていなければ、チャットで ', code('/guild:quest'), ' と送ってください。'));
+  if (qd.info === 'decomposing') return h('section', { class: 'letter' }, seal('分'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '分解中'), h('h3', null, '依頼を受け付けました'), h('p', null, '受付係が道のりを描いています。まだ計画はありません。進まないときは、チャットで ', code('/guild:quest'), ' と送ってください。'));
+  if (qd.info === 'replan') return h('section', { class: 'letter' }, seal('直'), h('div', { class: 'kick', style: 'color:var(--sub)' }, '計画を直しています'), h('h3', null, '計画の作り直しを待っています'), h('p', null, '/guild:quest が動いていれば、受付係がすぐ作り直します。動いていなければ、チャットで ', code('/guild:quest'), ' と送ってください。'));
   if (qd.info === 'aborted') {
     const part = partialOutputs(qd);
     return h('section', { class: 'letter' }, seal('止'), h('div', { class: 'kick', style: 'color:var(--sub)' }, part.length ? '中止（一部の成果物あり）' : '中止'), h('h3', null, 'この依頼は中止されました'),
@@ -864,7 +864,7 @@ function infoLetter(qd) {
 // ---- 詳細パネルのタブ（道のり／日付／インプット）と、報告の読み込み
 const DTABS = [['way', '道のり'], ['dates', '日付'], ['inputs', 'インプット']];
 // 報告のファイル（reports/<目標>-<役>.md）。道のりの行に、この順で並べる
-const REPORT_ROLES = [['adventurer', '冒険者'], ['scout', '斥候'], ['verify-scout', '斥候（出典の確認）'], ['user', 'あなた'], ['appraiser', '鑑定士']];
+const REPORT_ROLES = [['wizard', '魔法使い'], ['alchemist', '錬金術師'], ['adventurer', '冒険者'], ['verify-adventurer', '冒険者（出典の確認）'], ['user', 'あなた'], ['appraiser', '鑑定士']];
 function reportsOf(qd, tid) { return REPORT_ROLES.map(([r, label]) => ({ name: `${tid}-${r}.md`, label })).filter((x) => qd.q.reports.includes(x.name)); }
 // 報告の中身は、行を開いたとき・判断の手紙を出すときだけ読む（S.rcache に覚える。null は読み込み中、'' は読めなかった）
 function reportText(qid, name) {
@@ -1014,7 +1014,7 @@ function datesTab(qd) {
     sentNote(`${k}:sent`)];
 }
 // ---- インプット：このクエストが使うファイル（guild/inputs/）。追加・外すは入力 inputs で送る（plan.json は guild.py が書く）
-// 承認の手紙に載せる、計画の見どころ（地図師の自己点検 brief・計画の警告・あなたの作業量・再計画の差分）。ない古い計画では何も出さない
+// 承認の手紙に載せる、計画の見どころ（受付係の自己点検 brief・計画の警告・あなたの作業量・再計画の差分）。ない古い計画では何も出さない
 function planBriefBlock(p) {
   if (!p) return null;
   const list = (title, items, cls) => (Array.isArray(items) && items.length ? h('div', { class: 'qa' }, h('span', { class: 'lbl' }, title), h('ul', { class: cls || 'fine', style: 'margin:4px 0 0 18px;padding:0' }, ...items.map((x) => h('li', null, String(x))))) : null);
@@ -1056,7 +1056,7 @@ function inputsBlock(qd) {
         : h('button', { type: 'button', class: 'btn ghost sm', disabled: S.conn !== 'ok', onclick: () => sendInputs(qd, [], [x.name], `in:${qd.id}`) }, '外す')));
   return [
     qd.inputs.length ? h('ul', { class: 'flist' }, qd.inputs.map((x) => row(x, false))) : h('p', { class: 'sub' }, 'このクエストのインプットはありません。'),
-    qd.candidates.length ? [h('p', { class: 'fine', style: 'margin:8px 0 4px' }, '候補（地図師が迷って選ばなかったもの。「追加」で入れられます）'), h('ul', { class: 'flist' }, qd.candidates.map((x) => row(x, true)))] : null,
+    qd.candidates.length ? [h('p', { class: 'fine', style: 'margin:8px 0 4px' }, '候補（受付係が迷って選ばなかったもの。「追加」で入れられます）'), h('ul', { class: 'flist' }, qd.candidates.map((x) => row(x, true)))] : null,
     sentNote(`in:${qd.id}`)];
 }
 // 既存のインプット（guild/inputs/）から選ぶチェックリスト。「＋ 新規」とインプットタブで使う。
@@ -1075,7 +1075,7 @@ function inputPicker(key, qkey, except) {
 function inputsTab(qd) {
   const ed = inputsEditable(qd), key = `ipk:${qd.id}`, open = !!S.open[key], chosen = S.form[key] || [];
   return [
-    h('div', { class: 'ihead' }, h('p', { class: 'fine', style: 'margin:0' }, 'このクエストが使うファイル（', code('guild/inputs/'), '）。「指定」は依頼主、「自動」は地図師が選んだものです。'),
+    h('div', { class: 'ihead' }, h('p', { class: 'fine', style: 'margin:0' }, 'このクエストが使うファイル（', code('guild/inputs/'), '）。「指定」は依頼主、「自動」は受付係が選んだものです。'),
       ed ? h('button', { type: 'button', class: 'btn sm', 'aria-expanded': String(open), onclick: () => { S.open[key] = !open; render(); } }, open ? '選ぶのをやめる' : '既存から選ぶ') : null),
     inputsBlock(qd),
     ed && open ? h('div', { class: 'ipbox' }, inputPicker(key, `f:ipq:${qd.id}`, new Set(qd.inputs.map((x) => x.name.toLowerCase()))),
@@ -1365,7 +1365,7 @@ function newDialog() {
       h('p', { class: 'fine nsum' }, newSummary(picked, ups, over))),
     S.newError ? h('p', { class: 'err', role: 'alert' }, S.newError) : null,
     h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn go', disabled: S.conn !== 'ok', onclick: sendRequest }, 'クエストを出す'), h('button', { type: 'button', class: 'btn ghost', onclick: closeNew }, 'やめる'),
-      h('span', { class: 'fine', style: 'align-self:center' }, '出すと、地図師が目標に分け、日付も付けて、承認を求めます。')));
+      h('span', { class: 'fine', style: 'align-self:center' }, '出すと、受付係が目標に分け、日付も付けて、承認を求めます。')));
   box.addEventListener('keydown', trapTab);
   return h('div', { class: 'reader nmodal', onclick: (e) => { if (e.target === e.currentTarget) closeNew(); } }, box);
 }
@@ -1524,8 +1524,8 @@ function webLetter(m) {
     h('h3', null, '外部サイトを開く許可の答えを送りました'),
     h('p', null, '/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。'));
   return h('section', { class: 'letter danger', 'aria-label': '外部サイトを開く許可' }, seal('外', 'ng'),
-    h('div', { class: 'kick' }, 'お願い：外部サイトを開く許可'), h('h3', null, '冒険者が、許可のないサイトを開こうとして止められました'),
-    h('p', null, '許可したサイトだけ、冒険者は読めます。サイトごとに選んでください。「許可しない」を選ぶと、冒険者はそのサイトを開かずに進め、報告の「未確認」に書きます。'),
+    h('div', { class: 'kick' }, 'お願い：外部サイトを開く許可'), h('h3', null, '魔法使いが、許可のないサイトを開こうとして止められました'),
+    h('p', null, '許可したサイトだけ、魔法使いは読めます。サイトごとに選んでください。「許可しない」を選ぶと、魔法使いはそのサイトを開かずに進め、報告の「未確認」に書きます。'),
     w.pending.map((x, i) => {
       const ck = `${k}:${x.domain}`;
       return h('div', { class: 'qa' },
@@ -1543,7 +1543,7 @@ function webCard(m) {
   const inp = h('input', { type: 'text', id: key, placeholder: '例：go.jp', 'aria-label': '許可するドメイン' }); inp.value = S.form[key] || ''; bindKey(inp, key);
   const row = (d) => h('li', null, code(d), ' ', h('button', { type: 'button', class: 'linkbtn', disabled: !!w.wait, onclick: () => sendWeb({ type: 'web', remove: [d] }, 'web:rm:' + d) }, '外す'));
   return h('section', { class: 'card' }, h('h3', null, `許可リスト（${w.allow.length}件）`),
-    h('p', { class: 'fine' }, '冒険者が WebFetch で開けるサイトです。ドメインを許可すると、その下のサイト（www.go.jp など）も開けます。'),
+    h('p', { class: 'fine' }, '魔法使いが WebFetch で開けるサイトです。ドメインを許可すると、その下のサイト（www.go.jp など）も開けます。'),
     w.allow.length ? h('ul', { class: 'flist' }, w.allow.map(row)) : h('p', { class: 'fine' }, 'まだありません。'),
     w.once.length ? h('p', { class: 'fine' }, '今回だけ許可：' + w.once.join('、')) : null,
     h('div', { class: 'btns' }, inp, h('button', { type: 'button', class: 'btn', disabled: !!w.wait, onclick: () => { const v = (S.form[key] || '').trim(); if (v) { S.form[key] = ''; sendWeb({ type: 'web', add: [v] }, 'web:add:' + v); } } }, '追加')),
@@ -1555,7 +1555,7 @@ function webTab() {
   if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、許可リストが表示されます。');
   const w = m.web;
   return [h('h2', { class: 'h2' }, '外部サイト'),
-    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '冒険者が、依頼を進めるなかで読めるウェブサイトを決めます。リストにないサイトを開こうとしたときは、「クエスト掲示板」の手紙でお聞きします。'),
+    h('p', { class: 'sub', style: 'margin:0 0 12px' }, '魔法使いが、依頼を進めるなかで読めるウェブサイトを決めます。リストにないサイトを開こうとしたときは、「クエスト掲示板」の手紙でお聞きします。'),
     w.pending.length && !w.wait ? h('div', { class: 'attn', role: 'status' }, h('b', null, `許可待ちが${w.pending.length}件あります`), w.pending.map((x) => code(x.domain)), h('button', { type: 'button', class: 'linkbtn', onclick: () => { S.tab = 'board'; render(); } }, 'クエスト掲示板の手紙で答える')) : null,
     webCard(m)];
 }
@@ -1629,7 +1629,7 @@ function archiveForm() {
       fld('出典・根拠', inp('a:source', '例：経理部の○○さんに確認', 'a:source')),
       h('div', { class: 'fld wide' }, h('label', { class: 'cap', for: 'a:inputs' }, 'インプット（任意。guild/inputs/ のファイル名を1行に1つ）'),
         textarea('a:inputs', { id: 'a:inputs', rows: '2', placeholder: '例：KGI定義.md' }),
-        h('span', { class: 'fine' }, '依頼文にこの項目の名前・別名が出てきたとき、ここに書いたファイルが、地図師に「関係がありそう」と勧められます。ファイルがなくても保存できます。'))));
+        h('span', { class: 'fine' }, '依頼文にこの項目の名前・別名が出てきたとき、ここに書いたファイルが、受付係に「関係がありそう」と勧められます。ファイルがなくても保存できます。'))));
   more.addEventListener('toggle', () => { S.open['a:more'] = more.open; });
   return h('section', { class: 'quick', 'aria-label': '項目の登録' },
     h('label', { class: 'lbl', for: 'a:name', style: 'margin:0 0 6px' }, edit ? `項目を編集する（${edit}）` : '自分で項目を登録する'),
@@ -1677,7 +1677,7 @@ function archiveCard(e) {
 function knowTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
   const q = (S.form['f:kn'] || '').trim().toLowerCase();
-  const out = [h('h2', { class: 'h2' }, '書庫'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '用語・業務フロー・業務情報・個人を、種類別にためています。次の依頼で、役が索引を見て、関係する項目を使います。依頼が終わるたびに、司書が登録候補を挙げます（「クエスト掲示板」の手紙で選びます）。項目に「インプット」（guild/inputs/ のファイル名）を付けておくと、依頼文にその項目の名前が出てきたとき、地図師にそのファイルが勧められます。'),
+  const out = [h('h2', { class: 'h2' }, '書庫'), h('p', { class: 'sub', style: 'margin:0 0 12px' }, '用語・業務フロー・業務情報・個人を、種類別にためています。次の依頼で、役が索引を見て、関係する項目を使います。依頼が終わるたびに、司書が登録候補を挙げます（「クエスト掲示板」の手紙で選びます）。項目に「インプット」（guild/inputs/ のファイル名）を付けておくと、依頼文にその項目の名前が出てきたとき、受付係にそのファイルが勧められます。'),
     searchBox('f:kn', '言葉で探す（本文も探します）')];
   if (m.archiveWait) out.push(h('p', { class: 'fine', role: 'status' }, `書庫への反映待ちが ${m.archiveWait} 件あります。/guild:quest が動いていれば、すぐ反映されます。動いていなければ、チャットで /guild:quest と送ってください。`));
   const kn = S.kn, all = m.archive || [];
@@ -1719,7 +1719,7 @@ function spyKn() {
 }
 
 // ---- ヘルプの上半分（処理フローの図と役の説明）
-const ACTOR = { me: ['あなた（ボード）', '--banner', '--banner-ink'], gm: ['ギルドマスター', '--brass', '--on'], cart: ['地図師', '--ok', '--on'], adv: ['冒険者・斥候', '--warn', '--on'], app: ['鑑定士', '--stop', '--on'], lib: ['司書', '--mute', '--on'], sys: ['', '--surface2', '--ink'] };
+const ACTOR = { me: ['あなた（ボード）', '--banner', '--banner-ink'], gm: ['ギルドマスター', '--brass', '--on'], cart: ['受付係', '--ok', '--on'], adv: ['魔法使い・錬金術師・冒険者', '--warn', '--on'], app: ['鑑定士', '--stop', '--on'], lib: ['司書', '--mute', '--on'], sys: ['', '--surface2', '--ink'] };
 function flowSvg() {
   const ns = 'http://www.w3.org/2000/svg';
   const E = (tag, a, ...kids) => { const e = document.createElementNS(ns, tag); for (const k in (a || {})) { if (k === 'style') e.style.cssText = a[k]; else e.setAttribute(k, a[k]); } for (const c of kids) e.append(c); return e; };
@@ -1751,14 +1751,14 @@ function flowSvg() {
   note(24, 227, '実行ループ（目標ごとに、前提が済んだものからくり返す。独立した目標は同時に進む。最後は「まとめの目標」）');
   arrow([[620, 182], [620, 205]]);
   box(40, 240, 'me', '実行前の確認', '確認の印がある目標');
-  box(40, 325, 'adv', '実行する', '調べる・書く（動的ページは斥候）');
+  box(40, 325, 'adv', '実行する', '調べる・書く（動的ページは冒険者）');
   box(40, 410, 'me', 'あなたの実行', '他システムの操作・承認・判断');
   arrow([[140, 304], [140, 325]]);
   box(300, 325, 'app', '合格基準で判定', '合格か、不合格か');
   arrow([[240, 349], [300, 349]]); arrow([[240, 442], [272, 442], [272, 370], [300, 370]]);
   box(560, 325, 'sys', '合格 → 次の目標へ', '前提が済んだ目標が動く');
   arrow([[500, 357], [560, 357]], '合格', 512, 349);
-  box(300, 240, 'adv', '出典を読む（斥候）', '開けない出典を、ブラウザで読む', 230);
+  box(300, 240, 'adv', '出典を読む（冒険者）', '開けない出典を、ブラウザで読む', 230);
   arrow([[400, 325], [400, 304]], '開けない出典は確認を頼む（1回）', 412, 319, false, true);
   box(300, 420, 'adv', 'やり直し', '指摘をもとに、回数に上限');
   arrow([[400, 389], [400, 420]], '不合格', 408, 408);
@@ -1767,7 +1767,7 @@ function flowSvg() {
   note(560, 506, '「実行しない」「できなかった」を選んだときも、ここへ');
   box(790, 325, 'sys', '計画を直す', '合格済みの目標は引き継ぐ', 190);
   arrow([[760, 452], [885, 452], [885, 389]], '直す', 800, 444, true);
-  note(800, 478, '→ 地図師が作り直して、再承認');
+  note(800, 478, '→ 受付係が作り直して、再承認');
   note(24, 506, '不合格のとき、「あなたの実行」の目標は、あなたに戻ります');
   // 納品
   arrow([[140, 520], [140, 550]]);
@@ -1785,10 +1785,11 @@ function flowSvg() {
 // ヘルプの「役」。モデルは ROLE_MODELS（agents/*.md の model と、テストで一致を確かめている）から引く
 const ROLES = [
   ['ギルドマスター', null, '/guild:quest が動いている間、ずっと', '依頼を受け付け、役を呼び、あなたの答えを待ちます。進め方の判断（順序・遷移・やり直し）は guild.py に任せ、自分では判断しません。', '/guild:quest を動かしているセッションのモデル'],
-  ['地図師', 'cartographer', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を目標に分け、使うインプットを理由つきで選び（迷うものは候補に）、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる目標を決めます。納品物は Markdown だけです。PowerPoint・Excel など Markdown 以外が要るときは、Claude Code に渡すプロンプト（*.prompt.md）にします。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
-  ['冒険者', 'adventurer', '自動でできる目標ごと', '調べる・書き写す・整理する・書く。最後のまとめの目標では、納品物の資料（Markdown）を作ります。Markdown 以外が要る部分は、Claude Code に渡すプロンプト（*.prompt.md）を書きます。報告は .work/Q###/reports/、成果物は .work/Q###/output/ に書き、納品物は全目標が済んだとき guild.py が deliverables/ に置きます。'],
-  ['斥候', 'scout', '動的ページを読む目標。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
-  ['鑑定士', 'appraiser', '目標ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、斥候に読んでもらいます。成果物は直しません。'],
+  ['受付係', 'receptionist', '新しい依頼を分けるとき、計画を作り直すとき', '依頼を目標に分け、使うインプットを理由つきで選び（迷うものは候補に）、前提・種別（自動／あなた）・確認の印・合格基準・納品物になる目標を決めます。納品物は Markdown だけです。PowerPoint・Excel など Markdown 以外が要るときは、Claude Code に渡すプロンプト（*.prompt.md）にします。あいまいなところは、質問として返します（ボードの手紙になります）。実行や、進め方の判断はしません。'],
+  ['魔法使い', 'wizard', '自動でできる目標のうち、調べる・比べる・出典を確かめる目標ごと', '外部の情報を調べ、比べ、出典を確かめます。外部サイトは、あなたが許可したものだけ開けます。報告は .work/Q###/reports/、成果物は .work/Q###/output/ に書きます。実行や、進め方の判断はしません。'],
+  ['錬金術師', 'alchemist', '自動でできる目標のうち、書く・整理する目標ごと', 'すでにある材料（前の目標の成果物・インプット）から、文章や表を書き、整理します。最後のまとめの目標では、納品物の資料（Markdown）を作ります。Markdown 以外が要る部分は、Claude Code に渡すプロンプト（*.prompt.md）を書きます。外のサイトは開けません（調べる必要があるときは、受付係が魔法使いの目標を前に置きます）。納品物は全目標が済んだとき guild.py が deliverables/ に置きます。'],
+  ['冒険者', 'adventurer', '動的ページを読む目標。鑑定士が開けなかった出典の確認（1回）', '動的ページ（地図・SNS など）を、ブラウザで読んで、文字を持ち帰ります。クリック・入力・ログインはしません。ブラウザは1つなので、同時に動くのは1人までです。'],
+  ['鑑定士', 'appraiser', '目標ごとに、作業のあと', '成果物を合格基準で判定します（合格・不合格）。出典のページを開いて、実在することと、書かれた内容が合うことを確かめます。開けないものは、冒険者に読んでもらいます。成果物は直しません。'],
   ['司書', 'librarian', '依頼が完了したあと、中止したあと', '報告と成果物から、書庫に残す用語・業務フロー・業務情報・個人・心得の候補を、12件まで挙げます。登録はしません（選ぶのはあなたです。心得だけは、そのまま登録されます）。'],
   ['あなた', null, '計画の承認・確認の印の前・「あなたの実行」・失敗の判断・受け取り', '他システムの操作・承認・判断だけを頼まれます。調べものや転記は頼まれません。', '—']];
 function rolesCard() {
@@ -1810,9 +1811,10 @@ function flowCards() {
 
 // 各役のモデル（ヘルプの役の一覧で使う）。正本は agents/*.md の model（tests/test_guild.py が一致を確かめる）
 const ROLE_MODELS = {
-  cartographer: ['地図師', 'opus'],
+  receptionist: ['受付係', 'opus'],
+  wizard: ['魔法使い', 'sonnet'],
+  alchemist: ['錬金術師', 'sonnet'],
   adventurer: ['冒険者', 'sonnet'],
-  scout: ['斥候', 'sonnet'],
   appraiser: ['鑑定士', 'sonnet'],
   librarian: ['司書', 'sonnet']
 };
@@ -1825,21 +1827,21 @@ function helpGrid() {
     sec('使い方', h('ol', null,
       h('li', null, h('b', null, '依頼を書く。'), '「クエスト掲示板」の「＋ 新規」で、依頼の内容・開始日・締切を書き、使う資料（インプット）を既存から選ぶかアップロードして、「クエストを出す」を押します。'),
       h('li', null, h('b', null, '受け付ける。'), 'チャットで ', code('/guild:quest'), ' と送ります（動いている間は、新しい依頼を自動で受け付けます）。足りないことは、この画面の「質問」の手紙で聞かれます。'),
-      h('li', null, h('b', null, '計画を承認する。'), '依頼が目標に分けられ、承認の手紙が出ます。使うインプット（あなたの「指定」と、地図師が理由つきで選んだ「自動」）も、ここで外したり、候補から追加したりできます。承認はこの1回だけです。'),
+      h('li', null, h('b', null, '計画を承認する。'), '依頼が目標に分けられ、承認の手紙が出ます。使うインプット（あなたの「指定」と、受付係が理由つきで選んだ「自動」）も、ここで外したり、候補から追加したりできます。承認はこの1回だけです。'),
       h('li', null, h('b', null, 'あとは待つ。'), '自動でできるものは進みます。あなたの番のときと、確認や判断が要るときだけ、「クエスト掲示板」の詳細に手紙が出ます。'),
       h('li', null, h('b', null, '受け取る。'), 'すべて済むと「受け取りの確認」の手紙が出ます。納品物を確かめて「受け取る」を押すと完了です。直したいときは、コメントを書いて「直してほしい」を押します。'))),
     sec('クエスト掲示板の使い方', dl([
       ['一覧', '左にクエストの一覧があります。番号・題名で探せ、状態（すべて／あなたの番／進行中／受け取り待ち／完了）で絞れます。完了・中止は、ふだんは畳んであります。'],
       ['詳細', '行を押すと、右に詳細が出ます。上に「あなたの番」の手紙、下にタブ「道のり」「日付」「インプット」があります。'],
       ['一覧を隠す', '詳細を横幅いっぱいにします。上のツールバーの「‹ ›」で前後のクエストへ移り、検索で番号・題名から開けます。隠したことは、このブラウザが覚えます。狭い画面では、一覧と詳細を切り替えます（「‹ 一覧へ戻る」）。'],
-      ['道のり', '目標の一覧です。行を開くと、合格基準と報告（冒険者・斥候・鑑定士・あなた）が読めます。失敗の判断の手紙には、鑑定士の指摘が出ます。'],
+      ['道のり', '目標の一覧です。行を開くと、合格基準と報告（魔法使い・錬金術師・冒険者・鑑定士・あなた）が読めます。失敗の判断の手紙には、鑑定士の指摘が出ます。'],
       ['日付', 'このクエストのガントと、依頼の開始日・締切、目標の予定日・締切の表です。直して「変更を送る」を押します。順序の矛盾は注意だけで、ほかの日付は自動では動きません。'],
       ['インプット', 'このクエストが使うファイルです。「外す」「追加」「既存から選ぶ」で直せます（承認の前でも後でも）。'],
       ['進捗で見る', 'このクエストだけを選んだ状態で、「クエスト進捗」を開きます。']])),
     sec('スキルの使い方（チャットで使う）', dl([['/guild:init', 'プロジェクトのフォルダで、最初に1回。guild/ フォルダを作り、使える Python を記録し、この画面（board.html）を置きます。何度実行しても、依頼や書庫の項目は消えません。プラグインを更新したあとにもう一度実行すると、この画面が最新になります。'], ['/guild:quest', '依頼を受け付け、分解・実行・判定・納品まで進めます。質問・承認・確認は、チャットではなく、この画面の「手紙」で聞きます。動いている間は、この画面での答えを待ち続け、届くとすぐ取り込みます。'], ['止まったとき', 'しばらく動きがなければ、チャットで /guild:quest と送ってください。保存済みの答えや依頼を読み取って、続きから進めます。']])),
     sec('印の見方', h('p', { class: 'fine', style: 'margin:0 0 6px' }, '依頼の状態（クエスト掲示板の一覧で使います）'), h('div', { class: 'legend', style: 'margin-bottom:14px' }, [['承認待ち', 'sd-draft', '計画ができました。承認すると動き出します。'], ['進行中', 'sd-run', '役たちが進めています。あなたの番があるときは「あなたの番」が付きます。'], ['要判断', 'sd-ng', '目標ができませんでした。進め方を選んでください。'], ['受け取り待ち', 'sd-turn', '全目標が済みました。納品物の受け取りの確認を待っています。'], ['完了', 'sd-ok', '受け取って、完了しました。'], ['中止', 'sd-stop', '中止しました。できていた成果物は残っています。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)])),
-      h('p', { class: 'fine', style: 'margin:0 0 6px' }, '目標の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の目標が終わるのを待っています。'], ['作業中', 'sd-run', '冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう目標です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の目標ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
-    sec('言葉の説明', dl([['目標', '依頼を分けた、ひとつひとつの作業。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['インプット', '依頼で使う資料（guild/inputs/ に1つだけ置き、各クエストは名前で参照）。あなたが「＋ 新規」で選んだものが「指定」、地図師が依頼文と書庫をもとに理由つきで選んだものが「自動」です。地図師が迷ったものは「候補」になります。'], ['書庫の紐づけ', '書庫の項目に「インプット」を書いておくと、依頼文にその項目の名前・別名が出てきたとき、地図師にそのファイルが勧められます（確認済み・出典ありの項目の、3文字以上の語だけ）。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
+      h('p', { class: 'fine', style: 'margin:0 0 6px' }, '目標の状態（依頼を開いたときの「道のり」で使います）'), h('div', { class: 'legend' }, [['案', 'sd-draft', '計画の案です。承認すると動き出します。'], ['待機', 'sd-wait', '前提の目標が終わるのを待っています。'], ['作業中', 'sd-run', '魔法使い・錬金術師・冒険者が作業しています。'], ['あなたの番', 'sd-turn', 'あなたに実行してもらう目標です。'], ['確認待ち', 'sd-turn', '実行の前に、あなたの確認を待っています。'], ['鑑定中', 'sd-run', '鑑定士が合格基準で確かめています。'], ['合格', 'sd-ok', '合格基準を満たしました。'], ['できず', 'sd-ng', 'できませんでした。進め方を選んでください。'], ['止まり', 'sd-stop', '前提の目標ができなかったため、止まっています。'], ['やめた', 'sd-stop', '計画から外しました。']].flatMap(([l, c, d]) => [stampEl(l, c), h('span', null, d)]))),
+    sec('言葉の説明', dl([['目標', '依頼を分けた、ひとつひとつの作業。'], ['合格基準', '「何を見て、どうなっていれば合格か、どう確かめるか」。作業の前に決めておきます。'], ['確認の印', '公開など、元に戻せないかもしれない作業に付きます。実行の直前に、もう一度お聞きします。'], ['書庫', '用語・業務フロー・業務情報・個人を種類別にためたもの。依頼が終わると司書が候補を挙げ、あなたが選んだものだけが入ります。次の依頼で、全員が使います。'], ['インプット', '依頼で使う資料（guild/inputs/ に1つだけ置き、各クエストは名前で参照）。あなたが「＋ 新規」で選んだものが「指定」、受付係が依頼文と書庫をもとに理由つきで選んだものが「自動」です。受付係が迷ったものは「候補」になります。'], ['書庫の紐づけ', '書庫の項目に「インプット」を書いておくと、依頼文にその項目の名前・別名が出てきたとき、受付係にそのファイルが勧められます（確認済み・出典ありの項目の、3文字以上の語だけ）。'], ['心得', 'guild の動かし方についての教訓。役は読みません。あなたが guild を直すときの材料です。']])),
     sec('困ったとき', h('div', { class: 'faq' },
       faq('結果を送ったのに、進まない', code('/guild:quest'), ' が動いていないかもしれません。送った内容は ', code('guild/'), ' の中に保存されているので、チャットで ', code('/guild:quest'), ' と送ると、読み取って進みます。'),
       faq('「保存先に未接続」と出る', 'Chrome や Edge で開き、「フォルダを選ぶ」から、プロジェクトのフォルダ（', code('guild/'), ' の1つ上）を選んでください。ブラウザを開き直すと、許可をもう一度求められます。'),
@@ -1978,11 +1980,11 @@ function obsidianTab() {
           h('li', null, h('b', null, 'プロジェクトの ', code('guild/'), ' フォルダ'), 'を選びます（書庫と納品物の両方が見えます）。'),
           h('li', null, '作業用のファイルは ', code('guild/.work/'), ' にあり、Obsidian には出ません（設定は要りません）。')),
         h('p', { class: 'fine' }, '書庫だけ読みたいときは、', code('guild/archive/'), ' を保管庫にします。')),
-      sec('ディレクトリ構成', pre(['guild/', '  board.html  config.json', '  archive/            書庫（用語名.md。種類は項目の type）', '    index.md          索引（役が最初に読む）',
-        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             依頼で使う資料（1つだけ置き、各クエストは名前で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、バックアップ'].join('\n'))),
+      sec('ディレクトリ構成', pre(['guild/', '  board.html', '  archive/            書庫（用語名.md。種類は項目の type）', '    index.md          索引（役が最初に読む）',
+        '  deliverables/       納品物と、Claude Code に渡すプロンプト（Q001_… .md / .prompt.md）', '  inputs/             依頼で使う資料（1つだけ置き、各クエストは名前で参照）',        '  .work/              作業用（Obsidian に出ない）：依頼ごとの Q001/（plan.json・報告・途中の資料）、受付待ち、外部サイトの許可、設定（config.json）、掟（codex/）、バックアップ'].join('\n'))),
       sec('納品物を見る', dl([['場所', h('span', null, code('deliverables/Q###_…'), '。全目標が済んで受け取りの確認の手紙が出た時に置かれます。Markdown 以外が要る部分は ', code('.prompt.md'), '（Claude Code に渡すプロンプト）です。')], ['書き方', 'フロントマター（YAML）、[[リンク]]、コールアウトで書かれていて、そのまま開けます。'], ['この画面でも', '「納品物」タブから、同じファイルを開いたり、コピーしたりできます。']])),
       sec('項目の書き方（書庫）', pre(['---', 'name: "KPI"', 'type: term', 'aliases: ["重要業績評価指標"]', 'inputs: ["KGI定義.md"]', 'confidence: confirmed', 'source: "依頼主の登録"', 'confirmed: 2026-10-11', 'status: "active"', 'summary: "目標の達成度を測る指標"', '---', '本文。他の項目へは [[KGI]] のようにリンクします。'].join('\n')),
-        dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止'], ['inputs', '関係する guild/inputs/ のファイル名（任意）。依頼文にこの項目の名前が出ると、地図師にそのファイルが勧められます']]),
+        dl([['type', 'term（用語）／flow／fact／personal（個人）／lesson（心得）'], ['confidence', 'confirmed（確認済み）／sourced（出典あり）／guess（推測）'], ['status', 'active／要確認／廃止'], ['inputs', '関係する guild/inputs/ のファイル名（任意）。依頼文にこの項目の名前が出ると、受付係にそのファイルが勧められます']]),
         h('p', { class: 'fine' }, '本文は Obsidian で編集してもかまいませんが、先頭のフロントマターは Obsidian の「プロパティ」画面で編集しないでください（別名などの書き方が変わり、読めなくなって消えることがあります）。索引（', code('index.md'), '）は自動では更新されません。確実に反映するには、この画面の「書庫」から編集してください。')),
       sec('整形（フォーマッタ）の設定',
         h('ul', null,
@@ -2155,7 +2157,7 @@ function demoTree(scene) {
   p1.inputs = [{ name: 'notes.txt', source: 'user', reason: '依頼主の指定' }, { name: 'KGI定義.md', source: 'auto', reason: '要点の書き方の参考（書庫の用語『KPI』のヒント）' }];
   p1.candidates = [{ name: '古い資料.pdf', reason: '中身は読んでいない。名前からは関係が分からない' }]; p2.inputs = []; p2.candidates = [];
   const rep = {};
-  ['G1-adventurer.md', 'G1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "goals": [] }' : `## 結果\n${n} の見本です。`); });
+  ['G1-wizard.md', 'G1-appraiser.md', 'plan-draft.json'].forEach((n) => { rep[n] = T(n.endsWith('json') ? '{ "goals": [] }' : `## 結果\n${n} の見本です。`); });
   if (scene === 'failed') { rep['G2-user.md'] = T('# G2 の結果\nできた：上司に口頭で共有した\nメモ：返事は「検討する」だった'); rep['G2-appraiser.md'] = T('---\ngoal: G2\n---\n# G2 の鑑定\n## 判定\n不合格\n## 指摘\n- 合格ラインの「了承する」という返事が、報告にない\n- 返事は「検討する」で、了承ではない\n- やり直しの回数（1回）を超えた\n## 未確認\n- なし'); }
   return {
     'config.json': J({ python: 'python', root: 'C:\\Users\\demo\\project' }), inputs: { 'notes.txt': T('- 要点1\n- 要点2\n- 要点3\n- 要点4'), 'KGI定義.md': T('# KGI の定義\n最終目標の達成度を測る指標'), '売上 2026Q3.csv': T('月,売上\n7月,100'), '古い資料.pdf': T('(PDF の見本)') }, archive: { 'KPI.md': T('---\nname: KPI\ntype: term\naliases: ["重要業績評価指標"]\ninputs: ["KGI定義.md"]\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 目標の達成度を測る指標\n---\n見本の項目です。'), '文体.md': T('---\nname: 文体\ntype: personal\naliases: []\nconfidence: confirmed\nsource: 依頼主の登録\nconfirmed: 2026-10-11\nstatus: active\nsummary: 敬体で簡潔に書く\n---\n見本の項目です。'), 'index.md': T('# 書庫の索引'), inbox: {} },

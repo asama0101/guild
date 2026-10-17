@@ -1,10 +1,10 @@
-"""冒険者の WebFetch の許可（標準ライブラリだけ）。
+"""魔法使いの WebFetch の許可（標準ライブラリだけ）。
 
 許可の状態は guild/.work/web/access.json に置く。フック（hooks/web_gate.py）と guild.py の両方が、このファイルを使う。
   allow    許可リストのドメイン（サブドメインも通す）
   once     「今回だけ」許可したドメイン。依頼の完了・中止で guild.py web-reset が空にする
   denied   依頼主が許可しなかったドメイン。同じく web-reset で空にする
-  pending  冒険者が開こうとして止められ、依頼主の答えを待っているもの
+  pending  魔法使いが開こうとして止められ、依頼主の答えを待っているもの
 依頼主の答えは guild/.work/web/inbox/ に JSON で届き、guild.py web-ingest が反映する。
 """
 import datetime
@@ -85,7 +85,7 @@ def now():
 
 
 def gate(gdir, url):
-    """URL を開いてよいか。(allow か deny, 冒険者に返す理由) を返す。許可がなければ pending に積む。"""
+    """URL を開いてよいか。(allow か deny, 魔法使いに返す理由) を返す。許可がなければ pending に積む。"""
     domain = domain_of(url)
     if domain is None:
         return "deny", f"http(s) の URL ではないため開けません: {url}"

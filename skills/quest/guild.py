@@ -4,10 +4,10 @@
 plan.json を書けるのはこのファイルだけ。遷移は transitions.json で決め、定義にない遷移はエラー。
 使い方: guild.py {adopt|validate|sync|next|ingest} PLAN / guild.py advance PLAN ID EVENT
 adopt は PLAN と同じフォルダの reports/plan-draft.json から PLAN を作る（承認前の状態で）。inputs・candidates の名前が guild/inputs/ になければエラー。
-guild.py init ROOT: ROOT/guild/ と config.json（この Python のパス）を作る。
+guild.py init ROOT: ROOT/guild/ と guild/.work/config.json（この Python のパス）、掟（guild/.work/codex/）を作る。
 guild.py new ROOT [R…]: ROOT/guild/.work/ に次の依頼のフォルダ（Q001…）を作る。R… を渡すと、ボードが保存した受付待ちの依頼を取り込む（選んだインプットが guild/inputs/ になければ、依頼を .work/requests/rejected/ へ移して拒否する）。
 guild.py requests ROOT: 受付待ちの依頼を一覧する。
-guild.py inputs-list ROOT [--text 依頼文 | --text-file パス]（同時指定は不可。長い依頼文や記号を含む依頼文はファイルで渡す）:guild/inputs/ のファイル（名前・拡張子・大きさ・更新日・文字のファイルの先頭5行）と、依頼文に出てくる書庫の項目からのヒントを一覧する（地図師に渡す）。
+guild.py inputs-list ROOT [--text 依頼文 | --text-file パス]（同時指定は不可。長い依頼文や記号を含む依頼文はファイルで渡す）:guild/inputs/ のファイル（名前・拡張子・大きさ・更新日・文字のファイルの先頭5行）と、依頼文に出てくる書庫の項目からのヒントを一覧する（受付係に渡す）。
 guild.py close ROOT: 完了・中止した依頼のインプットのバックアップを消す。
 guild.py arrivals ROOT: ボードから届いて、まだ取り込んでいない入力と依頼を一覧する。
 guild.py pause ROOT: 「ギルドを閉める」。.work/pause.json を書く。ギルドマスターは、新しい役を呼ばず、実行中の役が終わるのを待って止まる（依頼は中止にならない）。
@@ -19,7 +19,7 @@ guild.py publish QDIR: 納品物を guild/deliverables/ へコピーする（全
 guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
 guild.py archive-ingest ROOT: .work/archive-inbox/ の入力（entry・promote・deprecate・retype）を書庫に反映する。
 guild.py web-ingest ROOT: .work/web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
-guild.py web-pending ROOT: 冒険者が止められて、依頼主の答え待ちのドメインを一覧する。
+guild.py web-pending ROOT: 魔法使いが止められて、依頼主の答え待ちのドメインを一覧する。
 guild.py web-reset ROOT: 「今回だけ」の許可と、許可しなかった記録を空にする（依頼の完了・中止のとき）。
 入力（inbox の JSON）の type には、due（依頼の開始日・締切、目標の予定日・締切の設定。目標の締切だけ解除できる）と、inputs（このクエストのインプットの追加・外す。足す名前は guild/inputs/ にあること）がある。
 エラーは終了コード 1。
@@ -55,6 +55,7 @@ SATISFIED = ("done", "skipped")
 MAX_RETRIES_LIMIT = 5  # 目標ごとの max_retries の上限
 PROMPT_SUFFIX = ".prompt.md"  # Markdown 以外（PowerPoint・Excel など）が要るときの、Claude Code に渡すプロンプトのファイル名
 CRITERIA_KEYS = ("viewpoint", "pass_line", "check")
+CLASSES = ("wizard", "alchemist", "adventurer")  # 目標（auto）を実行する役（職業）
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -259,6 +260,11 @@ def validate(plan, tr):
             errs.append(f"{i}: kind が不明です: {t.get('kind')}")
         if t.get("state") not in tr["states"]:
             errs.append(f"{i}: state が不明です: {t.get('state')}")
+        if t.get("kind") == "auto":
+            if t.get("class") not in CLASSES:
+                errs.append(f"{i}: class は {'・'.join(CLASSES)} のどれかにしてください: {t.get('class')!r}")
+        elif "class" in t:
+            errs.append(f"{i}: class は auto の目標だけに付けられます")
         c = t.get("criteria") or {}
         if not isinstance(c, dict):
             errs.append(f"{i}: criteria はオブジェクト（viewpoint・pass_line・check）にしてください")
@@ -342,6 +348,8 @@ def next_view(plan, qdir=None):
     groups = {"ready": "running", "confirm": "awaiting_confirm", "waiting_user": "waiting_user",
               "review": "review", "blocked": "blocked", "failed": "failed"}
     out = {k: [t["id"] for t in plan["goals"] if t["state"] == s] for k, s in groups.items()}
+    out["ready_by_class"] = {c: [t["id"] for t in plan["goals"] if t["state"] == "running" and t.get("kind") == "auto" and t.get("class") == c]
+                             for c in CLASSES}  # 実行できる目標を、呼ぶ役（職業）ごとに分けたもの
     out["runnable"] = runnable(plan)
     out["status"] = plan.get("status", "active")
     out["approved"] = bool(plan.get("approved"))
@@ -573,7 +581,7 @@ def quest_dates(qdir, old=None):
     return {"start": start, "due": due}
 
 
-INPUT_SOURCES = ("user", "auto")  # 依頼主の指定 / 地図師の選択
+INPUT_SOURCES = ("user", "auto")  # 依頼主の指定 / 受付係の選択
 
 
 def request_inputs(qdir):
@@ -596,9 +604,9 @@ def user_removed(old):
 
 def selected_inputs(qdir, draft, old=None):
     """plan.json の inputs と candidates を決める。
-    依頼主の指定（request.json の inputs。source=user）が先頭で、地図師の選択（plan-draft.json の inputs。source=auto）を後ろに足す。
+    依頼主の指定（request.json の inputs。source=user）が先頭で、受付係の選択（plan-draft.json の inputs。source=auto）を後ろに足す。
     作り直し（replan）では、旧計画の inputs（依頼主の追加・外すを反映済み）を引き継ぎ、依頼主が外したままの名前は足さない。
-    地図師が書いた名前は guild/inputs/ にあること（なければエラー。地図師に差し戻す）。"""
+    受付係が書いた名前は guild/inputs/ にあること（なければエラー。受付係に差し戻す）。"""
     have = existing_inputs(gdir_of(qdir))
 
     def drafted(key):
@@ -674,9 +682,9 @@ def _str_list(v):
 
 
 def normalize_brief(brief, ids):
-    """地図師の自己点検（目的・非目標・前提・リスク・要件と目標の対応）を整える。返り値は (brief か None, エラー, 警告)。"""
+    """受付係の自己点検（目的・非目標・前提・リスク・要件と目標の対応）を整える。返り値は (brief か None, エラー, 警告)。"""
     if not isinstance(brief, dict):
-        return None, [], ["地図師の自己点検（brief）がありません。要件が目標で網羅されているかは、確かめられていません"]
+        return None, [], ["受付係の自己点検（brief）がありません。要件が目標で網羅されているかは、確かめられていません"]
     errs, warns = [], []
     out = {"intent": str(brief.get("intent") or "").strip(), "non_goals": _str_list(brief.get("non_goals")),
            "assumptions": _str_list(brief.get("assumptions")), "risks": _str_list(brief.get("risks")), "coverage": []}
@@ -699,7 +707,7 @@ def normalize_brief(brief, ids):
 
 
 def plan_quality(plan, brief):
-    """計画の質の検査（adopt のときだけ）。エラーは地図師に差し戻し、警告は承認の手紙に出す（承認は止めない）。
+    """計画の質の検査（adopt のときだけ）。エラーは受付係に差し戻し、警告は承認の手紙に出す（承認は止めない）。
     返り値は (エラー, 警告, 整えた brief)。"""
     goals = plan["goals"]
     errs, warns = [], []
@@ -751,7 +759,7 @@ def plan_diff(old, plan, carried):
 
 
 def adopt(plan_path, tr):
-    """reports/plan-draft.json（地図師の分解結果）を検査し、未承認の plan.json にする。"""
+    """reports/plan-draft.json（受付係の分解結果）を検査し、未承認の plan.json にする。"""
     plan_path = Path(plan_path)
     draft_path = plan_path.parent / "reports" / "plan-draft.json"
     if not draft_path.exists():
@@ -765,7 +773,7 @@ def adopt(plan_path, tr):
     goals = draft.get("goals")
     if not isinstance(goals, list):
         raise GuildError("plan-draft.json に goals がありません")
-    inputs, candidates = selected_inputs(plan_path.parent, draft, old)  # 何も書く前に検査する（落ちたら地図師に差し戻す）
+    inputs, candidates = selected_inputs(plan_path.parent, draft, old)  # 何も書く前に検査する（落ちたら受付係に差し戻す）
     plan = {"quest": draft.get("quest"), "title": draft.get("title"), "approved": False, "status": "active",
             **({"archive_used": [str(x) for x in draft["archive_used"]]} if isinstance(draft.get("archive_used"), list) else {}),
             "inputs": inputs, "candidates": candidates,
@@ -801,10 +809,10 @@ def adopt(plan_path, tr):
 
 
 def carry_over(plan, old):
-    """計画の作り直し。完了済みで、番号・種別・題名・合格基準・依存が同じで、依存先もすべて引き継がれる目標は、状態を引き継ぐ。
+    """計画の作り直し。完了済みで、番号・種別・職業・題名・合格基準・依存が同じで、依存先もすべて引き継がれる目標は、状態を引き継ぐ。
     上流が変わった（引き継がれなかった）目標の下流は、古い成果物が前提にずれるので引き継がない。
     経緯（history）は旧計画のものに追記する。引き継いだ id の一覧を返す（成果物の退避は archive_outputs）。"""
-    same = lambda a, b: all(a.get(k) == b.get(k) for k in ("kind", "title", "criteria"))         and list(a.get("deps", [])) == list(b.get("deps", []))
+    same = lambda a, b: all(a.get(k) == b.get(k) for k in ("kind", "class", "title", "criteria"))         and list(a.get("deps", [])) == list(b.get("deps", []))
     new_by = {t["id"]: t for t in plan["goals"]}
     old_by = {t["id"]: t for t in old.get("goals", [])}
     carried = []
@@ -848,19 +856,29 @@ def init_guild(root):
     gdir.mkdir(parents=True, exist_ok=True)
     init_archive(gdir / "archive")
     (work_dir(gdir) / "requests").mkdir(parents=True, exist_ok=True)
+    legacy = gdir / CONFIG
+    if legacy.exists() and not config_path(gdir).exists():
+        shutil.move(str(legacy), str(config_path(gdir)))  # 旧版の guild/config.json を .work/ へ移す
+    cdir = work_dir(gdir) / CODEX
+    cdir.mkdir(exist_ok=True)
+    codex = HERE / "codex.md"
+    if codex.exists():
+        shutil.copy2(codex, cdir / "default.md")  # 既定の掟はプラグイン側が正本。init のたびに最新に置き換える
+    if not (cdir / "project.md").exists():
+        (cdir / "project.md").write_text("# プロジェクトの掟（追記）\n\n（まだありません）\n", encoding="utf-8")
     for sub in (INPUTS, DELIV):
         (gdir / sub).mkdir(exist_ok=True)
     board = HERE / "board.html"
     if board.exists():
         shutil.copy2(board, gdir / "board.html")  # ボードはプラグイン側が正本。init のたびに最新に置き換える
-    cfg_path = gdir / "config.json"
+    cfg_path = config_path(gdir)
     cfg = load_json(cfg_path) if cfg_path.exists() else {}
     cfg["python"] = sys.executable
     cfg["python_version"] = ".".join(map(str, sys.version_info[:3]))
     cfg["root"] = str(Path(root).resolve())  # ボードが、パスをフルパスでコピーするために使う
     save_plan(cfg_path, cfg)
     return {"guild": str(gdir), "root": cfg["root"], "python": cfg["python"], "python_version": cfg["python_version"],
-            "board": str(gdir / "board.html") if board.exists() else None}
+            "board": str(gdir / "board.html") if board.exists() else None, "codex": str(cdir / "default.md")}
 
 
 REQUEST_ID = re.compile(r"^R[0-9][0-9-]*$")
@@ -879,6 +897,19 @@ def list_requests(root):
             out.append({"id": f.stem, "text": d.get("text", ""), "start": d.get("start"), "due": d.get("due"),
                         "inputs": d.get("inputs", []), "files": d.get("files", [])})
     return out
+
+
+CONFIG = "config.json"  # guild/.work/config.json（旧版は guild/config.json。init が移す）
+CODEX = "codex"  # guild/.work/codex/：default.md（既定の掟のコピー。init が毎回更新）と project.md（プロジェクトの追記）
+
+
+def config_path(gdir):
+    return work_dir(gdir) / CONFIG
+
+
+def has_config(gdir):
+    """/guild:init の済んだ guild/ か。旧版の配置（guild/config.json）も、init を再実行するまでは認める。"""
+    return config_path(gdir).exists() or (Path(gdir) / CONFIG).exists()
 
 
 INPUTS = "inputs"
@@ -1041,7 +1072,7 @@ def new_quest(root, request_id=None):
     依頼の inputs（依頼主が既存から選んだ名前）が guild/inputs/ になければ、依頼を requests/rejected/ へ移して拒否する（番号は進まない）。
     request.json の inputs は、選んだ名前と、取り込んだアップロードの名前を合わせたもの（重なりを除き、選んだものが先）。"""
     gdir = Path(root) / "guild"
-    if not (gdir / "config.json").exists():
+    if not has_config(gdir):
         raise GuildError(f"{gdir} がありません（/guild:init を先に実行してください）")
     wdir = work_dir(gdir)
     wdir.mkdir(exist_ok=True)
@@ -1516,7 +1547,7 @@ def archive_ingest(root):
     return report
 
 
-# ============================================================ インプットの一覧（地図師の材料）
+# ============================================================ インプットの一覧（受付係の材料）
 TEXT_EXTS = (".md", ".txt", ".csv")  # 先頭の行を読むファイル
 HEAD_LINES = 5
 HEAD_BYTES = 65536  # 大きなファイルでも、ここまでしか読まない
@@ -1553,10 +1584,10 @@ def hint_terms(adir, text):
 
 
 def inputs_list(root, text=""):
-    """guild/inputs/ のファイルを一覧する（地図師がインプットを選ぶ材料）。サブフォルダは見ない。
+    """guild/inputs/ のファイルを一覧する（受付係がインプットを選ぶ材料）。サブフォルダは見ない。
     hints は、依頼文に出てくる書庫の項目から付ける理由。ヒントのあるファイルを先に、それぞれ名前順に並べる。"""
     gdir = Path(root) / "guild"
-    if not (gdir / "config.json").exists():
+    if not has_config(gdir):
         raise GuildError(f"{gdir} がありません（/guild:init を先に実行してください）")
     d = gdir / INPUTS
     files = sorted((p for p in d.iterdir() if p.is_file()), key=lambda p: p.name.lower()) if d.is_dir() else []

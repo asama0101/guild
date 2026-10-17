@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 ## 手順
 
-1. `guild/config.json` を読み、`python` のパスを得る。なければ、`/guild:init` を先に実行するよう伝えて止める。
+1. `guild/.work/config.json` を読み、`python` のパスを得る。なければ、`/guild:init` を先に実行するよう伝えて止める。
 2. 次を実行する。`<python>` は `config.json` の `python`、`<root>` はプロジェクトのルート（`guild/` の1つ上）。
 
    ```

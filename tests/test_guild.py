@@ -21,6 +21,8 @@ CRIT = {"viewpoint": "v", "pass_line": "p", "check": "c"}
 def goal(i, kind="auto", deps=(), **kw):
     t = {"id": i, "title": i, "kind": kind, "deps": list(deps), "criteria": dict(CRIT),
          "state": "pending", "retries": 0, "output": None}
+    if kind == "auto":
+        t["class"] = "wizard"
     t.update(kw)
     return t
 
@@ -33,6 +35,8 @@ def draft_json(d, **kw):
         if not any(t.get("deliverable") is True for t in ts):
             ts[-1]["deliverable"] = True
         for t in ts:
+            if t.get("kind") == "auto" and "class" not in t:
+                t["class"] = "wizard"
             if t.get("kind") == "human" and not t.get("instruction"):
                 t["instruction"] = "やってください。"
     return json.dumps(d, **kw)
@@ -359,7 +363,7 @@ class InitAndNewTest(unittest.TestCase):
 
     def test_init_records_python_and_is_idempotent(self):
         r = guild.init_guild(self.root)
-        cfg = json.loads((self.root / "guild" / "config.json").read_text(encoding="utf-8"))
+        cfg = json.loads((self.root / "guild" / ".work" / "config.json").read_text(encoding="utf-8"))
         self.assertEqual(cfg["python"], sys.executable)
         self.assertEqual(r["python"], sys.executable)
         self.assertEqual(Path(cfg["root"]), self.root.resolve())  # ボードのフルパスのコピー用
@@ -685,7 +689,7 @@ class MarkdownOnlyTest(unittest.TestCase):
             q = Path(d) / "Q001"
             (q / "reports").mkdir(parents=True)
             draft = {"quest": "Q001", "title": "t", "format": "pptx", "goals": [
-                {"id": "G1", "title": "x", "kind": "auto", "deps": [], "deliverable": True, "criteria": CRIT}]}
+                {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "deliverable": True, "criteria": CRIT}]}
             (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             saved = json.loads((q / "plan.json").read_text(encoding="utf-8"))
@@ -827,7 +831,7 @@ class AdoptDatesTest(unittest.TestCase):
             if old is not None:
                 (q / "plan.json").write_text(json.dumps(old), encoding="utf-8")
             draft = {"quest": "Q001", "title": "t", "goals": goals or [
-                {"id": "G1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT}]}
+                {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT}]}
             (q / "reports" / "plan-draft.json").write_text(draft_json(draft), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             return json.loads((q / "plan.json").read_text(encoding="utf-8"))
@@ -840,7 +844,7 @@ class AdoptDatesTest(unittest.TestCase):
 
     def test_request_dates_are_taken_and_draft_goal_dates_are_kept(self):
         p = self.adopt(request={"start": "2026-10-15", "due": "2026-10-30"}, goals=[
-            {"id": "G1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT, "scheduled": "2026-10-16", "due": "2026-10-18"},
+            {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT, "scheduled": "2026-10-16", "due": "2026-10-18"},
             {"id": "G2", "title": "b", "kind": "human", "deps": ["G1"], "criteria": CRIT, "instruction": "x"}])
         self.assertEqual((p["start"], p["due"]), ("2026-10-15", "2026-10-30"))
         self.assertEqual((p["goals"][0]["scheduled"], p["goals"][0]["due"]), ("2026-10-16", "2026-10-18"))
@@ -865,7 +869,7 @@ class AdoptDatesTest(unittest.TestCase):
             q = Path(d) / "Q001"
             (q / "reports").mkdir(parents=True)
             (q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q001", "title": "t", "goals": [
-                {"id": "G1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT, "due": "2026-10-20"}]}), encoding="utf-8")
+                {"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT, "due": "2026-10-20"}]}), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)
             self.assertEqual(guild.load_json(q / "plan.json")["goals"][0]["due"], "2026-10-20")
 
@@ -1224,13 +1228,13 @@ class ArchiveTest(unittest.TestCase):
         d.mkdir(parents=True, exist_ok=True)
         (d / "0-broken.json").write_text("{not json", encoding="utf-8")
         self.put_inbox("1-unknown.json", {"type": "nanika"})
-        self.put_inbox("2-escape.json", {"type": "promote", "path": "../../config.json"})
+        self.put_inbox("2-escape.json", {"type": "promote", "path": "../.work/config.json"})
         self.put_inbox("3-nofile.json", {"type": "promote", "path": "ない.md"})
         self.put_inbox("4-ok.json", {"type": "entry", "entry": {"type": "term", "name": "ok", "summary": "s", "body": "", "source": ""}})
         r = guild.archive_ingest(self.root)
         self.assertEqual((len(r["applied"]), len(r["rejected"])), (1, 4))
         self.assertEqual(list(d.glob("*.json")), [])
-        self.assertTrue((self.root / "guild" / "config.json").is_file())
+        self.assertTrue((self.root / "guild" / ".work" / "config.json").is_file())
 
     def test_arrivals_include_archive_inbox(self):
         self.assertFalse([a for a in guild.arrivals(self.root) if a["kind"] == "archive"])
@@ -1359,23 +1363,23 @@ class WebGateHookTest(unittest.TestCase):
         env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.root))
         return subprocess.run([sys.executable, "-I", str(ROOT / "hooks" / "web_gate.py")], input=json.dumps(payload), capture_output=True, text=True, encoding="utf-8", env=env, cwd=str(self.root))
 
-    def test_adventurer_unknown_domain_is_denied(self):
-        r = self.run_hook({"agent_type": "guild:adventurer", "tool_input": {"url": "https://a.example.jp/"}})
+    def test_wizard_unknown_domain_is_denied(self):
+        r = self.run_hook({"agent_type": "guild:wizard", "tool_input": {"url": "https://a.example.jp/"}})
         self.assertEqual(r.returncode, 0, r.stderr)
         out = json.loads(r.stdout)["hookSpecificOutput"]
         self.assertEqual((out["hookEventName"], out["permissionDecision"]), ("PreToolUse", "deny"))
         self.assertIn("許可待ち", out["permissionDecisionReason"])
         self.assertEqual(webaccess.pending(self.root / "guild")[0]["domain"], "a.example.jp")
 
-    def test_adventurer_allowed_domain_passes_silently(self):
+    def test_wizard_allowed_domain_passes_silently(self):
         webaccess.save(self.root / "guild", dict(webaccess.load(self.root / "guild"), allow=["example.jp"]))
-        r = self.run_hook({"agent_type": "guild:adventurer", "tool_input": {"url": "https://a.example.jp/"}})
+        r = self.run_hook({"agent_type": "guild:wizard", "tool_input": {"url": "https://a.example.jp/"}})
         self.assertEqual((r.returncode, r.stdout), (0, ""))
 
     def test_other_callers_are_not_judged(self):
         for payload in ({"tool_input": {"url": "https://a.example.jp/"}},
                         {"agent_type": "guild:appraiser", "tool_input": {"url": "https://a.example.jp/"}},
-                        {"agent_type": "other:adventurer-x", "tool_input": {"url": "https://a.example.jp/"}}):
+                        {"agent_type": "other:wizard-x", "tool_input": {"url": "https://a.example.jp/"}}):
             r = self.run_hook(payload)
             self.assertEqual((r.returncode, r.stdout), (0, ""))
         self.assertEqual(webaccess.pending(self.root / "guild"), [])
@@ -1383,7 +1387,7 @@ class WebGateHookTest(unittest.TestCase):
     def test_no_guild_folder_or_bad_input_is_silent(self):
         with tempfile.TemporaryDirectory() as other:
             env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
-            r = subprocess.run([sys.executable, "-I", str(ROOT / "hooks" / "web_gate.py")], input=json.dumps({"agent_type": "guild:adventurer", "cwd": other, "tool_input": {"url": "https://a.example.jp/"}}), capture_output=True, text=True, encoding="utf-8", env=env, cwd=other)
+            r = subprocess.run([sys.executable, "-I", str(ROOT / "hooks" / "web_gate.py")], input=json.dumps({"agent_type": "guild:wizard", "cwd": other, "tool_input": {"url": "https://a.example.jp/"}}), capture_output=True, text=True, encoding="utf-8", env=env, cwd=other)
             self.assertEqual((r.returncode, r.stdout), (0, ""))
         r = self.run_hook("not a dict")
         self.assertEqual(r.returncode, 0)
@@ -1394,7 +1398,7 @@ class WebGateHookTest(unittest.TestCase):
         if not sh:
             self.skipTest("sh がありません")
         env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.root))
-        r = subprocess.run([sh, str(ROOT / "hooks" / "web_gate.sh")], input=json.dumps({"agent_type": "guild:adventurer", "tool_input": {"url": "https://a.example.jp/"}}), capture_output=True, text=True, encoding="utf-8", env=env)
+        r = subprocess.run([sh, str(ROOT / "hooks" / "web_gate.sh")], input=json.dumps({"agent_type": "guild:wizard", "tool_input": {"url": "https://a.example.jp/"}}), capture_output=True, text=True, encoding="utf-8", env=env)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
 
@@ -1437,8 +1441,8 @@ class McpContractTest(unittest.TestCase):
     def test_no_bundled_mcp(self):
         self.assertFalse((ROOT / ".mcp.json").exists())
 
-    def test_scout_uses_environment_playwright(self):
-        head = (ROOT / "agents" / "scout.md").read_text(encoding="utf-8").split("---")[1]
+    def test_adventurer_uses_environment_playwright(self):
+        head = (ROOT / "agents" / "adventurer.md").read_text(encoding="utf-8").split("---")[1]
         tools = re.search(r"^tools:(.*)$", head, re.M).group(1)
         for name in ("navigate", "snapshot", "wait_for", "press_key", "take_screenshot", "tabs", "close"):
             self.assertIn(f"mcp__playwright__browser_{name}", tools)
@@ -1636,7 +1640,7 @@ class DeliverablesTest(unittest.TestCase):
         guild.save_plan(self.q / "plan.json", old)
         guild.publish_deliverables(self.q)
         (self.q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q001", "title": "t", "goals": [
-            {"id": "G1", "title": "x", "kind": "auto", "deps": [], "criteria": CRIT}]}), encoding="utf-8")
+            {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT}]}), encoding="utf-8")
         guild.adopt(self.q / "plan.json", TR)
         self.assertEqual(self.names(), [])
 
@@ -1793,7 +1797,7 @@ class BoardPathsTest(unittest.TestCase):
     def test_detail_tabs_and_way_rows(self):
         for needle in ("const DTABS = [['way', '道のり'], ['dates', '日付'], ['inputs', 'インプット']]", "function detailTabs(", "function wayTab(",
                        "function goalRow(", "function reportsOf(", "function reportText(", "function excerpt(", "function appraiserNote(",
-                       "'verify-scout'", "role: 'tablist'", "@container (min-width:860px)", "S.rcache = {}", "appraiserNote(qd, t),"):
+                       "'verify-adventurer'", "role: 'tablist'", "@container (min-width:860px)", "S.rcache = {}", "appraiserNote(qd, t),"):
             self.assertIn(needle, self.board)
         for gone in ("function ganttBlock(", "function ganttOf(", "const BARKIND", "function goalTags(", ".bar2{", ".nowline{", ".way{", ".gx{"):
             self.assertNotIn(gone, self.board)
@@ -1842,25 +1846,27 @@ class DocsContractTest(unittest.TestCase):
         for needle in ("guild.py\" publish", "close <root>", ".prompt.md", ".work/"):
             self.assertIn(needle, s)
 
-    def test_accept_publishes_and_adventurer_avoids_work_links(self):
+    def test_accept_publishes_and_executors_avoid_work_links(self):
         self.assertIn("`ingest` が同じ納品物を置く", self.read("skills", "quest", "SKILL.md"))
-        a = self.read("agents", "adventurer.md")
-        self.assertNotIn("[[.work/", a)
-        self.assertIn("Obsidian から見えない", a)
+        for name in ("wizard.md", "alchemist.md"):
+            a = self.read("agents", name)
+            self.assertNotIn("[[.work/", a, name)
+            self.assertIn("Obsidian から見えない", a, name)
 
-    def test_cartographer_decides_dates_and_prompts(self):
-        s = self.read("agents", "cartographer.md")
+    def test_receptionist_decides_dates_and_prompts(self):
+        s = self.read("agents", "receptionist.md")
         for needle in ("scheduled", "\"due\"", ".prompt.md"):
             self.assertIn(needle, s)
         self.assertNotIn("\"format\"", s)
 
-    def test_adventurer_may_add_prompts_without_approval(self):
-        s = self.read("agents", "adventurer.md")
-        self.assertIn(".prompt.md", s)
-        self.assertIn("目標は増やさない。計画の承認は取らない", s)
+    def test_executors_may_add_prompts_without_approval(self):
+        for name in ("wizard.md", "alchemist.md"):
+            s = self.read("agents", name)
+            self.assertIn(".prompt.md", s, name)
+            self.assertIn("目標は増やさない。計画の承認は取らない", s, name)
 
     def test_agents_use_work_paths(self):
-        self.assertIn("`guild/.work/Q###/reports/plan-draft.json`", self.read("agents", "cartographer.md"))
+        self.assertIn("`guild/.work/Q###/reports/plan-draft.json`", self.read("agents", "receptionist.md"))
         for p in (ROOT / "agents").glob("*.md"):
             s = p.read_text(encoding="utf-8")
             if "reports/" in s:
@@ -1896,20 +1902,20 @@ class DocsContractTest(unittest.TestCase):
             for gone in ("template", "テンプレート", "templates/"):
                 self.assertNotIn(gone, s, f"{f} に {gone} が残っている")
 
-    def test_cartographer_selects_inputs_with_reasons(self):
-        s = self.read("agents", "cartographer.md")
+    def test_receptionist_selects_inputs_with_reasons(self):
+        s = self.read("agents", "receptionist.md")
         for needle in ("`inputs-list` の出力", "**`guild/inputs/` にない名前を書かない**", "\"candidates\": [", "中身は読んでいない",
                        "依頼主が外したファイルを、もう一度 `inputs` に書かない"):
             self.assertIn(needle, s)
 
     def test_roles_read_the_plan_inputs(self):
-        for name in ("adventurer.md", "appraiser.md", "scout.md"):
+        for name in ("wizard.md", "alchemist.md", "adventurer.md", "appraiser.md"):
             s = self.read("agents", name)
             self.assertIn("`plan.json` の `inputs`", s, name)
             self.assertIn("`guild/inputs/<name>`", s, name)
         self.assertIn("\"inputs\": [\"KGI定義.md\"]", self.read("agents", "librarian.md"))
 
-    def test_quest_skill_passes_inputs_list_to_the_cartographer(self):
+    def test_quest_skill_passes_inputs_list_to_the_receptionist(self):
         s = self.read("skills", "quest", "SKILL.md")
         for needle in ("inputs-list <root> --text-file", "ファイルに保存せず、チャットにも書かない", "`.work/requests/rejected/`", "`guild/inputs/<name>`"):
             self.assertIn(needle, s)
@@ -1967,7 +1973,7 @@ class NoTemplateTest(unittest.TestCase):
             q = Path(d) / "guild" / ".work" / "Q001"
             (q / "reports").mkdir(parents=True)
             draft = {"quest": "Q001", "title": "t", "template": "templates/ない.md", "goals": [
-                {"id": "G1", "title": "x", "kind": "auto", "deps": [], "deliverable": True, "criteria": CRIT}]}
+                {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "deps": [], "deliverable": True, "criteria": CRIT}]}
             (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
             guild.adopt(q / "plan.json", TR)  # テンプレートの検査はしない（ないファイルを書いてきても落ちない）
             self.assertNotIn("template", guild.load_json(q / "plan.json"))
@@ -2260,7 +2266,7 @@ class InputsSelectTest(unittest.TestCase):
         return q
 
     def adopt(self, q, **extra):
-        draft = {"quest": "Q001", "title": "t", "goals": [{"id": "G1", "title": "a", "kind": "auto", "deps": [], "criteria": CRIT}], **extra}
+        draft = {"quest": "Q001", "title": "t", "goals": [{"id": "G1", "title": "a", "kind": "auto", "class": "wizard", "deps": [], "criteria": CRIT}], **extra}
         (q / "reports" / "plan-draft.json").write_text(draft_json(draft, ensure_ascii=False), encoding="utf-8")
         guild.adopt(q / "plan.json", TR)
         return guild.load_json(q / "plan.json")

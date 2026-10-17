@@ -20,6 +20,8 @@ CRIT = {"viewpoint": "v", "pass_line": "p", "check": "c"}
 def goal(i, kind="auto", deps=(), **kw):
     t = {"id": i, "title": i, "kind": kind, "deps": list(deps), "criteria": dict(CRIT),
          "state": "pending", "retries": 0, "output": None}
+    if kind == "auto":
+        t["class"] = "wizard"
     t.update(kw)
     return t
 

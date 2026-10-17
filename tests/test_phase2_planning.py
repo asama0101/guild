@@ -17,6 +17,8 @@ GOOD = {"viewpoint": "依頼の目的に答えているか", "pass_line": "結�
 
 def goal(i, kind="auto", deps=(), **kw):
     t = {"id": i, "title": f"{i}をする", "kind": kind, "deps": list(deps), "criteria": dict(GOOD)}
+    if kind == "auto":
+        t["class"] = "wizard"
     t.update(kw)
     return t
 
