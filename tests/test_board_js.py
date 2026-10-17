@@ -132,3 +132,11 @@ class PressingDefersRefreshTest(unittest.TestCase):
 
     def test_skill_limits_parallel_roles_so_arrivals_are_taken_sooner(self):
         self.assertIn("一度に 3 つまで", (ROOT / "skills" / "quest" / "SKILL.md").read_text(encoding="utf-8"))
+
+
+class PauseBoxTest(unittest.TestCase):
+    def test_pause_box_checks_the_heartbeat_and_explains_the_limit(self):
+        box = BOARD[BOARD.index("function pauseBox()"):BOARD.index("async function closeGuild()")]
+        for needle in ("aliveInfo(S.hb, Date.now())", "印だけが残っています", "その役が返るまで", "止める作業がないので"):
+            self.assertIn(needle, box, needle)
+        self.assertIn("on ? h('button', { class: 'btn wax'", box)  # 動いていないときは「閉める」を出さない

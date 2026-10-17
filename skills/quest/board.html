@@ -2216,16 +2216,19 @@ function notifyButton() {
 }
 function pauseBox() {
   if (!S.model) return null;
+  const on = aliveInfo(S.hb, Date.now()).cls === 'on';  // /guild:quest が動いているか（ハートビート）
   if (S.model.paused) return h('div', { class: 'attn', role: 'status' }, h('b', null, 'ギルドを閉める準備中です'),
-    '実行中の作業が終わると /guild:quest が止まります。依頼は中止していません。再開は、チャットで /guild:quest です。',
+    on ? '実行中の作業が終わると /guild:quest が止まります。役が作業中のときは、その役が返るまで（数分かかることがあります）止まりません。依頼は中止していません。再開は、チャットで /guild:quest です。'
+      : '/guild:quest は動いていないので、印だけが残っています。次に /guild:quest を動かすと、印が消えて続きから進みます。依頼は中止していません。',
     h('button', { type: 'button', class: 'linkbtn', onclick: unpause }, '取り消す'));
   if (!S.confirm.pause) return null;
   return h('section', { class: 'letter', 'aria-label': 'ギルドを閉める確認', style: 'margin-bottom:12px' }, seal('閉'),
-    h('div', { class: 'kick' }, 'ギルドを閉める'), h('h3', null, '今日の作業を、ここで止めますか'),
-    h('p', null, '新しい作業は始めず、実行中の作業が終わると /guild:quest が止まります。依頼は中止になりません。再開は、チャットで /guild:quest を実行します。'),
+    h('div', { class: 'kick' }, 'ギルドを閉める'), h('h3', null, on ? '今日の作業を、ここで止めますか' : '/guild:quest は、いま動いていません'),
+    on ? h('p', null, '新しい作業は始めず、実行中の作業が終わると /guild:quest が止まります。役が作業中のときは、その役が返るまで（数分かかることがあります）止まりません。依頼は中止になりません。再開は、チャットで /guild:quest を実行します。')
+      : h('p', null, '止める作業がないので、閉める必要はありません。印を置いても、次に /guild:quest を動かすまで残るだけです。依頼は中止になりません。'),
     h('div', { class: 'btns' },
-      h('button', { class: 'btn wax', type: 'button', onclick: closeGuild }, '閉める'),
-      h('button', { class: 'btn', type: 'button', onclick: () => { S.confirm.pause = false; render(); } }, 'やめておく')));
+      on ? h('button', { class: 'btn wax', type: 'button', onclick: closeGuild }, '閉める') : null,
+      h('button', { class: 'btn', type: 'button', onclick: () => { S.confirm.pause = false; render(); } }, on ? 'やめておく' : '閉じる')));
 }
 async function closeGuild() {
   S.confirm.pause = false;
