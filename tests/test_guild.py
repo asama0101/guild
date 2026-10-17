@@ -1074,7 +1074,7 @@ class ArchiveTest(unittest.TestCase):
         self.assertIsNone(guild.find_entry(self.adir, "term", ["別物"]))
 
     def test_propose_registers_lessons_and_holds_the_rest(self):
-        self.draft(self.cand("C1"), self.cand("C2", type="lesson", name="鑑定士はウェブを開けない", aliases=[], summary="出典照合が未検証"))
+        self.draft(self.cand("C1", confidence="guess", source=""), self.cand("C2", type="lesson", name="鑑定士はウェブを開けない", aliases=[], summary="出典照合が未検証"))
         r = guild.archive_propose(self.q)
         self.assertEqual(r["status"], "proposed")
         self.assertEqual(r["pending"], ["C1"])
@@ -1104,16 +1104,16 @@ class ArchiveTest(unittest.TestCase):
 
     def test_propose_turns_duplicate_into_update(self):
         rel = guild.write_entry(self.adir, self.entry(name="wvs2", summary="古い説明", confidence="sourced", source="u"))
-        self.draft(self.cand("C1"))
+        self.draft(self.cand("C1", conflict=True))  # 食い違いは、自動で登録せず、依頼主の確認に回る
         guild.archive_propose(self.q)
         self.assertEqual(self.archive_json()["candidates"][0]["update_of"], rel)
 
     def test_decide_registers_chosen_only_and_updates_index(self):
-        self.draft(self.cand("C1"), self.cand("C2", name="DX", aliases=[], summary="s2"))
+        self.draft(self.cand("C1", confidence="guess", source=""), self.cand("C2", name="DX", aliases=[], summary="s2", confidence="guess", source=""))
         guild.archive_propose(self.q)
         guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register", "C2": "skip"}})
         e = guild.read_entry(self.adir / "WVS2.md")
-        self.assertEqual((e["confidence"], e["status"]), ("sourced", "active"))
+        self.assertEqual((e["confidence"], e["status"]), ("guess", "active"))
         self.assertFalse((self.adir / "DX.md").exists())
         self.assertIn("WVS2", (self.adir / "index.md").read_text(encoding="utf-8"))
         self.assertEqual(self.archive_json()["status"], "done")
@@ -1121,7 +1121,7 @@ class ArchiveTest(unittest.TestCase):
     def test_decide_twice_or_without_proposal_is_error(self):
         with self.assertRaises(guild.GuildError):
             guild.archive_decide(self.q, {"type": "archive", "decisions": {}})
-        self.draft(self.cand("C1"))
+        self.draft(self.cand("C1", confidence="guess", source=""))
         guild.archive_propose(self.q)
         guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register"}})
         with self.assertRaises(guild.GuildError):
@@ -1146,7 +1146,7 @@ class ArchiveTest(unittest.TestCase):
         self.assertIn("別の値", e["body"])
 
     def test_ingest_handles_archive_even_when_quest_aborted(self):
-        self.draft(self.cand("C1"))
+        self.draft(self.cand("C1", confidence="guess", source=""))
         guild.archive_propose(self.q)
         p = plan(goal("G1"))
         p["status"] = "aborted"
@@ -1248,7 +1248,7 @@ class ArchiveTest(unittest.TestCase):
 
     def test_cli_archive_commands(self):
         script = str(ROOT / "skills" / "quest" / "guild.py")
-        self.draft(self.cand("C1"))
+        self.draft(self.cand("C1", confidence="guess", source=""))
         out = subprocess.run([sys.executable, script, "archive-propose", str(self.q)], capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(json.loads(out.stdout)["pending"], ["C1"])
@@ -2050,13 +2050,11 @@ class ArchiveInputsTest(unittest.TestCase):
 
     def test_candidate_inputs_pass_through_and_merge_on_update(self):
         self.draft(dict(self.entry(confidence="sourced", source="https://example.com (2026-10-16)", inputs=["KGI定義.md"]), id="C1"))
-        guild.archive_propose(self.q)
-        guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register"}})
+        guild.archive_propose(self.q)  # 出典ありは、自動で登録される
         self.assertEqual(guild.read_entry(self.adir / "KGI.md")["inputs"], ["KGI定義.md"])
         # 同名の候補は更新になり、inputs は足される（重なりは除く）
         self.draft(dict(self.entry(confidence="sourced", source="https://example.com (2026-10-16)", inputs=["kgi定義.md", "売上.csv"]), id="C1"))
         guild.archive_propose(self.q)
-        guild.archive_decide(self.q, {"type": "archive", "decisions": {"C1": "register"}})
         self.assertEqual(guild.read_entry(self.adir / "KGI.md")["inputs"], ["KGI定義.md", "売上.csv"])
 
     def test_candidate_with_bad_inputs_is_rejected(self):

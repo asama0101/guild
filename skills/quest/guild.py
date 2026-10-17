@@ -112,8 +112,13 @@ REPLACE_TRIES = 6  # Windows・OneDrive 配下で、置き換え先を他のプ�
 
 def save_plan(path, plan):
     """JSON を原子的に書く。tmp 名にプロセス番号を付け、並列で書いても tmp が衝突しない。"""
+    write_text_atomic(path, json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
+
+
+def write_text_atomic(path, text):
+    """テキストを原子的に書く（save_plan と同じ作り）。"""
     tmp = Path(f"{path}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8")
     try:
         for n in range(REPLACE_TRIES):
             try:
@@ -868,6 +873,8 @@ def init_guild(root):
     legacy = gdir / CONFIG
     if legacy.exists() and not config_path(gdir).exists():
         shutil.move(str(legacy), str(config_path(gdir)))  # 旧版の guild/config.json を .work/ へ移す
+    for c in CLASSES:
+        (experience_dir(gdir) / c / "notes").mkdir(parents=True, exist_ok=True)
     cdir = work_dir(gdir) / CODEX
     cdir.mkdir(exist_ok=True)
     codex = HERE / "codex.md"
@@ -910,6 +917,15 @@ def list_requests(root):
 
 CONFIG = "config.json"  # guild/.work/config.json（旧版は guild/config.json。init が移す）
 CODEX = "codex"  # guild/.work/codex/：default.md（既定の掟のコピー。init が毎回更新）と project.md（プロジェクトの追記）
+
+
+EXPERIENCE = "experience"  # guild/.work/experience/<class>/：summary.md（司書がまとめる）と notes/<依頼>-<目標>.md（各役が書く）
+EXPERIENCE_MAX = 2000  # 職業ごとの経験の要約の長さの上限（文字）。役が作業の前に読むので、短く保つ
+AUTO_CONFIDENCE = ("sourced", "confirmed")  # 書庫に自動で登録してよい確度（推測は、依頼主が選ぶ）
+
+
+def experience_dir(gdir):
+    return work_dir(gdir) / EXPERIENCE
 
 
 def config_path(gdir):
@@ -1440,8 +1456,68 @@ def apply_candidate(adir, c, quest):
     return write_entry(adir, dict(c, confirmed=today(), status="active"))
 
 
+def apply_experience(qdir):
+    """司書の経験の要約（reports/experience-draft.json：{"summaries": {職業: 本文}}）を、職業ごとの summary.md に書く。
+    承認は要らない。職業の名前の誤り・空・長すぎるものは、書かずに rejected で返す（ほかは書く）。"""
+    qdir = Path(qdir)
+    draft = qdir / "reports" / "experience-draft.json"
+    out = {"written": [], "rejected": []}
+    if not draft.exists():
+        return out
+    try:
+        sums = load_json(draft).get("summaries")
+    except (GuildError, AttributeError):
+        sums = None
+    if not isinstance(sums, dict):
+        out["rejected"].append({"class": None, "reason": "summaries がオブジェクトではありません"})
+        return out
+    gdir = gdir_of(qdir)
+    for c, text in sums.items():
+        if c not in CLASSES:
+            out["rejected"].append({"class": c, "reason": f"職業は {'・'.join(CLASSES)} のどれかです"})
+        elif not isinstance(text, str) or not text.strip():
+            out["rejected"].append({"class": c, "reason": "本文が空です"})
+        elif len(text) > EXPERIENCE_MAX:
+            out["rejected"].append({"class": c, "reason": f"{EXPERIENCE_MAX} 字を超えています（{len(text)} 字）"})
+        else:
+            d = experience_dir(gdir) / c
+            d.mkdir(parents=True, exist_ok=True)
+            write_text_atomic(d / "summary.md", text.strip() + "\n")
+            out["written"].append(c)
+    return out
+
+
+def auto_registrable(adir, c):
+    """書庫に自動で登録してよい候補か。心得、または確度が出典あり以上で、既存との食い違いがなく、
+    既存の項目の確度を下げる更新でないもの。推測・食い違い・確度を下げる更新は、依頼主が選ぶ。"""
+    if c["type"] == "lesson":
+        return True
+    if c.get("conflict") or c.get("confidence") not in AUTO_CONFIDENCE:
+        return False
+    rel = c.get("update_of")
+    if rel and (Path(adir) / rel).is_file():
+        old = read_entry(entry_path(adir, rel)).get("confidence", "guess")
+        if CONFIDENCE.index(c["confidence"]) < CONFIDENCE.index(old):
+            return False
+    return True
+
+
+def codex_proposals(cands, quest):
+    """同じ心得が 2 回目に出た（既存の心得の更新になる）とき、掟に足す提案にする。決めるのは依頼主。
+    候補に codex（掟に書く 1 行）があればそれを、なければ要約を使う。"""
+    out = []
+    for c in cands:
+        if c["type"] == "lesson" and c.get("update_of"):
+            text = str(c.get("codex") or c.get("summary") or "").strip().replace("\n", " ")
+            if text:
+                out.append({"id": f"K{len(out) + 1}", "name": c["name"], "text": text, "quest": quest})
+    return out
+
+
 def archive_propose(qdir):
-    """司書の候補を検査する。心得はそのまま登録、ほかは依頼主の確認待ち（archive.json）。同名・別名は更新の候補にする。"""
+    """司書の候補を検査する。心得と、確度が出典あり以上で食い違いのないものは、そのまま書庫に登録する。
+    推測・既存との食い違い・確度を下げる更新は、依頼主の確認待ち（archive.json）。同名・別名は更新の候補にする。
+    同じ心得の 2 回目は、掟への提案にする。職業ごとの経験の要約（experience-draft.json）も、ここで書く。"""
     qdir = Path(qdir)
     adir = gdir_of(qdir) / "archive"
     init_archive(adir)
@@ -1459,14 +1535,17 @@ def archive_propose(qdir):
         found = find_entry(adir, c["type"], [c["name"], *c.get("aliases", [])])
         if found:
             c["update_of"] = found
-        if c["type"] == "lesson":
+        if auto_registrable(adir, c):
             registered.append(apply_candidate(adir, c, qdir.name))
         else:
             pending.append(c)
     rebuild_index(adir)
-    state = {"status": "proposed" if pending else "done", "candidates": pending, "registered": registered, "decided": {}}
+    proposals = codex_proposals(cands, qdir.name)
+    state = {"status": "proposed" if pending or proposals else "done", "candidates": pending, "registered": registered,
+             "codex_proposals": proposals, "decided": {}}
     save_plan(qdir / "archive.json", state)
-    return {"status": state["status"], "registered": registered, "pending": [c["id"] for c in pending]}
+    return {"status": state["status"], "registered": registered, "pending": [c["id"] for c in pending],
+            "codex_proposals": [k["id"] for k in proposals], "experience": apply_experience(qdir)}
 
 
 def archive_decide(qdir, data):
@@ -1479,6 +1558,9 @@ def archive_decide(qdir, data):
     decisions = data.get("decisions")
     if not isinstance(decisions, dict):
         raise GuildError("decisions がありません")
+    codex = data.get("codex", {})
+    if not isinstance(codex, dict):
+        raise GuildError("codex は {提案の id: adopt か skip} にしてください")
     adir = gdir_of(qdir) / "archive"
     for c in state["candidates"]:
         if decisions.get(c["id"]) == "register":
@@ -1486,9 +1568,29 @@ def archive_decide(qdir, data):
             state["decided"][c["id"]] = "register"
         else:
             state["decided"][c["id"]] = "skip"
+    for k in state.get("codex_proposals", []):  # 掟への追記は、依頼主が採用したものだけ（既定は採用しない）
+        if codex.get(k["id"]) == "adopt":
+            append_codex(gdir_of(qdir), k)
+            state["decided"][k["id"]] = "adopt"
+        else:
+            state["decided"][k["id"]] = "skip"
     state["status"] = "done"
     rebuild_index(adir)
     save_plan(state_path, state)
+
+
+def append_codex(gdir, proposal):
+    """依頼主が採用した提案を、プロジェクトの掟（guild/.work/codex/project.md）に 1 行で追記する。同じ文は、二度書かない。
+    既定の掟（default.md）には触れない。"""
+    path = work_dir(gdir) / CODEX / "project.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = path.read_text(encoding="utf-8") if path.exists() else "# プロジェクトの掟（追記）\n\n"
+    line = f"- {proposal['text']}（心得「{proposal['name']}」、{proposal.get('quest', '')}、{today()}）"
+    if f"- {proposal['text']}（" in text:
+        return
+    if "（まだありません）" in text:
+        text = text.replace("（まだありません）\n", "")
+    write_text_atomic(path, text.rstrip("\n") + "\n" + line + "\n")
 
 
 def archive_apply(adir, data):

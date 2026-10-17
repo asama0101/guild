@@ -400,7 +400,7 @@ class MemFS {
 
 // 論理パス（画面の中で使う Q001/… requests/… web/… archive/inbox/…）を、guild/ の中の物理パスに写す。
 // 機械用のファイルは guild/.work/ にある（Obsidian に出ない）。archive/ の項目、deliverables/、inputs/ はそのまま。
-const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json'], [/^heartbeat\.json$/, '.work/heartbeat.json'], [/^config\.json$/, '.work/config.json']];
+const PHYS = [[/^archive\/inbox(?=\/|$)/, '.work/archive-inbox'], [/^(Q\d+|requests|web|codex|experience)(?=\/|$)/, '.work/$1'], [/^pause\.json$/, '.work/pause.json'], [/^heartbeat\.json$/, '.work/heartbeat.json'], [/^config\.json$/, '.work/config.json']];
 function physical(p) { for (const [re, to] of PHYS) if (re.test(p)) return p.replace(re, to); return p; }
 class PathMap {
   constructor(fs) { this.fs = fs; }
@@ -595,7 +595,7 @@ function derive(q) {
   d.allDone = d.total > 0 && d.done === d.total;
   d.finished = d.allDone && !!p.accepted;
   // 書庫の登録候補（依頼が完了・中止したあと、司書が出したもの）。中止された依頼でも答えられる
-  if (q.archive && q.archive.status === 'proposed') d.asks.push({ kind: 'archive', key: `${q.id}:archive`, label: '書庫の登録候補', cands: q.archive.candidates || [], sent: inboxHas('archive') });
+  if (q.archive && q.archive.status === 'proposed') d.asks.push({ kind: 'archive', key: `${q.id}:archive`, label: '書庫の登録候補', cands: q.archive.candidates || [], codex: q.archive.codex_proposals || [], auto: (q.archive.registered || []).length, sent: inboxHas('archive') });
   if (p.status === 'aborted') { d.label = '中止'; d.cls = 'sd-stop'; d.info = 'aborted'; d.me = d.asks.some((a) => !a.sent) ? '書庫の登録候補' : '—'; return d; }
   if (p.status === 'replan') { d.label = '計画を直し中'; d.cls = 'sd-run'; d.info = 'replan'; return d; }
   if (!p.approved) {
@@ -762,7 +762,7 @@ function letterFor(qd, a) {
     const typeName = (t) => (ARCH_TYPES.find((x) => x[0] === t) || [t, t])[1];
     return h('section', { class: 'letter', 'aria-label': '書庫の登録候補' }, seal('書'),
       h('div', { class: 'kick' }, 'お願い：書庫に残すもの'), h('h3', null, '次の依頼で役に立てるものを、選んでください'),
-      h('p', null, '司書が、この依頼から書庫に残す候補を挙げました。「登録」を選んだものだけが、書庫に入ります。推測のものは、はじめ「不要」になっています。'),
+      h('p', null, `司書が挙げた候補のうち、出典があるもの（${a.auto} 件）は、すでに書庫に登録しました。ここに出ているのは、推測のもの、既存の項目との食い違い、確認済みの項目を低い確度で書き換えるものです。「登録」を選んだものだけが、書庫に入ります。推測のものは、はじめ「不要」になっています。`),
       a.cands.map((c, i) => {
         const ck = `${k}:c${c.id}`, def = c.confidence === 'guess' ? 'skip' : 'register', cf = CONF[c.confidence] || [c.confidence, 'sd-wait'];
         return h('div', { class: 'qa' },
@@ -774,7 +774,11 @@ function letterFor(qd, a) {
           radio(ck + 'r', ck, 'register', c.update_of ? (c.conflict ? '登録する（両方の値を残して「要確認」にする）' : '登録する（既存の項目を更新）') : '登録する', '', '', def),
           radio(ck + 'r', ck, 'skip', '不要', '', '', def));
       }),
-      h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'archive', decisions: Object.fromEntries(a.cands.map((c) => [c.id, S.form[`${k}:c${c.id}`] || (c.confidence === 'guess' ? 'skip' : 'register')])) }, k) }, '選んだとおりに送る')),
+      a.codex.length ? [h('p', { class: 'lbl', style: 'margin:12px 0 4px' }, '掟への提案（同じ心得が 2 回目に出ました。「掟に足す」を選んだものだけが、プロジェクトの掟に足されます）'),
+        a.codex.map((kp) => { const ck = `${k}:k${kp.id}`; return h('div', { class: 'qa' },
+          h('span', { class: 'lbl' }, `心得「${kp.name}」`), h('p', { class: 'fine', style: 'margin:0 0 4px' }, kp.text),
+          radio(ck + 'r', ck, 'adopt', '掟に足す', '', '', 'skip'), radio(ck + 'r', ck, 'skip', '足さない', '', '', 'skip')); })] : null,
+      h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => send(qd.id, { type: 'archive', decisions: Object.fromEntries(a.cands.map((c) => [c.id, S.form[`${k}:c${c.id}`] || (c.confidence === 'guess' ? 'skip' : 'register')])), codex: Object.fromEntries(a.codex.map((kp) => [kp.id, S.form[`${k}:k${kp.id}`] || 'skip'])) }, k) }, '選んだとおりに送る')),
       sentNote(k));
   }
   if (a.kind === 'accept') {
@@ -871,8 +875,8 @@ const DTABS = [['way', '道のり'], ['dates', '日付'], ['inputs', 'インプ�
 const REPORT_ROLES = [['wizard', '魔法使い'], ['alchemist', '錬金術師'], ['adventurer', '冒険者'], ['verify-adventurer', '冒険者（出典の確認）'], ['user', 'あなた'], ['appraiser', '鑑定士']];
 function reportsOf(qd, tid) { return REPORT_ROLES.map(([r, label]) => ({ name: `${tid}-${r}.md`, label })).filter((x) => qd.q.reports.includes(x.name)); }
 // 報告の中身は、行を開いたとき・判断の手紙を出すときだけ読む（S.rcache に覚える。null は読み込み中、'' は読めなかった）
-function reportText(qid, name) {
-  const path = `${qid}/reports/${name}`;
+function reportText(qid, name) { return fileText(`${qid}/reports/${name}`); }
+function fileText(path) {
   if (!(path in S.rcache)) {
     S.rcache[path] = null;
     Promise.resolve(S.fs.readText(path)).then((t) => { S.rcache[path] = t == null ? '' : t; }, () => { S.rcache[path] = ''; }).then(() => { if (!S.composing) render(); });
@@ -1810,7 +1814,16 @@ function flowCards() {
   return [h('h2', { class: 'h2' }, 'ヘルプ'),
     h('p', { class: 'sub', style: 'margin:0 0 12px' }, '依頼を出してから、納品物を受け取るまでの流れと、それぞれの役の説明です。あなたが操作するのは、赤い箱の場所と、「書庫に残す」で登録を選ぶときです。'),
     h('div', { class: 'card', style: 'margin-bottom:16px;overflow:auto' }, flowSvg()),
-    rolesCard()];
+    rolesCard(), codexCard()];
+}
+// ギルドの掟（全役が作業の最初に読む共通ルール）。既定は読むだけ。プロジェクトの追記は、司書の提案を依頼主が採用したものだけ
+function codexCard() {
+  const show = (path) => { const t = fileText(path); return t == null ? '読み込み中…' : (t || '読めませんでした（/guild:init を実行すると置かれます）'); };
+  const pre = (t) => h('pre', { style: 'white-space:pre-wrap;word-break:break-word;background:var(--surface2);border-radius:4px;padding:12px;font-size:13px;margin:0 0 12px' }, t);
+  return h('section', { class: 'card' }, h('h3', null, 'ギルドの掟'),
+    h('p', { class: 'fine', style: 'margin:0 0 8px' }, '全員が、作業の最初に読む決まりです。既定の掟は、プラグインが持っていて、ここでは読むだけです（書き換えられません）。プロジェクトの追記は、同じ心得が 2 回出たときに司書が提案し、あなたが採用したものだけが足されます。'),
+    h('p', { class: 'lbl', style: 'margin:0 0 4px' }, '既定の掟'), pre(show('codex/default.md')),
+    h('p', { class: 'lbl', style: 'margin:0 0 4px' }, 'このプロジェクトの追記'), pre(show('codex/project.md')));
 }
 
 // 各役のモデル（ヘルプの役の一覧で使う）。正本は agents/*.md の model（tests/test_guild.py が一致を確かめる）
@@ -2168,7 +2181,7 @@ function demoTree(scene) {
     deliverables: { 'Q001_report.md': T('見本'), 'Q001_スライド.prompt.md': T('---\ntype: prompt\n---\n# PowerPoint 5枚を作って…'), 'Q002_comparison.md': T('見本') },
     requests: { 'R20261010-112800.json': J({ type: 'request', text: '社内の議事録テンプレートを見直してほしい', start: null, due: null, inputs: [], files: [] }),
       rejected: { 'R20261009-090000.json': J({ type: 'request', text: '売上の資料をまとめてほしい', inputs: ['消えた資料.xlsx'], files: [] }), 'R20261009-090000.json.reason.txt': T('選んだインプットが guild/inputs/ にありません（削除された可能性があります）: 消えた資料.xlsx') } },
-    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: [], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/G1/digest.md', inputs: ['notes.txt'] }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { G1: { 'digest.md': T('- 見本') }, G3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
+    Q001: { ...(scene === 'archive' ? { 'archive.json': J({ status: 'proposed', registered: ['KPI.md'], codex_proposals: [{ id: 'K1', name: '出典なしの数字は不合格', text: '数字には、必ず出典を添える', quest: 'Q001' }], decided: {}, candidates: [{ id: 'C1', type: 'term', name: 'digest', aliases: [], summary: '要点を3行にまとめた資料', body: '社内では、notes.txt の要点を3行にしたものをこう呼ぶ。', confidence: 'sourced', source: 'Q001/output/G1/digest.md', inputs: ['notes.txt'] }, { id: 'C2', type: 'fact', name: '公開の了承者', aliases: [], summary: '上司の了承が要る', body: '公開前に上司の口頭の了承をもらう。', confidence: 'guess', source: '', update_of: 'facts/公開の了承者.md', conflict: true }] }) } : {}), 'plan.json': J(p1), 'request.json': J({ text: 'notes.txt の要点を3行にまとめて、上司の了承をもらったあとで公開したい' }), reports: rep, output: { G1: { 'digest.md': T('- 見本') }, G3: { '公開用まとめ.md': T('# 見本の資料 - 結論から書く') } }, inbox: {} },
     Q002: { 'plan.json': J(p2), reports: { 'G1-appraiser.md': T('見本') }, output: { G3: { 'comparison.md': T('見本') } }, inbox: {} }
   };
 }

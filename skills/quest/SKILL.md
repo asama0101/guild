@@ -129,11 +129,13 @@ disable-model-invocation: true
 
 完了した（または中止した）依頼ごとに、一度だけ行う。
 
-1. 司書を呼ぶ（`subagent_type: guild:librarian`）。メッセージに、依頼のフォルダ、書庫の場所（`guild/archive/`）、ギルドの掟の場所（`guild/.work/codex/default.md`・`guild/.work/codex/project.md`）、出力先（`<dir>/reports/archive-draft.json`）を書く。
+1. 司書を呼ぶ（`subagent_type: guild:librarian`）。メッセージに、依頼のフォルダ、書庫の場所（`guild/archive/`）、ギルドの掟の場所（`guild/.work/codex/default.md`・`guild/.work/codex/project.md`）、出力先（`<dir>/reports/archive-draft.json`、職業ごとの経験の要約は `<dir>/reports/experience-draft.json`）、経験のメモの場所（`guild/.work/experience/<職業>/`）を書く。
 2. `guild.py archive-propose <dir>` を実行する。検査に落ちたら、エラーを添えて司書に差し戻す（2回まで）。直らなければ、状況を短くチャットで伝えて、候補を書かないまま `archive-propose` を実行する（`archive-draft.json` を消してから）。
 3. 出力の `status` を見る。
-   - `done`：登録する候補がない（または心得だけ登録した）。何もしない。
-   - `proposed`：依頼主の確認待ち。ボードに「登録候補の確認」の手紙が出る。あなたは何もしない（手順4の待機で答えを待つ）。答えは `inbox/` に届き、`guild.py ingest <dir>/plan.json` が書庫に反映する。
+   - `done`：確認待ちの候補も、掟の提案もない。何もしない（出典のある候補と心得は、`guild.py` が自動で登録した）。
+   - `proposed`：依頼主の確認待ち。推測・既存との食い違い・確認済みの項目を低い確度で書き換える候補、または掟への提案（同じ心得の 2 回目）がある。ボードに「登録候補の確認」の手紙が出る。あなたは何もしない（手順4の待機で答えを待つ）。答えは `inbox/` に届き、`guild.py ingest <dir>/plan.json` が書庫に反映する。
+
+出力の `experience` に、職業ごとの経験の要約を書いた職業（`written`）と、書かなかったもの（`rejected`。職業の名前の誤り・空・2000 字超え）が出る。`rejected` があれば、理由を短くチャットで伝える（司書への差し戻しはしない）。
 
 書庫は、次の依頼で全役が `index.md` から読む。心得（`type: lesson` の項目）は、役は読まず、依頼主が guild の改善に使う。依頼主の好みや確かめていない推測は、事実として書かない（司書の指示書に書いてある）。
 
