@@ -556,7 +556,8 @@ async function loadAll() {
   // 魔法使いの WebFetch の許可（フックと guild.py が書く）。答えの JSON が web/inbox/ に残っている間は「送信済み」
   const wa = (await readJSON('web/access.json')) || {};
   const webList = (k) => (Array.isArray(wa[k]) ? wa[k] : []);
-  const webWait = (await S.fs.list('web/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
+  let webWait = 0;  // 許可待ちへの答え（decisions）だけ数える。許可リストの追加・外す（add・remove）は、手紙を「送信済み」にしない
+  for (const x of await S.fs.list('web/inbox')) if (x.kind === 'file' && x.name.endsWith('.json')) { const j = await readJSON(`web/inbox/${x.name}`); if (!j || (j.decisions && Object.keys(j.decisions).length)) webWait++; }
   const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), notes: wa.notes && typeof wa.notes === 'object' ? wa.notes : {}, wait: webWait };
   // 共通のインプット（guild/inputs/ の直下だけ。サブフォルダは見ない）。名前の同一判定は、大文字小文字を区別しない（guild.py と同じ）
   const inputs = (await S.fs.list('inputs')).filter((e) => e.kind === 'file').map((e) => ({ name: e.name, mtime: e.mtime || 0 })).sort((a, b) => a.name.localeCompare(b.name));
@@ -968,7 +969,7 @@ function reportText(qid, name) { return fileText(`${qid}/reports/${name}`); }
 function fileText(path) {
   if (!(path in S.rcache)) {
     S.rcache[path] = null;
-    Promise.resolve(S.fs.readText(path)).then((t) => { S.rcache[path] = t == null ? '' : t.replace(/^\uFEFF/, ''); }, () => { S.rcache[path] = ''; }).then(() => { if (!S.composing) render(); });
+    Promise.resolve(S.fs.readText(path)).then((t) => { S.rcache[path] = t == null ? '' : t.replace(/^\uFEFF/, ''); }, () => { S.rcache[path] = ''; }).then(() => { const again = () => { if (isEditing()) setTimeout(again, 500); else render(); }; again(); });  // 入力中は、終わるまで待つ（作り直すと、入力が途切れる）
   }
   return S.rcache[path];
 }
@@ -1174,7 +1175,12 @@ function uploadBox(qd) {
     if (S.conn !== 'ok') { S.form[errKey] = '保存先につながっていません。上の「フォルダを選ぶ」から選んでください。'; render(); return; }
     const names = [];
     try { for (const f of ups) { await S.fs.writeBlob(`inputs/${f.name}`, f); names.push(f.name); } }
-    catch (e) { S.form[errKey] = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。${names.length ? `置けたもの：${names.join('、')}` : ''}`; render(); return; }
+    catch (e) {
+      S.form[errKey] = `保存できませんでした（${e.name || 'エラー'}：${e.message || e}）。${names.length ? `置けたもの：${names.join('、')}（インプットに足しました。残りは、もう一度選んでください）` : ''}`;
+      S.files[key] = ups.filter((f) => !names.includes(f.name));  // 置けたものは、再試行で「同じ名前」にならないよう、待ちから外す
+      if (names.length) await sendInputs(qd, names, [], `in:${qd.id}`);
+      render(); return;
+    }
     S.files[key] = [];
     await sendInputs(qd, names, [], `in:${qd.id}`);
   };
@@ -1377,6 +1383,7 @@ function jumpQuest(id) {
   const b = boardBucket(qd);
   S.tab = 'board';
   if (S.bfilter !== 'all' && S.bfilter !== b) S.bfilter = 'all';
+  if (S.seriesFilter && !(qd.q.plan && qd.q.plan.series === S.seriesFilter)) S.seriesFilter = '';  // 関連で絞っていて、その依頼が出ないとき
   if (!hit((S.form['f:bq'] || '').trim().toLowerCase(), qd.id, qd.title)) S.form['f:bq'] = '';
   if (b === 'done') S.showClosed = true;
   selectQuest(id);
@@ -1410,13 +1417,14 @@ function questListPane(m, L) {
   const seriesSel = seriesList.length ? h('select', { class: 'qsearch', 'aria-label': '関連（series）で絞る', onchange: (e) => { S.seriesFilter = e.target.value; render(); } },
     h('option', { value: '' }, '関連：すべて'), seriesList.map((v) => h('option', { value: v }, `関連：${v}（${m.quests.filter((x) => x.q.plan && x.q.plan.series === v).length}）`))) : null;
   if (seriesSel) seriesSel.value = S.seriesFilter || '';
-  const empty = !reqs.length && !openRows.length && !closedRows.length;
+  const shownReqs = S.seriesFilter ? [] : reqs;  // 受付待ちの依頼は、関連を持たないので、絞ったときは出さない
+  const empty = !shownReqs.length && !openRows.length && !closedRows.length;
   return h('aside', { class: 'qlist', id: 'quest-list', 'aria-label': 'クエスト一覧' },
     h('div', { class: 'qlhead' }, h('h2', { class: 'h2' }, 'クエスト掲示板'), h('button', { type: 'button', class: 'btn sm newbtn', onclick: openNew }, '＋ 新規')),
     search, seriesSel, chips,
     h('div', { class: 'qrows' },
-      S.seriesFilter ? null : reqs.map(requestRow), openRows.map(questRow),
-      L.closed.length ? h('button', { type: 'button', class: 'qfold', 'aria-expanded': String(!!S.showClosed), onclick: () => { S.showClosed = !S.showClosed; render(); } }, S.showClosed ? `完了・中止 ${L.closed.length}件を畳む` : `完了・中止 ${L.closed.length}件を表示`) : null,
+      shownReqs.map(requestRow), openRows.map(questRow),
+      closedRows.length ? h('button', { type: 'button', class: 'qfold', 'aria-expanded': String(!!S.showClosed), onclick: () => { S.showClosed = !S.showClosed; render(); } }, S.showClosed ? `完了・中止 ${closedRows.length}件を畳む` : `完了・中止 ${L.closed.length}件を表示`) : null,
       S.showClosed ? closedRows.map(questRow) : null,
       empty ? h('p', { class: 'sub', style: 'padding:10px 12px;margin:0' }, m.quests.length || m.requests.length ? '当てはまるクエストはありません。' : 'まだ依頼はありません。「＋ 新規」から出してください。') : null));
 }
@@ -1580,7 +1588,7 @@ const hit = (q, ...texts) => !q || texts.some((t) => String(t || '').toLowerCase
 
 // 「納品物」画面は、ファイル画面を統合した：左で種類（初めは納品物）、右で依頼別／種類別
 function sendArchive(obj, key) {
-  return writeOrFallback(`archive/inbox/${nowName(obj.type, String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true); });
+  return writeOrFallback(`archive/inbox/${nowName(obj.type, String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true).then(() => true); return false; });
 }
 function archiveForm() {
   const edit = S.form['a:edit'] || '', key = 'a:form';
@@ -1597,8 +1605,7 @@ function archiveForm() {
     const bad = inputs.filter((n) => /[\\/:\x00-\x1f\x7f]/.test(n) || n === '.' || n === '..');
     if (bad.length) { S.archiveError = `インプットのファイル名に使えない文字があります（/ \\ : など）：${bad.join('、')}`; render(); return; }
     const entry = { type: S.form['a:type'] || 'term', name, aliases: (S.form['a:aliases'] || '').split(/[、,，]/).map((x) => x.trim()).filter(Boolean), inputs, summary, body: (S.form['a:body'] || '').trim(), source: (S.form['a:source'] || '').trim() };
-    await sendArchive(edit ? { type: 'entry', update_of: edit, entry } : { type: 'entry', entry }, key);
-    if (S.sent[key]) reset();
+    if (await sendArchive(edit ? { type: 'entry', update_of: edit, entry } : { type: 'entry', entry }, key)) reset();  // 2 回目以降に書き込みが失敗したとき、入力を消さない
     render();
   };
   const ta = textarea('a:body', { id: 'a:body', rows: '2', placeholder: '本文（任意）。手順・意味・数値など' });
@@ -2220,7 +2227,8 @@ function obsidianTab() {
 }
 
 // ============================================================ 書き込み
-function nowName(type, goal) { return `${stamp14(new Date())}-${type}${goal ? '-' + goal : ''}.json`; }
+let nameSeq = 0;  // 同じ秒に、同じ種類の入力を 2 件送っても、上書きしない（ミリ秒と連番を足す）
+function nowName(type, goal) { const d = new Date(); return `${stamp14(d)}${String(d.getMilliseconds()).padStart(3, '0')}${nameSeq++ % 10}-${type}${goal ? '-' + goal : ''}.json`; }
 async function writeOrFallback(path, text, onOk) {
   if (S.conn !== 'ok' || !S.fs) { S.fallback = { path: `guild/${physical(path)}`, text, err: '保存先につながっていません' }; render(); return false; }
   try { await S.fs.writeText(path, text); if (onOk) onOk(); return true; }

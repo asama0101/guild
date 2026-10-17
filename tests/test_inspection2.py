@@ -2,6 +2,7 @@
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,9 @@ sys.path.insert(0, str(ROOT / "tests"))
 import guild  # noqa: E402
 import webaccess  # noqa: E402
 from test_board_js import extract, node_eval  # noqa: E402
+from test_audit_fixes import LOAD_JS  # noqa: E402
+
+BOARD_SRC = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
 
 TR = guild.load_transitions()
 CRIT = {"viewpoint": "viewpoint 十分に具体的", "pass_line": "pass_line 十分に具体的", "check": "check 十分に具体的"}
@@ -292,6 +296,36 @@ class WebLockTest(unittest.TestCase):
             with webaccess.file_lock(webaccess.access_path(gdir)):
                 with self.assertRaises(webaccess.WebError):
                     webaccess.gate(gdir, "https://new.example.org/", "p", lock_timeout=0.2)
+
+
+@unittest.skipUnless(shutil.which("node"), "node がありません")
+class BoardMinorTest(unittest.TestCase):
+    def test_input_file_names_do_not_collide_within_a_second(self):
+        src = re.search(r"^const pad = .*$", BOARD_SRC, re.M).group(0) + "\n" + re.search(r"^const stamp14 = .*$", BOARD_SRC, re.M).group(0) + "\nlet nameSeq = 0;\n" + extract("nowName")
+        out = node_eval(src + "\nconst a = [nowName('result', 'G1'), nowName('result', 'G1'), nowName('result', 'G1')];\nconsole.log(JSON.stringify([new Set(a).size, a.every((n) => /^\\d{14}\\d+-result-G1\\.json$/.test(n))]));")
+        self.assertEqual(out, [3, True])
+
+    def test_jump_resets_a_series_filter_that_hides_the_target(self):
+        code = extract("jumpQuest") + r"""
+const S = { model: { quests: [{ id: 'Q001', q: { plan: { series: '週報' } }, title: 't' }, { id: 'Q002', q: { plan: { series: '月報' } }, title: 't' }] }, bfilter: 'all', form: {}, seriesFilter: '週報', tab: '' };
+const boardBucket = () => 'run', hit = () => true, selectQuest = () => {};
+jumpQuest('Q002'); const a = S.seriesFilter; S.seriesFilter = '週報'; jumpQuest('Q001');
+console.log(JSON.stringify([a, S.seriesFilter]));"""
+        self.assertEqual(node_eval(code), ["", "週報"])
+
+    def test_only_decisions_make_the_web_letter_wait(self):
+        files = {"config.json": "{}", "web/inbox/a.json": json.dumps({"type": "web", "add": ["a.example.com"]}),
+                 "web/inbox/b.json": json.dumps({"type": "web", "decisions": {"b.example.com": "allow"}})}
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "t.js"
+            f.write_text(LOAD_JS.replace("await loadAll();\n  const first", "console.log(JSON.stringify((await loadAll()).web.wait)); return;\n  const first", 1), encoding="utf-8")
+            r = subprocess.run(["node", str(f), json.dumps(files)], capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(json.loads(r.stdout), 1)
+
+    def test_wiring(self):
+        for needle in ("if (await sendArchive(", "const again = () =>", "置けたもの：", "const shownReqs = S.seriesFilter ? [] : reqs;"):
+            self.assertIn(needle, BOARD_SRC, needle)
 
 
 if __name__ == "__main__":
