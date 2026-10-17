@@ -572,7 +572,7 @@ const TSTATE = {
 };
 const closed = (s) => s === 'done' || s === 'skipped';
 // 期限は日付だけ。その日の終わり（ローカル時刻の 23:59:59.999）を過ぎたら期限切れ。済んだ目標には付けない
-const overdue = (t, nowMs) => !!t.due && !closed(t.state) && nowMs > new Date(t.due + 'G23:59:59.999').getTime();
+const overdue = (t, nowMs) => !!t.due && !closed(t.state) && nowMs > new Date(t.due + 'T23:59:59.999').getTime();
 // 日付の矛盾は警告にとどめる（遷移には使わない）。YYYY-MM-DD は文字列のまま比べられる
 function dateIssues(plan, t) {
   const out = [], s = t.scheduled, d = t.due;
@@ -1227,7 +1227,7 @@ function questDetail(qd) {
 
 // ============================================================ 日付の道具
 const DAY_MS = 86400000;
-const dayNum = (s) => Math.floor(Date.parse(s + 'G00:00:00Z') / DAY_MS);
+const dayNum = (s) => Math.floor(Date.parse(s + 'T00:00:00Z') / DAY_MS);
 const okDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(dayNum(s));  // 不正な日付は無視する
 
 // ============================================================ 描画（画面）
