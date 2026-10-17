@@ -283,7 +283,7 @@ class IngestFlowTest(Base):
         plan = {"quest": "Q002", "title": "t", "approved": True, "status": "active", "accepted": True,
                 "goals": [{"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "state": "done", "retries": 0,
                            "criteria": {"viewpoint": "v", "pass_line": "p", "check": "c"}}]}
-        guild.save_plan(q2 / "plan.json", plan)
+        guild.save_json(q2 / "plan.json", plan)
         self.assertEqual(guild.next_view(plan, q2)["archive"], "proposed")  # 掟の提案だけが残っていても、確認待ち
         write(q2 / "inbox" / "a-archive.json", {"type": "archive", "decisions": {}, "codex": {"K1": "adopt"}})
         res = guild.ingest(q2 / "plan.json", guild.load_json(q2 / "plan.json"), guild.load_transitions())
@@ -297,7 +297,7 @@ class IngestFlowTest(Base):
         plan = {"quest": "Q001", "title": "t", "approved": True, "status": "active",
                 "goals": [{"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "state": "done", "retries": 0,
                            "criteria": {"viewpoint": "v", "pass_line": "p", "check": "c"}}]}
-        guild.save_plan(self.q / "plan.json", plan)
+        guild.save_json(self.q / "plan.json", plan)
         write(self.q / "inbox" / "a-archive.json", {"type": "archive", "decisions": {"C1": "register"}, "codex": ["K1"]})
         res = guild.ingest(self.q / "plan.json", guild.load_json(self.q / "plan.json"), guild.load_transitions())
         self.assertEqual(len(res["rejected"]), 1)

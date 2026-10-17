@@ -41,7 +41,7 @@ class Base(unittest.TestCase):
     def plan(self, *goals, **kw):
         p = {"quest": self.q.name, "title": "週報の作成", "series": "週報", "approved": True, "status": "active", "goals": list(goals)}
         p.update(kw)
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         return p
 
     def report(self, name, text):

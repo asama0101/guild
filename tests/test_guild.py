@@ -1156,7 +1156,7 @@ class ArchiveTest(unittest.TestCase):
         guild.archive_propose(self.q)
         p = plan(goal("G1"))
         p["status"] = "aborted"
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         (self.q / "inbox" / "a-archive.json").write_text(json.dumps({"type": "archive", "decisions": {"C1": "register"}}), encoding="utf-8")
         r = guild.ingest(self.q / "plan.json", guild.load_json(self.q / "plan.json"), TR)
         self.assertEqual(r["rejected"], [])
@@ -1566,11 +1566,11 @@ class InputsTest(unittest.TestCase):
             self.request(rid, **{"a.txt": body})
             guild.new_quest(self.root, rid)
         for q, extra in (("Q002", {"accepted": True}), ("Q003", {})):
-            guild.save_plan(self.g / ".work" / q / "plan.json", dict(plan(goal("G1")), **extra))
+            guild.save_json(self.g / ".work" / q / "plan.json", dict(plan(goal("G1")), **extra))
         self.assertEqual(guild.close_quests(self.root), {"removed": ["Q002"]})
         self.assertFalse((self.g / ".work" / "backup" / "Q002").exists())
         self.assertTrue((self.g / ".work" / "backup" / "Q003").is_dir())  # 進行中の依頼のバックアップは残る
-        guild.save_plan(self.g / ".work" / "Q003" / "plan.json", dict(plan(goal("G1")), status="aborted"))
+        guild.save_json(self.g / ".work" / "Q003" / "plan.json", dict(plan(goal("G1")), status="aborted"))
         self.assertEqual(guild.close_quests(self.root), {"removed": ["Q003"]})
 
     def test_unsafe_names_are_skipped(self):
@@ -1598,7 +1598,7 @@ class DeliverablesTest(unittest.TestCase):
         (d / name).write_text(body, encoding="utf-8")
 
     def save(self, *goals):
-        guild.save_plan(self.q / "plan.json", plan(*goals))
+        guild.save_json(self.q / "plan.json", plan(*goals))
 
     def names(self):
         d = self.g / "deliverables"
@@ -1647,7 +1647,7 @@ class DeliverablesTest(unittest.TestCase):
     def test_replan_adopt_unpublishes(self):
         self.out("G1", "a.md")
         old = dict(plan(goal("G1", state="done")), status="replan")
-        guild.save_plan(self.q / "plan.json", old)
+        guild.save_json(self.q / "plan.json", old)
         guild.publish_deliverables(self.q)
         (self.q / "reports" / "plan-draft.json").write_text(draft_json({"quest": "Q001", "title": "t", "goals": [
             {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": CRIT}]}), encoding="utf-8")
@@ -2269,7 +2269,7 @@ class InputsSelectTest(unittest.TestCase):
         self.request("R20261016-1", picked=picked)
         q = Path(guild.new_quest(self.root, "R20261016-1")["dir"])
         if old is not None:
-            guild.save_plan(q / "plan.json", old)
+            guild.save_json(q / "plan.json", old)
         return q
 
     def adopt(self, q, **extra):

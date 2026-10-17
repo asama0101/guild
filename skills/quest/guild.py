@@ -119,7 +119,7 @@ REPLACE_TRIES = webaccess.REPLACE_TRIES
 write_text_atomic = webaccess.write_text_atomic  # フック（別プロセス）も使うので、webaccess.py に置く
 
 
-def save_plan(path, plan):
+def save_json(path, plan):
     """JSON を原子的に書く。tmp 名にプロセス番号を付け、並列で書いても tmp が衝突しない。"""
     write_text_atomic(path, json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
 
@@ -1017,7 +1017,7 @@ def adopt(plan_path, tr):
             plan["meta_locked"] = list(old["meta_locked"])
         carried = carry_over(plan, old)
         plan["replan_diff"] = plan_diff(old, plan, carried)
-    save_plan(plan_path, plan)  # 保存してから成果物を動かす。保存に失敗しても、成果物は元の場所に残る
+    save_json(plan_path, plan)  # 保存してから成果物を動かす。保存に失敗しても、成果物は元の場所に残る
     if old is not None:
         unpublish_deliverables(plan_path.parent)  # 作り直し。置いた納品物は、また全目標が済んだ時に置き直す
         try:
@@ -1106,7 +1106,7 @@ def init_guild(root):
     cfg["python"] = sys.executable
     cfg["python_version"] = ".".join(map(str, sys.version_info[:3]))
     cfg["root"] = str(Path(root).resolve())  # ボードが、パスをフルパスでコピーするために使う
-    save_plan(cfg_path, cfg)
+    save_json(cfg_path, cfg)
     return {"guild": str(gdir), "root": cfg["root"], "python": cfg["python"], "python_version": cfg["python_version"],
             "board": str(gdir / "board.html") if board.exists() else None, "codex": str(cdir / "default.md")}
 
@@ -1340,7 +1340,7 @@ def publish_deliverables(qdir, plan=None):
         rel = check_deliver_to(qdir, plan["deliver_to"])
         target = gdir_of(qdir).parent / Path(*rel.split("/"))
         target.mkdir(parents=True, exist_ok=True)
-        save_plan(qdir / "delivered.json", {"dir": rel, "files": names})  # コピーの前に、置く予定の一覧を残す（途中で失敗しても、取り下げで消せる）
+        save_json(qdir / "delivered.json", {"dir": rel, "files": names})  # コピーの前に、置く予定の一覧を残す（途中で失敗しても、取り下げで消せる）
         for n in names:
             shutil.copy2(dest / n, target / n)
         out["delivered_to"] = rel
@@ -1391,7 +1391,7 @@ def new_quest(root, request_id=None):
             names = import_inputs(gdir, files, qdir.name)
             shutil.rmtree(files)
         req["inputs"] = unique_names(picked + names)
-        save_plan(qdir / "request.json", req)  # JSON を原子的に書く関数（plan 専用の名前だが中身は汎用）
+        save_json(qdir / "request.json", req)  # JSON を原子的に書く関数（plan 専用の名前だが中身は汎用）
         out["request"], out["inputs"], out["inputs_dir"] = req, req["inputs"], str(gdir / INPUTS)
     return out
 
@@ -1464,7 +1464,7 @@ def beat(root, state):
     try:
         gdir = Path(root) / "guild"
         if gdir.is_dir():
-            save_plan(work_dir(gdir) / HEARTBEAT, {"state": state, "t": now(), "pid": os.getpid()})
+            save_json(work_dir(gdir) / HEARTBEAT, {"state": state, "t": now(), "pid": os.getpid()})
     except OSError:
         pass
 
@@ -1611,7 +1611,7 @@ def digest(root):
                     continue  # 壊れた依頼は、ログから外す（ほかの依頼は出す）
     out = {"t": now(), "quests": quests, "needs_total": sum(len(q["needs"]) for q in quests), "stats": stats(root)["total"]}
     if wd.is_dir():
-        save_plan(wd / CLOG, out)
+        save_json(wd / CLOG, out)
     return out
 
 
@@ -1976,7 +1976,7 @@ def archive_propose(qdir):
     proposals = codex_proposals(cands, qdir.name)
     state = {"status": "proposed" if pending or proposals else "done", "candidates": pending, "registered": registered,
              "codex_proposals": proposals, "followups": followups, "decided": {}}
-    save_plan(qdir / "archive.json", state)
+    save_json(qdir / "archive.json", state)
     return {"status": state["status"], "registered": registered, "pending": [c["id"] for c in pending],
             "codex_proposals": [k["id"] for k in proposals], "followups": followups, "experience": apply_experience(qdir)}
 
@@ -2003,7 +2003,7 @@ def archive_decide(qdir, data):
             state["decided"][c["id"]] = "register"
         else:
             state["decided"][c["id"]] = "skip"
-        save_plan(state_path, state)  # 1 件ごとに残す
+        save_json(state_path, state)  # 1 件ごとに残す
     for k in state.get("codex_proposals", []):  # 掟への追記は、依頼主が採用したものだけ（既定は採用しない）
         if codex.get(k["id"]) == "adopt":
             append_codex(gdir_of(qdir), k)
@@ -2012,7 +2012,7 @@ def archive_decide(qdir, data):
             state["decided"][k["id"]] = "skip"
     state["status"] = "done"
     rebuild_index(adir)
-    save_plan(state_path, state)
+    save_json(state_path, state)
 
 
 def append_codex(gdir, proposal):
@@ -2169,7 +2169,7 @@ def mutate_plan(cmd, path, argv):
     errs = validate(plan, tr)
     if errs:
         raise GuildError("plan.json の検査に失敗しました: " + " / ".join(errs))
-    commit = lambda: save_plan(path, plan)
+    commit = lambda: save_json(path, plan)
     redo_goal = None
     if cmd == "sync":
         result = sync(plan, tr)

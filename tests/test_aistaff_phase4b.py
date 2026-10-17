@@ -93,7 +93,7 @@ def done_plan(q, deliver_to="docs/reports", accepted=True):
     plan = {"quest": q.name, "title": "週報", "series": "s", "approved": True, "status": "active", "accepted": accepted,
             **({"deliver_to": deliver_to} if deliver_to else {}),
             "goals": [dict(g("G1", deliverable=True), state="done", retries=0, output=None)]}
-    guild.save_plan(q / "plan.json", plan)
+    guild.save_json(q / "plan.json", plan)
     out = q / "output" / "G1"
     out.mkdir(parents=True, exist_ok=True)
     (out / "a.md").write_text("本文", encoding="utf-8")
@@ -222,7 +222,7 @@ class CarryOverSafetyTest(unittest.TestCase):
             (d / "reports").mkdir()
             old = {"quest": "Q1", "title": "t", "approved": True, "status": "replan",
                    "goals": [dict(g("G1", deliverable=True, deliverable_spec=SPEC, format="md"), **old_kw, state="done", retries=0, output=None)]}
-            guild.save_plan(d / "plan.json", old)
+            guild.save_json(d / "plan.json", old)
             draft = {"quest": "Q1", "title": "t", "series": "s", "goals": [dict(g("G1", deliverable=True, deliverable_spec=SPEC), **new_kw)]}
             write(d / "reports" / "plan-draft.json", draft)
             return guild.adopt(d / "plan.json", TR)["carried"]

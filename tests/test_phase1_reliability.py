@@ -105,7 +105,7 @@ class LockTest(unittest.TestCase):
             return real(a, b)
 
         with mock.patch.object(guild.os, "replace", flaky):
-            guild.save_plan(self.path, {"a": 1})
+            guild.save_json(self.path, {"a": 1})
         self.assertEqual(json.loads(self.path.read_text(encoding="utf-8")), {"a": 1})
         self.assertEqual([p.name for p in self.dir.iterdir()], ["plan.json"])  # tmp が残らない
 
@@ -113,7 +113,7 @@ class LockTest(unittest.TestCase):
         seen = []
         real = os.replace
         with mock.patch.object(guild.os, "replace", lambda a, b: (seen.append(str(a)), real(a, b))[1]):
-            guild.save_plan(self.path, {"a": 1})
+            guild.save_json(self.path, {"a": 1})
         self.assertIn(str(os.getpid()), seen[0])
 
 
@@ -176,7 +176,7 @@ class AdoptOrderTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_outputs_stay_when_save_fails(self):
-        with mock.patch.object(guild, "save_plan", side_effect=OSError("disk")):
+        with mock.patch.object(guild, "save_json", side_effect=OSError("disk")):
             with self.assertRaises(OSError):
                 guild.adopt(self.path, TR)
         self.assertTrue((self.dir / "output" / "G1" / "x.md").exists())
@@ -343,7 +343,7 @@ class ReviewFixesTest(unittest.TestCase):
             pass
 
         with self.assertRaises(TypeError):
-            guild.save_plan(self.path, {"a": Boom()})  # JSON にできない
+            guild.save_json(self.path, {"a": Boom()})  # JSON にできない
         self.assertEqual(list(self.dir.iterdir()), [])
 
     def test_carry_over_terminates_on_cycle_and_unknown_dep(self):

@@ -147,7 +147,7 @@ class OverallTest(Base):
     def ingest_accept(self):
         write(self.q / "inbox" / "1-accept.json", {"type": "accept"})
         p = self.plan()
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         return p, guild.ingest(self.q / "plan.json", p, TR)
 
     def test_accept_is_refused_before_the_overall_check(self):
@@ -166,7 +166,7 @@ class OverallTest(Base):
         self.overall()
         old = self.plan()
         old["status"] = "replan"
-        guild.save_plan(self.q / "plan.json", old)
+        guild.save_json(self.q / "plan.json", old)
         write(self.q / "reports" / "plan-draft.json", {"quest": "Q001", "title": "題", "series": "s", "goals": [g("G1", deliverable=True, deliverable_spec=SPEC)]})
         guild.adopt(self.q / "plan.json", TR)
         self.assertFalse((self.q / "reports" / guild.OVERALL_REPORT).exists())
@@ -222,7 +222,7 @@ class DeliverToPublishTest(Base):
         plan = {"quest": "Q001", "title": "週報", "series": "s", "approved": True, "status": "active", "accepted": True,
                 **({"deliver_to": deliver_to} if deliver_to else {}),
                 "goals": [dict(g("G1", deliverable=True), state="done", retries=0, output=None)]}
-        guild.save_plan(self.q / "plan.json", plan)
+        guild.save_json(self.q / "plan.json", plan)
         out = self.q / "output" / "G1"
         out.mkdir(parents=True, exist_ok=True)
         (out / "a.md").write_text("本文", encoding="utf-8")
@@ -283,7 +283,7 @@ class DeliverToPublishTest(Base):
         guild.publish_deliverables(self.q)
         plan["status"] = "replan"
         plan["goals"][0]["state"] = "pending"
-        guild.save_plan(self.q / "plan.json", plan)
+        guild.save_json(self.q / "plan.json", plan)
         write(self.q / "reports" / "plan-draft.json", {"quest": "Q001", "title": "題", "series": "s", "goals": [g("G1", deliverable=True, deliverable_spec=SPEC)]})
         guild.adopt(self.q / "plan.json", TR)
         self.assertEqual(list((self.root / "docs" / "reports").glob("Q001_*")), [])
@@ -295,14 +295,14 @@ class CleanupTest(Base):
         guild.adopt(self.q / "plan.json", TR)
         p = json.loads((self.q / "plan.json").read_text(encoding="utf-8"))
         p["status"] = "replan"
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         guild.adopt(self.q / "plan.json", TR)
         self.assertFalse((self.q / "plan.prev.json").exists())
 
     def test_close_removes_prev_and_backup_only_for_closed_quests(self):
         def mk(q, **kw):
             plan = {"quest": q.name, "title": "t", "approved": True, "status": "active", "goals": [dict(g("G1"), state="done", retries=0, output=None)], **kw}
-            guild.save_plan(q / "plan.json", plan)
+            guild.save_json(q / "plan.json", plan)
             (q / "prev" / "20260101000000").mkdir(parents=True)
             (q / "prev" / "20260101000000" / "a.md").write_text("x", encoding="utf-8")
             (self.gdir / ".work" / "backup" / q.name).mkdir(parents=True)
@@ -320,7 +320,7 @@ class CleanupTest(Base):
         self.assertFalse((q3 / "prev").exists())
 
     def test_close_without_backup_still_removes_prev(self):
-        guild.save_plan(self.q / "plan.json", {"quest": "Q001", "title": "t", "approved": True, "status": "active", "accepted": True,
+        guild.save_json(self.q / "plan.json", {"quest": "Q001", "title": "t", "approved": True, "status": "active", "accepted": True,
                                               "goals": [dict(g("G1"), state="done", retries=0, output=None)]})
         (self.q / "prev" / "x").mkdir(parents=True)
         guild.close_quests(self.root)

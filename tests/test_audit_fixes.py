@@ -89,11 +89,11 @@ class StaleDraftTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def send(self, plan, obj):
-        guild.save_plan(self.q / "plan.json", plan)
+        guild.save_json(self.q / "plan.json", plan)
         (self.q / "inbox").mkdir(exist_ok=True)
         (self.q / "inbox" / "x.json").write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
         p = guild.load_plan(self.q / "plan.json")
-        guild.ingest(self.q / "plan.json", p, self.tr, commit=lambda: guild.save_plan(self.q / "plan.json", p))
+        guild.ingest(self.q / "plan.json", p, self.tr, commit=lambda: guild.save_json(self.q / "plan.json", p))
 
     def goal(self):
         return {"id": "G1", "title": "調べる", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": {k: k + " 十分に具体的" for k in guild.CRITERIA_KEYS}, "state": "done", "retries": 0}
@@ -125,7 +125,7 @@ class ArchiveDecideTest(unittest.TestCase):
             guild.init_guild(root)
             q = Path(guild.new_quest(root)["dir"])
             cands = [{"id": f"C{i}", "type": "term", "name": f"用語{i}", "summary": "説明", "confidence": "guess", "body": "本文"} for i in (1, 2)]
-            guild.save_plan(q / "archive.json", {"status": "proposed", "candidates": cands, "registered": [], "codex_proposals": [], "decided": {}})
+            guild.save_json(q / "archive.json", {"status": "proposed", "candidates": cands, "registered": [], "codex_proposals": [], "decided": {}})
             answer = {"type": "archive", "decisions": {"C1": "register", "C2": "register"}}
             real, calls = guild.apply_candidate, []
 

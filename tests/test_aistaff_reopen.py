@@ -34,7 +34,7 @@ class ReopenTest(unittest.TestCase):
         p = {"quest": "Q001", "title": "週報", "series": "週報", "approved": True, "status": "active", "accepted": True, "deliver_to": "docs/reports",
              "goals": [done_goal("G1", deliverable=True)], "history": [{"t": "x", "event": "accepted"}]}
         p.update(kw)
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         return p
 
     def send(self, obj):
@@ -42,7 +42,7 @@ class ReopenTest(unittest.TestCase):
         inbox.mkdir(exist_ok=True)
         (inbox / "reopen.json").write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
         plan = guild.load_plan(self.q / "plan.json")
-        report = guild.ingest(self.q / "plan.json", plan, TR, commit=lambda: guild.save_plan(self.q / "plan.json", plan))
+        report = guild.ingest(self.q / "plan.json", plan, TR, commit=lambda: guild.save_json(self.q / "plan.json", plan))
         return plan, report
 
     def test_accepted_quest_is_reopened_and_everything_published_is_withdrawn(self):

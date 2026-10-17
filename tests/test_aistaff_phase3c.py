@@ -59,7 +59,7 @@ class FormatTypeTest(Base):
         plan = {"quest": "Q001", "title": "t", "series": "s", "approved": True, "status": "active", "goals": [
             {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": dict(CRIT), "deliverable": True,
              "format": ["md"], "state": "done", "retries": 0, "output": None}]}
-        guild.save_plan(self.q / "plan.json", plan)
+        guild.save_json(self.q / "plan.json", plan)
         (self.q / "output" / "G1").mkdir(parents=True)
         (self.q / "output" / "G1" / "a.md").write_text("x", encoding="utf-8")
         self.assertEqual(guild.publish_deliverables(self.q)["published"], ["Q001_t.md"])
@@ -67,7 +67,7 @@ class FormatTypeTest(Base):
 
 class DigestShapeTest(Base):
     def test_a_non_dict_archive_json_does_not_hide_the_quest(self):
-        guild.save_plan(self.q / "plan.json", {"quest": "Q001", "title": "t", "series": "s", "approved": False, "status": "active", "goals": [
+        guild.save_json(self.q / "plan.json", {"quest": "Q001", "title": "t", "series": "s", "approved": False, "status": "active", "goals": [
             {"id": "G1", "title": "x", "kind": "auto", "class": "wizard", "effects": "none", "deps": [], "criteria": dict(CRIT), "state": "pending", "retries": 0, "output": None}]})
         (self.q / "archive.json").write_text("[1]", encoding="utf-8")
         d = guild.digest(self.root)
@@ -80,7 +80,7 @@ class FormatDeliverablesTest(Base):
         plan = {"quest": "Q001", "title": "週報", "series": "s", "approved": True, "status": "active", "goals": [
             {"id": "G1", "title": "x", "kind": "auto", "class": "alchemist", "effects": "none", "deps": [], "criteria": dict(CRIT), "deliverable": True,
              "format": fmt, "state": "done", "retries": 0, "output": None}]}
-        guild.save_plan(self.q / "plan.json", plan)
+        guild.save_json(self.q / "plan.json", plan)
         d = self.q / "output" / "G1"
         d.mkdir(parents=True, exist_ok=True)
         for n in ("memo.md", "report.html"):

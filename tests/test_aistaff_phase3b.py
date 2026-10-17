@@ -94,9 +94,9 @@ class AdoptMetaTest(Base):
         self.adopt()
         p = self.plan()
         write(self.q / "inbox" / "1-meta.json", {"type": "meta", "title": "営業部の週報", "series": "営業の週報"})
-        guild.ingest(self.q / "plan.json", p, TR, commit=lambda: guild.save_plan(self.q / "plan.json", p))
+        guild.ingest(self.q / "plan.json", p, TR, commit=lambda: guild.save_json(self.q / "plan.json", p))
         p["approved"], p["status"] = True, "replan"
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         self.draft(title="受付係の新しい題", series="新しい series")
         self.adopt()
         p2 = self.plan()
@@ -108,7 +108,7 @@ class AdoptMetaTest(Base):
         self.adopt()
         p = self.plan()
         p["status"] = "replan"
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         self.draft(title="新しい題", series="新しい series")
         self.adopt()
         self.assertEqual((self.plan()["title"], self.plan()["series"]), ("新しい題", "新しい series"))
@@ -123,7 +123,7 @@ class MetaInputTest(Base):
     def ingest(self, data):
         write(self.q / "inbox" / "1-meta.json", data)
         p = self.plan()
-        r = guild.ingest(self.q / "plan.json", p, TR, commit=lambda: guild.save_plan(self.q / "plan.json", p))
+        r = guild.ingest(self.q / "plan.json", p, TR, commit=lambda: guild.save_json(self.q / "plan.json", p))
         return r
 
     def test_changes_title_and_locks_it(self):
@@ -138,7 +138,7 @@ class MetaInputTest(Base):
         self.assertEqual(self.plan()["meta_locked"], ["series"])
         write(self.q / "inbox" / "2-meta.json", {"type": "meta", "title": "題", "series": "また別"})
         p = self.plan()
-        guild.ingest(self.q / "plan.json", p, TR, commit=lambda: guild.save_plan(self.q / "plan.json", p))
+        guild.ingest(self.q / "plan.json", p, TR, commit=lambda: guild.save_json(self.q / "plan.json", p))
         self.assertEqual(self.plan()["meta_locked"], ["series", "title"])
 
     def test_bad_input_is_rejected(self):
@@ -152,7 +152,7 @@ class MetaInputTest(Base):
         for status in ("replan", "aborted"):
             p = self.plan()
             p["status"] = status
-            guild.save_plan(self.q / "plan.json", p)
+            guild.save_json(self.q / "plan.json", p)
             self.assertEqual(len(self.ingest({"type": "meta", "title": "x"})["rejected"]), 1, status)
             for f in (self.q / "inbox" / "rejected").glob("*"):
                 f.unlink()
@@ -161,7 +161,7 @@ class MetaInputTest(Base):
         p = self.plan()
         p["approved"], p["accepted"] = True, True
         p["goals"][0]["state"] = "done"
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         out = self.q / "output" / "G1"
         out.mkdir(parents=True)
         (out / "報告.md").write_text("本文", encoding="utf-8")
@@ -237,7 +237,7 @@ class PromptFormatTest(Base):
         self.assertNotIn("targets", json.loads((q / "request.json").read_text(encoding="utf-8")))
 
     def test_only_prompt_files_are_published_for_prompt_format(self):
-        guild.save_plan(self.q / "plan.json", {"quest": "Q001", "title": "提案", "series": "提案", "approved": True, "status": "active",
+        guild.save_json(self.q / "plan.json", {"quest": "Q001", "title": "提案", "series": "提案", "approved": True, "status": "active",
                                                "goals": [dict(g("G1", deliverable=True, format="prompt"), state="done")]})
         d = self.q / "output" / "G1"
         d.mkdir(parents=True)
@@ -252,7 +252,7 @@ class PublishFormatTest(Base):
         goals = [dict(g("G1", deliverable=True, format=fmt), state="done")]
         if extra_goal:
             goals.insert(0, dict(g("G0"), state="done"))
-        guild.save_plan(self.q / "plan.json", {"quest": "Q001", "title": "週報: 営業/部?", "series": "週報", "approved": True, "status": "active", "goals": goals})
+        guild.save_json(self.q / "plan.json", {"quest": "Q001", "title": "週報: 営業/部?", "series": "週報", "approved": True, "status": "active", "goals": goals})
 
     def out(self, gid, name, body="x"):
         d = self.q / "output" / gid
@@ -295,7 +295,7 @@ class PublishFormatTest(Base):
         self.done_plan("md")
         p = json.loads((self.q / "plan.json").read_text(encoding="utf-8"))
         p["title"] = "///"
-        guild.save_plan(self.q / "plan.json", p)
+        guild.save_json(self.q / "plan.json", p)
         self.out("G1", "a.md")
         guild.publish_deliverables(self.q)
         self.assertEqual(self.names(), ["Q001_a.md"])

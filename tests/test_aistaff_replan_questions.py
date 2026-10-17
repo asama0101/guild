@@ -65,7 +65,7 @@ class ReplanAnswersTest(unittest.TestCase):
         self.root = Path(self.tmp.name)
         guild.init_guild(self.root)
         self.q = Path(guild.new_quest(self.root)["dir"])
-        guild.save_plan(self.q / "plan.json", {"quest": "Q001", "title": "週報", "series": "週報", "approved": False, "status": "replan", "goals": [], "history": []})
+        guild.save_json(self.q / "plan.json", {"quest": "Q001", "title": "週報", "series": "週報", "approved": False, "status": "replan", "goals": [], "history": []})
         (self.q / "inbox").mkdir(exist_ok=True)
 
     def tearDown(self):
