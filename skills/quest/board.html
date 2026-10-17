@@ -1714,7 +1714,7 @@ function searchBox(key, placeholder) {
 }
 const hit = (q, ...texts) => !q || texts.some((t) => String(t || '').toLowerCase().includes(q));
 
-// 「納品物」画面は、ファイル画面を統合した：左で種類（初めはすべて）、右で依頼別／種類別
+// 「納品物」画面は、ファイル画面を統合した：左で種類（初めは納品物）、右で依頼別／種類別
 function sendArchive(obj, key) {
   return writeOrFallback(`archive/inbox/${nowName(obj.type, String(Math.floor(Math.random() * 9000) + 1000))}`, JSON.stringify(obj, null, 2), () => { S.sent[key] = true; }).then((ok) => { if (ok) return refresh(true); });
 }
@@ -2145,7 +2145,7 @@ const FVIEWS = [['quest', '依頼別'], ['kind', '種類別']];
 const FKINDS = ['納品物', '成果物', '報告', '書庫', 'インプット'];
 function delivTab() {
   const m = S.model; if (!m) return h('p', { class: 'sub' }, '保存先につなぐと、ここに表示されます。');
-  const fm = filesModel(m), view = S.fview === 'kind' ? 'kind' : 'quest', kind = FKINDS.includes(S.fkind) ? S.fkind : 'all', q = (S.form['f:fs'] || '').trim().toLowerCase();
+  const fm = filesModel(m), view = S.fview === 'kind' ? 'kind' : 'quest', kind = FKINDS.includes(S.fkind) || S.fkind === 'all' ? S.fkind : '納品物', q = (S.form['f:fs'] || '').trim().toLowerCase();
   const hitQ = (x) => hit(q, x.id, x.title, x.series);
   const count = (k) => fm.kinds.filter(([n]) => k === 'all' || n === k).reduce((a, [, fs]) => a + fs.length, 0);
   const waiting = m.quests.filter((x) => x.allDone && !x.finished && x.q.plan && x.q.plan.status === 'active');
