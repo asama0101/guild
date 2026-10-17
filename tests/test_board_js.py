@@ -198,5 +198,5 @@ class FollowupActionsTest(unittest.TestCase):
 class LogYesNeedsMemoTest(unittest.TestCase):
     def test_log_yes_asks_for_a_memo_in_the_same_row(self):
         row = BOARD[BOARD.index("function turnRow("):BOARD.index("function logTab(")]
-        for needle in ("class: 'logmemo'", "if (ok && !note)", "メモを書いてください", "e.key === 'Enter'", "note, files: []"):
+        for needle in ("class: 'logmemo'", "メモ必須", "メモ（必須）", "if (ok && !note)", "メモを書いてください", "e.key === 'Enter'", "note, files: []"):
             self.assertIn(needle, row, needle)

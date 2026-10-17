@@ -204,7 +204,7 @@ textarea.need{border:2px solid var(--banner);background:#F6E4E1}
 .tn .tt{flex:1 1 320px;min-width:0}
 .tn .ta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;margin-left:auto}
 .tn .ta .who{font-size:12px}
-.tn .ta input.logmemo{width:240px;flex:0 1 240px;min-width:0;min-height:34px;padding:4px 8px;font-size:13px}
+.tn .ta input.logmemo{width:300px;flex:0 1 300px;min-width:0;min-height:34px;padding:4px 8px;font-size:13px}
 .tn .ta{flex-wrap:nowrap}
 .tn .tt{flex:1 1 200px}
 @media (max-width:760px){.tn .ta{flex-wrap:wrap}}
@@ -1783,9 +1783,9 @@ function turnRow(q) {
         S.form['log:ask'] = ''; S.form[mk] = ''; S.form[mk + ':err'] = '';
         await send(q.id, { type: 'result', goal: t.id, ok, note, files: [] }, key);
       };
-      const memo = ok ? h('input', { type: 'text', id: mk, class: 'logmemo', placeholder: '何を確かめたか（例：部長が B 案を選んだ・10/20）', 'aria-label': `${t.id} のメモ（必須）`, maxlength: '300' }) : null;
+      const memo = ok ? h('input', { type: 'text', id: mk, class: 'logmemo', placeholder: 'メモ（必須）：何を確かめたか　例：部長が B 案を選んだ', 'aria-label': `${t.id} のメモ（必須）`, maxlength: '300' }) : null;
       if (memo) { memo.value = S.form[mk] || ''; bindKey(memo, mk); memo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); S.form[mk] = memo.value; fire(); } }); }
-      return h('span', { class: 'ta', role: 'alert' }, h('span', { class: 'fine' }, ok ? '「できた」' : `${t.id}を「できなかった」で送る？`), memo,
+      return h('span', { class: 'ta', role: 'alert' }, h('span', { class: 'fine' }, ok ? [h('span', { class: 'fine' }, '「できた」'), h('span', { class: 'badge-req' }, 'メモ必須')] : `${t.id}を「できなかった」で送る？`), memo,
         ok && S.form[mk + ':err'] ? h('span', { class: 'fine', style: 'color:var(--ng);font-weight:700' }, S.form[mk + ':err']) : null,
         h('button', { type: 'button', class: 'btn sm go', onclick: fire }, '送る'),
         h('button', { type: 'button', class: 'btn ghost sm', onclick: () => { S.form['log:ask'] = ''; S.form[mk + ':err'] = ''; render(); } }, 'やめる'));
