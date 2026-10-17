@@ -140,3 +140,9 @@ class PauseBoxTest(unittest.TestCase):
         for needle in ("aliveInfo(S.hb, Date.now())", "印だけが残っています", "その役が返るまで", "止める作業がないので"):
             self.assertIn(needle, box, needle)
         self.assertIn("on ? h('button', { class: 'btn wax'", box)  # 動いていないときは「閉める」を出さない
+
+
+class SelectOpenDefersRefreshTest(unittest.TestCase):
+    def test_refresh_waits_while_a_select_is_open(self):
+        for needle in ("ae.tagName === 'SELECT' && S.selAt", "addEventListener('focusin'", "S.selAt = 0"):
+            self.assertIn(needle, BOARD, needle)

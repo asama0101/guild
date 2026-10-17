@@ -2370,6 +2370,7 @@ function isPressing() { return !!S.pressAt && Date.now() - S.pressAt < 5000; }  
 function isEditing() {
   if (S.composing) return true;
   const ae = document.activeElement;
+  if (ae && ae.tagName === 'SELECT' && S.selAt && Date.now() - S.selAt < 30000) return true;  // リストボックスを開いている間に作り直すと、すぐ閉じてしまう（選ぶか、30 秒で解く）
   const field = ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && ae.type !== 'radio' && ae.type !== 'checkbox' && ae.type !== 'file'));
   return !!field && Date.now() - S.lastInput < 10000;
 }
@@ -2498,7 +2499,10 @@ async function start() {
     if (k && e.target.type !== 'radio' && e.target.type !== 'checkbox') S.form[k] = e.target.value;
     if ((k && k.startsWith('f:') && !S.composing)) render();
   });
+  document.addEventListener('focusin', (e) => { if (e.target.tagName === 'SELECT') S.selAt = Date.now(); });
+  document.addEventListener('mousedown', (e) => { if (e.target.tagName === 'SELECT') S.selAt = Date.now(); }, true);
   document.addEventListener('change', (e) => {
+    if (e.target.tagName === 'SELECT') S.selAt = 0;
     const t = e.target, k = t.dataset && t.dataset.key;
     if (k && t.type === 'radio') S.form[k] = t.value;
     if (k && t.type === 'checkbox') S.form[k] = Array.from(document.querySelectorAll('input[type=checkbox]')).filter((c) => c.dataset.key === k && c.checked).map((c) => c.value);
