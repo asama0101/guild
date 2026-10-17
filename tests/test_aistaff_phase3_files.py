@@ -13,6 +13,7 @@ BOARD = (ROOT / "skills" / "quest" / "board.html").read_text(encoding="utf-8")
 PRE = r"""
 const h = (t, a, ...c) => ({ t, a: a || {}, c: c.flat(Infinity).filter((x) => x != null && x !== false) });
 const mermaidBlock = (src) => h('mermaid', null, src);
+const HTML_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
 const text = (n) => (typeof n === 'string' ? n : Array.isArray(n) ? n.map(text).join('') : n.c.map(text).join(''));
 const find = (n, t, acc = []) => { if (typeof n === 'string') return acc; if (n.t === t) acc.push(n); n.c.forEach((x) => find(x, t, acc)); return acc; };
 """
@@ -125,9 +126,11 @@ console.log(JSON.stringify([k('a.md', '# x'), k('a.md', '# x', true), k('a.txt',
         out = run("""
 const n = docView('a.html', '<script>alert(1)</script>');
 const f = find(n, 'iframe')[0];
-console.log(JSON.stringify({ sandbox: f.a.sandbox, srcdoc: f.a.srcdoc }));""")
+console.log(JSON.stringify({ sandbox: f.a.sandbox, srcdoc: f.a.srcdoc, csp: f.a.csp }));""")
         self.assertEqual(out["sandbox"], "")  # すべての許可なし（スクリプト・同一オリジンなし）
         self.assertIn("<script>", out["srcdoc"])
+        self.assertTrue(out["srcdoc"].startswith('<meta http-equiv="Content-Security-Policy" content="default-src \'none\''))  # 外部へ通信させない
+        self.assertIn("default-src 'none'", out["csp"])
 
 
 @unittest.skipUnless(shutil.which("node"), "node がありません")
@@ -169,7 +172,8 @@ class FilesModelTest(unittest.TestCase):
 class WiringTest(unittest.TestCase):
     def test_tab_reader_and_deliverable_filter_are_wired(self):
         for needle in ("['files', 'ファイル']", "files: filesTab", "docView(S.reader.path, S.reader.text, S.reader.source)", "ソースで見る",
-                       r"/\.(md|html|mmd)$/i.test(x.name)", "securityLevel: 'strict'", "mermaid@10.9.1", "sandbox: ''"):
+                       r"/\.(md|html|mmd)$/i.test(x.name)", "securityLevel: 'strict'", "mermaid@10.9.1", "sandbox: ''", "s.integrity = MERMAID_SRI", "s.crossOrigin = 'anonymous'",
+                       "function cleanSvg(root)", "foreignObject", "const HTML_CSP"):
             self.assertIn(needle, BOARD, needle)
 
     def test_no_inner_html_is_used_for_documents(self):

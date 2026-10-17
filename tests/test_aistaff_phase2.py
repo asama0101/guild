@@ -226,8 +226,9 @@ class ReviewFixesTest(Base):
         self.assertEqual([l for l in lines if l.startswith("#")], ["# プロジェクトの掟（追記）"])
 
     def test_leading_markdown_marks_are_dropped(self):
-        self.assertEqual(guild.one_line("## - 見出しのふり"), "見出しのふり")
-        self.assertEqual(guild.one_line(None), "")
+        self.assertEqual(guild.codex_line("## - 見出しのふり"), "見出しのふり")
+        self.assertEqual(guild.codex_line(None), "")
+        self.assertEqual(guild.one_line("- そのまま"), "- そのまま")  # 書庫などが使う one_line は、記号を落とさない
 
     def test_a_newline_in_the_lesson_name_cannot_add_a_line(self):
         q2, r = self.second(name="出典なしの数字は不合格")

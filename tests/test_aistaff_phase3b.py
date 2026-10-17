@@ -65,7 +65,7 @@ class MetaCheckTest(unittest.TestCase):
 
     def test_whitespace_and_newlines_are_normalised(self):
         _, _, t, s = guild.check_meta({"title": " a" + chr(10) + "b ", "series": "## 見出し"})
-        self.assertEqual((t, s), ("a b", "見出し"))
+        self.assertEqual((t, s), ("a b", "## 見出し"))  # タイトルの記号は落とさない（掟の 1 行とは別）
 
 
 class AdoptMetaTest(Base):

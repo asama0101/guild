@@ -278,7 +278,7 @@ def validate(plan, tr):
             errs.append(f"{i}: kind が不明です: {t.get('kind')}")
         if t.get("state") not in tr["states"]:
             errs.append(f"{i}: state が不明です: {t.get('state')}")
-        if "format" in t and t["format"] not in FORMATS:
+        if "format" in t and not (isinstance(t["format"], str) and t["format"] in FORMATS):
             errs.append(f"{i}: format は {'・'.join(FORMATS)} のどれかにしてください: {t['format']!r}")
         if t.get("kind") == "auto":
             if t.get("class") not in CLASSES:
@@ -360,7 +360,7 @@ def archive_state(qdir):
         return "none"
     try:
         return "done" if load_json(f).get("status") == "done" else "proposed"
-    except GuildError:
+    except (GuildError, AttributeError):  # 壊れている・dict でない archive.json は、確認待ちとして扱う
         return "proposed"
 
 
@@ -813,7 +813,7 @@ def request_format(qdir):
         f = load_json(Path(qdir) / "request.json").get("format") if (Path(qdir) / "request.json").exists() else None
     except (GuildError, AttributeError):
         f = None
-    return f if f in FORMATS else DEFAULT_FORMAT
+    return f if isinstance(f, str) and f in FORMATS else DEFAULT_FORMAT
 
 
 def apply_format(plan, fmt):
@@ -821,7 +821,7 @@ def apply_format(plan, fmt):
     errs = []
     for t in plan["goals"]:
         if t.get("deliverable") is True:
-            if t.get("format") not in (None, fmt):
+            if t.get("format") is not None and t.get("format") != fmt:
                 errs.append(f"{t['id']}: 納品する目標の format は、依頼の形式（{fmt}）と同じにしてください: {t['format']!r}")
             t["format"] = fmt
     return errs
@@ -1120,7 +1120,8 @@ def deliverable_files(qdir, plan):
         d = Path(qdir) / "output" / t["id"]
         if t.get("state") != "done" or not d.is_dir():
             continue
-        exts = {".md", FORMATS.get(t.get("format"), ".md")}  # 納品する目標は、指定の形式（html・mermaid）のファイルも納品物にする
+        f = t.get("format")
+        exts = {FORMATS[f] if isinstance(f, str) and f in FORMATS else ".md"}  # 納品する目標は、指定の形式のファイルだけを納品物にする
         for f in sorted(d.rglob("*")):
             if not f.is_file():
                 continue
@@ -1186,7 +1187,7 @@ def new_quest(root, request_id=None):
         if not src.exists():
             raise GuildError(f"{src} がありません")
         req = load_json(src)
-        if req.get("format") is not None and req["format"] not in FORMATS:
+        if req.get("format") is not None and not (isinstance(req["format"], str) and req["format"] in FORMATS):
             msg = f"format は {'・'.join(FORMATS)} のどれかにしてください: {req['format']!r}"
             reject_request(wdir, request_id, msg)
             raise GuildError(msg)
@@ -1393,6 +1394,8 @@ def quest_digest(qdir):
     try:
         arch = load_json(qdir / "archive.json") if (qdir / "archive.json").exists() else {}
     except GuildError:
+        arch = {}
+    if not isinstance(arch, dict):
         arch = {}
     if arch.get("status") == "proposed":
         needs.append({"kind": "archive", "text": "書庫の登録候補の確認"})
@@ -1723,7 +1726,7 @@ def auto_registrable(adir, c):
     return True
 
 
-def one_line(text):
+def codex_line(text):
     """1 行にする。改行・\r・U+2028 など、すべての空白を 1 つの空白にし、行頭の見出し・箇条書きの記号を落とす。"""
     t = " ".join(str(text or "").split())
     while t[:1] in ("#", "-", "*", ">", "+"):
@@ -1737,9 +1740,9 @@ def codex_proposals(cands, quest):
     out = []
     for c in cands:
         if c["type"] == "lesson" and c.get("update_of"):
-            text = one_line(c.get("codex") or c.get("summary"))
+            text = codex_line(c.get("codex") or c.get("summary"))
             if text:
-                out.append({"id": f"K{len(out) + 1}", "name": one_line(c["name"]), "text": text, "quest": quest})
+                out.append({"id": f"K{len(out) + 1}", "name": codex_line(c["name"]), "text": text, "quest": quest})
     return out
 
 
@@ -1749,7 +1752,7 @@ def clean_followups(raw):
         return []
     out = []
     for x in raw:
-        t = one_line(x) if isinstance(x, str) else ""
+        t = codex_line(x) if isinstance(x, str) else ""
         if t:
             out.append(t[:FOLLOWUP_MAX])
     return out[:MAX_FOLLOWUPS]
@@ -1828,8 +1831,8 @@ def append_codex(gdir, proposal):
     path = work_dir(gdir) / CODEX / "project.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     text = path.read_text(encoding="utf-8") if path.exists() else "# プロジェクトの掟（追記）\n\n"
-    ptext, pname = one_line(proposal["text"]), one_line(proposal["name"])
-    line = f"- {ptext}（心得「{pname}」、{one_line(proposal.get('quest'))}、{today()}）"
+    ptext, pname = codex_line(proposal["text"]), codex_line(proposal["name"])
+    line = f"- {ptext}（心得「{pname}」、{codex_line(proposal.get('quest'))}、{today()}）"
     if f"- {ptext}（" in text:
         return
     if "（まだありません）" in text:

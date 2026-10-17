@@ -1533,7 +1533,8 @@ function metaEditor(qd) {
   const p = qd.q.plan;
   if (!p || p.status === 'aborted' || p.status === 'replan') return null;
   const open = S.metaOpen === qd.id, k = `meta:${qd.id}`;
-  if (!open) return h('button', { type: 'button', class: 'linkbtn', style: 'margin:0 0 6px', onclick: () => { S.metaOpen = qd.id; render(); } }, '題名・関連を直す');
+  if (!open) return h('div', null, h('button', { type: 'button', class: 'linkbtn', style: 'margin:0 0 6px', onclick: () => { S.metaOpen = qd.id; render(); } }, '題名・関連を直す'),
+    qd.q.inbox.some((x) => x.type === 'meta') ? h('span', { class: 'fine', style: 'margin-left:8px' }, '題名・関連の変更を送信済み（/guild:quest が読み取ると反映されます）') : null);
   const t = h('input', { type: 'text', 'aria-label': '題名', maxlength: '80' }); t.value = S.form[`${k}:title`] !== undefined ? S.form[`${k}:title`] : (p.title || ''); bindKey(t, `${k}:title`);
   const sr = h('input', { type: 'text', 'aria-label': '関連（series）', maxlength: '80' }); sr.value = S.form[`${k}:series`] !== undefined ? S.form[`${k}:series`] : (p.series || ''); bindKey(sr, `${k}:series`);
   const sent = qd.q.inbox.some((x) => x.type === 'meta');
@@ -1998,21 +1999,34 @@ function renderMarkdown(src) {
   return out;
 }
 // Mermaid の図：まずソースを出し、描画できたら図に置き換える。描画の部品（mermaid.js）は、見るときにインターネット（CDN）から読み込む。読めないときは、ソースのまま
+const HTML_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";  // HTML の納品物は、外部へ通信させない（画像は data: だけ）
 const MERMAID_URL = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
+const MERMAID_SRI = 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr';  // 改ざんされた部品は、読み込まない
 const mmCache = {}; let mmPromise = null, mmSeq = 0;
 function loadMermaid() {
   if (!mmPromise) mmPromise = new Promise((res, rej) => {
     if (window.mermaid) { res(window.mermaid); return; }
-    const s = document.createElement('script'); s.src = MERMAID_URL;
+    const s = document.createElement('script'); s.src = MERMAID_URL; s.integrity = MERMAID_SRI; s.crossOrigin = 'anonymous';
     s.onload = () => { try { window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', flowchart: { htmlLabels: false } }); res(window.mermaid); } catch (e) { mmPromise = null; rej(e); } };
     s.onerror = () => { mmPromise = null; rej(new Error('mermaid を読み込めませんでした')); };
     document.head.appendChild(s);
   });
   return mmPromise;
 }
+// SVG の掃除：script・foreignObject・イベント属性（on*）・javascript: の参照を落とす（Mermaid の strict に加えた、もう一重の守り）
+function cleanSvg(root) {
+  for (const el of Array.from(root.querySelectorAll('script, foreignObject, iframe, object, embed'))) el.remove();
+  for (const el of [root, ...root.querySelectorAll('*')]) {
+    for (const a of Array.from(el.attributes)) {
+      if (/^on/i.test(a.name) || (/^(xlink:)?href$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) el.removeAttribute(a.name);
+    }
+  }
+  return root;
+}
 function svgNode(svgText) {
   const root = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
   if (!root || root.nodeName === 'parsererror' || root.querySelector('parsererror')) throw new Error('図を読み取れませんでした');
+  cleanSvg(root);
   return document.importNode(root, true);
 }
 function mermaidBlock(src) {
@@ -2032,7 +2046,7 @@ function docView(path, text, asSource) {
   if (asSource || !['md', 'html', 'mmd'].includes(k)) return h('pre', null, text);
   if (k === 'md') return h('div', { class: 'md' }, renderMarkdown(text));
   if (k === 'mmd') return h('div', { class: 'md' }, mermaidBlock(text));
-  return h('div', { class: 'md' }, h('p', { class: 'fine', style: 'margin:0 0 4px' }, 'HTML の納品物です。スクリプトは動かしません。'), h('iframe', { class: 'md-frame', sandbox: '', srcdoc: text, title: 'HTML の納品物' }));
+  return h('div', { class: 'md' }, h('p', { class: 'fine', style: 'margin:0 0 4px' }, 'HTML の納品物です。スクリプトは動かしません。'), h('iframe', { class: 'md-frame', sandbox: '', csp: HTML_CSP, srcdoc: `<meta http-equiv="Content-Security-Policy" content="${HTML_CSP}">` + text, title: 'HTML の納品物' }));
 }
 const TEXT_EXT = ['md', 'txt', 'csv', 'json', 'html', 'mmd', 'yaml', 'yml', 'xml', 'log', 'tsv'];
 function canOpen(path) { return TEXT_EXT.includes(docKind(path)); }
