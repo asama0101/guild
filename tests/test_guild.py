@@ -1377,6 +1377,10 @@ class WebGateHookTest(unittest.TestCase):
         self.assertIn("許可待ち", out["permissionDecisionReason"])
         self.assertEqual(webaccess.pending(self.root / "guild")[0]["domain"], "a.example.jp")
 
+    def test_wizard_prompt_is_recorded_as_the_purpose(self):
+        self.run_hook({"agent_type": "guild:wizard", "tool_input": {"url": "https://a.example.jp/", "prompt": "営業時間を取り出す"}})
+        self.assertEqual(webaccess.pending(self.root / "guild")[0]["purposes"], ["営業時間を取り出す"])
+
     def test_wizard_allowed_domain_passes_silently(self):
         webaccess.save(self.root / "guild", dict(webaccess.load(self.root / "guild"), allow=["example.jp"]))
         r = self.run_hook({"agent_type": "guild:wizard", "tool_input": {"url": "https://a.example.jp/"}})
@@ -2472,3 +2476,40 @@ class WebParentDecisionTest(unittest.TestCase):
         webaccess.apply(data, {"type": "web", "decisions": {"example.jp": "allow"}})
         self.assertEqual(data["allow"], ["example.jp"])
         self.assertEqual([p["domain"] for p in data["pending"]], ["other.jp", "notexample.jp"])
+
+
+class WebDescribeTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        guild.init_guild(self.root)
+        self.gdir = self.root / "guild"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_gate_records_the_purpose_from_the_prompt(self):
+        webaccess.gate(self.gdir, "https://a.example.jp/1", "価格表を   取り出す\n")
+        webaccess.gate(self.gdir, "https://a.example.jp/2", "価格表を 取り出す")  # 同じ目的は重ねない
+        webaccess.gate(self.gdir, "https://a.example.jp/3", "送料を調べる")
+        p = webaccess.pending(self.gdir)[0]
+        self.assertEqual(p["purposes"], ["価格表を 取り出す", "送料を調べる"])
+
+    def test_describe_writes_only_for_pending_domains_and_trims(self):
+        webaccess.gate(self.gdir, "https://a.example.jp/1")
+        r = webaccess.describe(self.gdir, {"a.example.jp": "政府統計の窓口 " * 20, "other.jp": "x", "b.example.jp": ""})
+        self.assertEqual(r["written"], ["a.example.jp"])
+        self.assertEqual(sorted(s["domain"] for s in r["skipped"]), ["b.example.jp", "other.jp"])
+        self.assertLessEqual(len(webaccess.load(self.gdir)["notes"]["a.example.jp"]), webaccess.NOTE_MAX)
+
+    def test_describe_cli_and_reset_keeps_only_listed_notes(self):
+        webaccess.gate(self.gdir, "https://a.example.jp/1")
+        f = self.root / "d.json"
+        f.write_text(json.dumps({"descriptions": {"a.example.jp": "例の説明"}}, ensure_ascii=False), encoding="utf-8")
+        r = subprocess.run([sys.executable, str(ROOT / "skills" / "quest" / "guild.py"), "web-describe", str(self.root), str(f)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        data = webaccess.load(self.gdir)
+        data["pending"] = []
+        webaccess.save(self.gdir, data)
+        webaccess.reset(self.gdir)
+        self.assertEqual(webaccess.load(self.gdir)["notes"], {})

@@ -189,7 +189,8 @@
 | `close <root>` | 閉じた依頼（受け取り済みか中止）の、インプットのバックアップ（`.work/backup/Q###`）を消す。進行中の依頼のものは残す |
 | `ingest <plan.json>` | `inbox/*.json`（下の「入力」）を検査して反映し、処理済みを `inbox/done/` に移す。不正な入力は `inbox/rejected/` に移して理由を出す。`accept` を取り込むと納品物を置き（`publish` と同じ）、`decision` の `abort`・`replan` では取り下げる |
 | `web-ingest <root>` | `.work/web/inbox/` の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を `.work/web/access.json` に反映する。不正な入力は `rejected/` に理由（`<入力>.reason.txt`）つきで移す |
-| `web-pending <root>` | 魔法使いがフックに止められて、依頼主の答え待ちのドメイン（`access.json` の `pending`）を一覧する |
+| `web-pending <root>` | 魔法使いがフックに止められて、依頼主の答え待ちのドメイン（`access.json` の `pending`。`purposes` は WebFetch の `prompt`＝取りたい内容で、フックが記録する事実）を一覧する |
+| `web-describe <root> <file>` | `<file>`（`{"descriptions": {ドメイン: 一言の説明}}`）の説明を、許可待ちのドメインの `access.json` の `notes` に書く。80 字以内。許可待ちにないドメインは飛ばす。説明は AI の推測で、ボードには「AI の推測」として出る |
 | `web-reset <root>` | 「今回だけ」の許可（`once`）と、許可しなかった記録（`denied`）を空にする（依頼の完了・中止のとき）。出力の `cleared` は消したもの、`allow` は残った許可リスト |
 | `pause <root>` | 「ギルドを閉める」。`guild/.work/pause.json`（`{"type": "pause", "created": …}`）を書く。ボードの「ギルドを閉める」と `/guild:close` が使う。`guild/` がなければエラー。依頼は中止にならない |
 | `pause-status <root>` | pause.json があるか（`paused`）。中身は見ず、壊れていても「あり」。ギルドマスターが周回の頭で見る。あれば、新しい役を呼ばず、実行中の役が終わるのを待って止まる |

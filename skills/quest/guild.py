@@ -19,6 +19,7 @@ guild.py publish QDIR: 納品物を guild/deliverables/ へコピーする（全
 guild.py archive-propose QDIR: 司書の候補（reports/archive-draft.json）を検査し、心得を登録して、残りを依頼主の確認待ち（archive.json）にする。
 guild.py archive-ingest ROOT: .work/archive-inbox/ の入力（entry・promote・deprecate・retype）を書庫に反映する。
 guild.py web-ingest ROOT: .work/web/inbox/ の依頼主の答え（WebFetch の許可・不許可、許可リストの追加・削除）を反映する。
+guild.py web-describe ROOT FILE: FILE（{"descriptions": {ドメイン: 一言の説明}}）の説明を、許可待ちのドメインに付ける（ボードの手紙に「AI の推測」として出る）。
 guild.py web-pending ROOT: 魔法使いが止められて、依頼主の答え待ちのドメインを一覧する。
 guild.py web-reset ROOT: 「今回だけ」の許可と、許可しなかった記録を空にする（依頼の完了・中止のとき）。
 入力（inbox の JSON）の type には、due（依頼の開始日・締切、目標の予定日・締切の設定。目標の締切だけ解除できる）と、inputs（このクエストのインプットの追加・外す。足す名前は guild/inputs/ にあること）がある。
@@ -2164,7 +2165,7 @@ def mutate_plan(cmd, path, argv):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "inputs-list", "pause", "pause-status", "pause-clear", "stats", "digest", "past-quests", "overall-skip"):
+    if len(argv) < 3 or argv[1] not in ("validate", "sync", "next", "ingest", "advance", "adopt", "init", "new", "requests", "close", "wait", "arrivals", "answers", "publish", "archive-propose", "archive-ingest", "web-ingest", "web-pending", "web-reset", "web-describe", "inputs-list", "pause", "pause-status", "pause-clear", "stats", "digest", "past-quests", "overall-skip"):
         print(__doc__)
         return 1
     cmd, path = argv[1], argv[2]
@@ -2183,6 +2184,16 @@ def main(argv):
             return 0
         if cmd in ("pause", "pause-status", "pause-clear"):
             print(json.dumps({"pause": pause_guild, "pause-status": pause_status, "pause-clear": pause_clear}[cmd](path), ensure_ascii=False))
+            return 0
+        if cmd == "web-describe":
+            if len(argv) != 4:
+                raise GuildError("web-describe ROOT FILE の形で指定してください")
+            try:
+                body = load_json(Path(argv[3]))
+                result = webaccess.describe(Path(path) / "guild", body.get("descriptions") if isinstance(body, dict) else None)
+            except webaccess.WebError as e:
+                raise GuildError(str(e))
+            print(json.dumps(result, ensure_ascii=False))
             return 0
         if cmd in ("web-ingest", "web-pending", "web-reset"):
             gdir = Path(path) / "guild"

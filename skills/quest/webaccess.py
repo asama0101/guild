@@ -4,7 +4,8 @@
   allow    許可リストのドメイン（サブドメインも通す）
   once     「今回だけ」許可したドメイン。依頼の完了・中止で guild.py web-reset が空にする
   denied   依頼主が許可しなかったドメイン。同じく web-reset で空にする
-  pending  魔法使いが開こうとして止められ、依頼主の答えを待っているもの
+  pending  魔法使いが開こうとして止められ、依頼主の答えを待っているもの（domain・urls・purposes〈WebFetch の prompt＝取りたい内容。事実〉・at）
+  notes    ドメインごとの一言の説明（{ドメイン: 文}）。ギルドマスターが web-describe で書く。AI の推測で、事実ではない
 依頼主の答えは guild/.work/web/inbox/ に JSON で届き、guild.py web-ingest が反映する。
 """
 import datetime
@@ -19,6 +20,7 @@ WORK = ".work"  # 機械用・作業用のフォルダ（guild/ の中。Obsidia
 DOMAIN_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$")
 DECISIONS = ("allow", "once", "deny")
 MAX_PENDING = 50
+PURPOSE_MAX, PURPOSES_MAX, NOTE_MAX = 200, 3, 80
 
 
 class WebError(Exception):
@@ -30,7 +32,7 @@ def access_path(gdir):
 
 
 def _blank():
-    return {"allow": [], "once": [], "denied": [], "pending": []}
+    return {"allow": [], "once": [], "denied": [], "pending": [], "notes": {}}
 
 
 def load(gdir):
@@ -42,9 +44,11 @@ def load(gdir):
         except (OSError, ValueError):
             raw = {}
         if isinstance(raw, dict):
-            for k in data:
+            for k in ("allow", "once", "denied", "pending"):
                 if isinstance(raw.get(k), list):
                     data[k] = raw[k]
+            if isinstance(raw.get("notes"), dict):
+                data["notes"] = {str(k): str(v) for k, v in raw["notes"].items() if isinstance(v, str)}
     return data
 
 
@@ -84,7 +88,11 @@ def now():
     return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
 
 
-def gate(gdir, url):
+def one_line(text, limit):
+    return " ".join(str(text or "").split())[:limit]
+
+
+def gate(gdir, url, prompt=""):
     """URL を開いてよいか。(allow か deny, 魔法使いに返す理由) を返す。許可がなければ pending に積む。"""
     domain = domain_of(url)
     if domain is None:
@@ -94,13 +102,21 @@ def gate(gdir, url):
         return "allow", ""
     if covered(domain, data["denied"]):
         return "deny", f"依頼主が {domain} の取得を許可しませんでした。このドメインは開かずに進めてください。報告の「未確認」に「許可なし：{url}」と書いてください。"
+    purpose = one_line(prompt, PURPOSE_MAX)
     seen = [p for p in data["pending"] if isinstance(p, dict) and p.get("domain") == domain]
     if seen:
+        changed = False
         if url not in seen[0].setdefault("urls", []) and len(seen[0]["urls"]) < 5:
             seen[0]["urls"].append(url)
+            changed = True
+        ps = seen[0].setdefault("purposes", [])
+        if purpose and purpose not in ps and len(ps) < PURPOSES_MAX:
+            ps.append(purpose)
+            changed = True
+        if changed:
             save(gdir, data)
     elif len(data["pending"]) < MAX_PENDING:
-        data["pending"].append({"domain": domain, "urls": [url], "at": now()})
+        data["pending"].append({"domain": domain, "urls": [url], "purposes": [purpose] if purpose else [], "at": now()})
         save(gdir, data)
     return "deny", (f"{domain} は、依頼主の許可がないため開けません。依頼主へは、ボードの手紙で確認を出します。"
                     f"今は開かずに、ほかの出典で進められる範囲で進めてください。報告の「未確認」に「許可待ち：{url}」と書いてください。")
@@ -160,11 +176,34 @@ def ingest(gdir):
     return report
 
 
+def describe(gdir, mapping):
+    """許可待ちのドメインに、一言の説明（AI の推測）を付ける。許可待ちにないドメインは受け付けない。書いた数と、飛ばした理由を返す。"""
+    if not isinstance(mapping, dict):
+        raise WebError("descriptions は {ドメイン: 説明} の辞書にしてください")
+    data = load(gdir)
+    waiting = {p.get("domain") for p in data["pending"] if isinstance(p, dict)}
+    written, skipped = [], []
+    for raw, text in mapping.items():
+        d = check_domain(raw)
+        t = one_line(text, NOTE_MAX)
+        if d not in waiting:
+            skipped.append({"domain": d, "reason": "許可待ちにありません"})
+        elif not t:
+            skipped.append({"domain": d, "reason": "説明が空です"})
+        else:
+            data["notes"][d] = t
+            written.append(d)
+    save(gdir, data)
+    return {"written": written, "skipped": skipped}
+
+
 def reset(gdir):
     """依頼の完了・中止で、「今回だけ」の許可と、許可しなかった記録を空にする。"""
     data = load(gdir)
     cleared = {"once": data["once"], "denied": data["denied"]}
     data["once"], data["denied"] = [], []
+    keep = set(data["allow"]) | {p.get("domain") for p in data["pending"] if isinstance(p, dict)}
+    data["notes"] = {k: v for k, v in data["notes"].items() if k in keep}  # 許可リストと許可待ちのドメインの説明だけ残す
     save(gdir, data)
     return {"cleared": cleared, "allow": data["allow"]}  # cleared は消したもの。残るのは allow（許可リスト）だけ
 

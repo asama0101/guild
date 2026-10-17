@@ -167,6 +167,7 @@ input[type=file]{font:inherit;font-size:13.5px;max-width:100%}
 .wbadge{font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--sub);margin-left:6px}
 .wkids{padding:2px 0 8px 18px;font-size:13px}
 .wkid{display:flex;flex-wrap:wrap;gap:2px 10px;padding:2px 0;word-break:break-all}
+.wnote{flex-basis:100%;font-size:12px;color:var(--sub);padding-left:2px}
 .wflt{width:100%;max-width:320px;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:4px;margin:0 0 8px}
 .wseg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;flex:none}
 .wseg button{font:inherit;font-size:12px;padding:5px 10px;min-height:32px;border:0;border-right:1px solid var(--line);background:var(--surface);color:var(--sub);cursor:pointer}
@@ -544,7 +545,7 @@ async function loadAll() {
   const wa = (await readJSON('web/access.json')) || {};
   const webList = (k) => (Array.isArray(wa[k]) ? wa[k] : []);
   const webWait = (await S.fs.list('web/inbox')).filter((x) => x.kind === 'file' && x.name.endsWith('.json')).length;
-  const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), wait: webWait };
+  const web = { allow: webList('allow'), once: webList('once'), denied: webList('denied'), pending: webList('pending').filter((x) => x && x.domain), notes: wa.notes && typeof wa.notes === 'object' ? wa.notes : {}, wait: webWait };
   // 共通のインプット（guild/inputs/ の直下だけ。サブフォルダは見ない）。名前の同一判定は、大文字小文字を区別しない（guild.py と同じ）
   const inputs = (await S.fs.list('inputs')).filter((e) => e.kind === 'file').map((e) => ({ name: e.name, mtime: e.mtime || 0 })).sort((a, b) => a.name.localeCompare(b.name));
   // 「ギルドを閉める」の印（guild.py pause と同じ pause.json）。中身は見ず、あるかどうかだけ
@@ -1645,7 +1646,7 @@ function webLetter(m) {
   if (w.wait) return h('section', { class: 'letter sentbox' }, seal('済', 'ok'), h('div', { class: 'kick', style: 'color:var(--ok)' }, '送信済み'),
     h('h3', null, '外部サイトを開く許可の答えを送りました'),
     h('p', null, '/guild:quest が動いていれば、すぐ読み取って進みます。動いていなければ、チャットで /guild:quest と送ってください。'));
-  const groups = webGroups(w.pending), fk = 'f:webflt';
+  const groups = webGroups(w.pending), fk = 'f:webflt', notes = w.notes || {};
   const cur = (p) => S.form[`${k}:${p}`] || 'deny';
   const count = { allow: 0, once: 0, deny: 0 };
   groups.forEach((g) => { count[cur(g.p)]++; });
@@ -1667,8 +1668,10 @@ function webLetter(m) {
     shown.map((g) => keepOpen(`web:g:${g.p}`, h('summary', { class: 'wsum' },
       h('span', { class: 'wnm' }, code(g.p), h('span', { class: 'wbadge' }, `${g.items.length} 件`)), seg(g)),
       h('div', { class: 'wkids' },
-        h('div', null, ext(`https://${g.p}/`, 'サイトを確かめる ↗')),
-        g.items.map((x) => h('div', { class: 'wkid' }, code(x.domain), (x.urls || []).slice(0, 3).map((u) => (safe(u) ? ext(u, u.replace(/^https?:\/\/[^/]+/i, '') || '/') : h('span', null, u)))))))),
+        h('div', null, ext(`https://${g.p}/`, 'サイトを確かめる ↗'), notes[g.p] ? h('div', { class: 'wnote' }, h('b', null, 'AI の推測（事実ではありません）：'), notes[g.p]) : null),
+        g.items.map((x) => h('div', { class: 'wkid' }, code(x.domain), (x.urls || []).slice(0, 3).map((u) => (safe(u) ? ext(u, u.replace(/^https?:\/\/[^/]+/i, '') || '/') : h('span', null, u))),
+          (x.purposes || []).length ? h('div', { class: 'wnote' }, h('b', null, '開こうとした目的：'), (x.purposes || []).slice(0, 3).join(' ／ ')) : null,
+          notes[x.domain] ? h('div', { class: 'wnote' }, h('b', null, 'AI の推測（事実ではありません）：'), notes[x.domain]) : null))))),
     shown.length ? null : h('p', { class: 'fine' }, '見つかりませんでした。'),
     h('div', { class: 'btns' }, h('button', { class: 'btn go', type: 'button', onclick: () => sendWeb({ type: 'web', decisions: Object.fromEntries(groups.map((g) => [g.p, cur(g.p)])) }, k) }, '選んだとおりに送る')),
     sentNote(k));
